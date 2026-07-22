@@ -31,11 +31,16 @@ class UserService:
         # memory fallback store
         self._users: dict[UUID, AppUser] = {}
         self._by_name: dict[str, UUID] = {}
-        self.ensure_admin_seeded()
+        self.ensure_default_users()
 
     @property
     def is_postgres(self) -> bool:
         return self._sf is not None
+
+    def ensure_default_users(self) -> None:
+        """Ensure admin + test exist (local tip DB parity)."""
+        self.ensure_admin_seeded()
+        self.ensure_test_user_seeded()
 
     def ensure_admin_seeded(self) -> None:
         if self.is_postgres:
@@ -50,6 +55,34 @@ class UserService:
             display_name=self._settings.admin_display_name,
             seed_cash=Decimal(str(self._settings.default_seed_cash)),
         )
+
+    def ensure_test_user_seeded(self) -> None:
+        if self.is_postgres:
+            try:
+                self._ensure_test_user_pg()
+            except HTTPException as e:
+                if e.status_code == 409:
+                    return
+                raise
+            return
+        username = (self._settings.test_username or "test").strip()
+        if not username:
+            return
+        if self.find_by_username(username):
+            return
+        try:
+            self.create_user(
+                username=username,
+                password=self._settings.tip_test_password or "test",
+                role=UserRole.USER,
+                display_name=self._settings.test_display_name or "Tester",
+                seed_cash=Decimal(str(self._settings.default_seed_cash)),
+            )
+            logger.info("Bootstrapped default USER '%s'", username)
+        except HTTPException as e:
+            if e.status_code == 409:
+                return
+            raise
 
     def list_users(self) -> list[AppUser]:
         if self.is_postgres:
@@ -247,6 +280,22 @@ class UserService:
             seed_cash=Decimal(str(self._settings.default_seed_cash)),
         )
         logger.info("Bootstrapped default ADMIN user '%s'", self._settings.admin_username)
+
+    def _ensure_test_user_pg(self) -> None:
+        """Postgres path used when V6 seed did not run / empty table edge cases."""
+        username = (self._settings.test_username or "test").strip()
+        if not username:
+            return
+        if self.find_by_username(username):
+            return
+        self.create_user(
+            username=username,
+            password=self._settings.tip_test_password or "test",
+            role=UserRole.USER,
+            display_name=self._settings.test_display_name or "Tester",
+            seed_cash=Decimal(str(self._settings.default_seed_cash)),
+        )
+        logger.info("Bootstrapped default USER '%s' (postgres)", username)
 
     def _list_pg(self) -> list[AppUser]:
         from app.user.entities import AppUserRow

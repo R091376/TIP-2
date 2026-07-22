@@ -3,6 +3,8 @@
  * Always sends both symbolId and timeframe on subscribe.
  */
 
+import { wsUrl } from '../config'
+
 export type LiveSocketStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
 
 export type LiveSocketHandlers = {
@@ -23,8 +25,7 @@ export function createLiveSocket({
   onMessage,
   onStatus,
 }: LiveSocketHandlers): LiveSocketHandle {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const url = `${protocol}//${window.location.host}/ws/live`
+  const url = wsUrl('/ws/live')
 
   let currentSymbolId = symbolId
   let currentTimeframe = timeframe

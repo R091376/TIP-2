@@ -50,10 +50,13 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    origins = [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
+    origins = settings.cors_origins_list() or ["http://localhost:5173"]
+    same_site = settings.session_same_site()
+    # Browsers require Secure when SameSite=None (cross-site FE/API on Render)
+    https_only = bool(settings.session_cookie_https_only) or same_site == "none"
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=origins or ["http://localhost:5173"],
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
@@ -63,8 +66,8 @@ def create_app() -> FastAPI:
         SessionMiddleware,
         secret_key=settings.session_secret,
         session_cookie="TIPSESSION",
-        same_site="lax",
-        https_only=False,
+        same_site=same_site,
+        https_only=https_only,
     )
 
     app.include_router(health.router)

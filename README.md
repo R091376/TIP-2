@@ -57,6 +57,16 @@ npm run dev
 
 Port **8080** and Vite proxy paths must stay aligned with `frontend/vite.config.js`.
 
+## Deploy on Render (split FE / API)
+
+See **[docs/RENDER-DEPLOY.md](docs/RENDER-DEPLOY.md)** and root **`render.yaml`**.
+
+Quick path:
+
+1. Blueprint-deploy from this repo (creates `tip2-api` + `tip2-web`).
+2. Set secrets: `DATABASE_URL`, `UPSTOX_ACCESS_TOKEN`, `CORS_ALLOWED_ORIGINS`.
+3. Redeploy static FE after API URL is known so `VITE_API_BASE_URL` is baked in.
+
 ## Validation
 
 Full automated + manual matrix: **`MIGRATION.md` §6–§7**.

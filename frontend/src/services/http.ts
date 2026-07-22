@@ -2,6 +2,8 @@
  * Shared fetch helper for TIP API (session cookies + JSON errors).
  */
 
+import { apiUrl } from '../config'
+
 export type ApiOptions = RequestInit & {
   /** When true (default), send session cookie. */
   credentials?: RequestCredentials
@@ -53,7 +55,7 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
     headers.set('Accept', 'application/json')
   }
 
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     ...options,
     credentials: options.credentials ?? 'include',
     headers,
@@ -88,7 +90,7 @@ export async function apiAllow401<T = unknown>(
   const headers = new Headers(options.headers || {})
   if (!headers.has('Accept')) headers.set('Accept', 'application/json')
 
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     ...options,
     credentials: options.credentials ?? 'include',
     headers,

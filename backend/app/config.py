@@ -17,6 +17,7 @@ class Settings(BaseSettings):
         env_file=(".env", "../.env"),
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
     # Server
@@ -41,6 +42,9 @@ class Settings(BaseSettings):
 
     # Session secret for cookie signing
     session_secret: str = Field(default="tip-dev-session-secret-change-me", alias="SESSION_SECRET")
+    # Cookie flags for split deploy (cross-site FE/API on HTTPS → none + https_only)
+    session_cookie_samesite: str = Field(default="lax", alias="SESSION_COOKIE_SAMESITE")
+    session_cookie_https_only: bool = Field(default=False, alias="SESSION_COOKIE_HTTPS_ONLY")
 
     # Admin seed
     tip_admin_password: str = Field(default="admin", alias="TIP_ADMIN_PASSWORD")
@@ -217,13 +221,19 @@ class Settings(BaseSettings):
     )
     instruments_refresh_on_startup: bool = True
 
-    # CORS
-    cors_allowed_origins: str = "http://localhost:5173"
+    # CORS (comma-separated). Include production FE origin on Render.
+    cors_allowed_origins: str = Field(
+        default="http://localhost:5173",
+        alias="CORS_ALLOWED_ORIGINS",
+    )
 
-    # Users
+    # Users (bootstrap defaults — passwords match local tip DB)
     default_seed_cash: float = 100_000.0
     admin_username: str = "admin"
     admin_display_name: str = "Administrator"
+    test_username: str = Field(default="test", alias="TIP_TEST_USERNAME")
+    test_display_name: str = Field(default="Tester", alias="TIP_TEST_DISPLAY_NAME")
+    tip_test_password: str = Field(default="test", alias="TIP_TEST_PASSWORD")
 
     @property
     def watchlist_store(self) -> str:
@@ -259,6 +269,16 @@ class Settings(BaseSettings):
         if not self.pattern_enabled:
             return False
         return bool(self.pattern_enabled_timeframes.get(timeframe, False))
+
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in (self.cors_allowed_origins or "").split(",") if o.strip()]
+
+    def session_same_site(self) -> str:
+        """Starlette SameSite value: lax | strict | none."""
+        v = (self.session_cookie_samesite or "lax").strip().lower()
+        if v in ("lax", "strict", "none"):
+            return v
+        return "lax"
 
 
 @lru_cache
