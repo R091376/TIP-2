@@ -3,7 +3,9 @@ import {
   ALERTS_MAX,
   appendAlert,
   collectPinnedInstanceIds,
+  compactAlerts,
 } from '../utils/alertList'
+import { fetchTodayPatternAlerts } from '../services/patternAlertsApi'
 import {
   applyInstanceOverlay,
   clearPatternOverlay,
@@ -21,6 +23,32 @@ function instanceSignature(instanceId, alertList) {
   return collectInstanceEvents(alertList, instanceId)
     .map((e) => e.id)
     .join('|')
+}
+
+/** Normalize API / WS alert fields for the feed. */
+function normalizeAlert(raw) {
+  if (!raw) return null
+  const time = Number(raw.time)
+  const price = Number(raw.price)
+  const instanceId = raw.instanceId || raw.instance_id || ''
+  const stage = (raw.stage || '').toLowerCase()
+  const id =
+    raw.id ||
+    [instanceId || 'x', stage || 'event', time || '', price || ''].join(':')
+  return {
+    id,
+    symbolId: raw.symbolId || raw.symbol_id,
+    timeframe: raw.timeframe,
+    patternType: raw.patternType || raw.pattern_type,
+    stage,
+    price,
+    time,
+    referenceLevel: raw.referenceLevel ?? raw.reference_level,
+    instanceId,
+    direction: raw.direction,
+    status: raw.status,
+    receivedAt: Number(raw.receivedAt ?? raw.received_at) || Date.now(),
+  }
 }
 
 /**
@@ -64,10 +92,92 @@ export function usePatternOverlay({
   const [alerts, setAlerts] = useState([])
   const [selectedAlertId, setSelectedAlertId] = useState(null)
   const [selectedInstanceId, setSelectedInstanceId] = useState(null)
+  const dayAlertsLoadedRef = useRef(false)
+  const dayAlertsInflightRef = useRef(false)
 
   alertsRef.current = alerts
   selectedAlertIdRef.current = selectedAlertId
   focusedInstanceIdRef.current = selectedInstanceId
+
+  function mergeDayAlerts(items) {
+    if (!items?.length) return
+    setAlerts((prev) => {
+      const byId = new Map()
+      // History first, then live (live overwrites same id)
+      for (const a of items) {
+        if (a?.id) byId.set(a.id, normalizeAlert(a))
+      }
+      for (const a of prev || []) {
+        if (a?.id) byId.set(a.id, a)
+      }
+      const merged = [...byId.values()].sort((a, b) => {
+        const ta = Number(a.time) || 0
+        const tb = Number(b.time) || 0
+        if (tb !== ta) return tb - ta
+        return (Number(b.receivedAt) || 0) - (Number(a.receivedAt) || 0)
+      })
+      const next = compactAlerts(merged, {
+        max: Math.max(ALERTS_MAX, 300),
+        pinnedInstanceIds: collectPinnedInstanceIds(
+          focusedInstanceIdRef.current,
+          overlayMemoryRef.current,
+        ),
+      })
+      alertsRef.current = next
+      return next
+    })
+  }
+
+  /**
+   * Hydrate alerts from Postgres journal for the IST calendar day.
+   * Retries until success; does not depend on disposedRef (that races StrictMode).
+   */
+  async function hydrateDayAlerts({ force = false } = {}) {
+    if (!force && dayAlertsLoadedRef.current) return
+    if (dayAlertsInflightRef.current) return
+    dayAlertsInflightRef.current = true
+    try {
+      const items = await fetchTodayPatternAlerts({ limit: 500 })
+      mergeDayAlerts(items)
+      dayAlertsLoadedRef.current = true
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.info('[alerts] hydrated day alerts:', items.length)
+      }
+    } catch (err) {
+      dayAlertsLoadedRef.current = false
+      // eslint-disable-next-line no-console
+      console.warn('[alerts] failed to load day alerts', err)
+    } finally {
+      dayAlertsInflightRef.current = false
+    }
+  }
+
+  // After chart bootstrap finishes (loading false), load today's alerts.
+  // Also try once on mount so feed is ready ASAP when already warm.
+  useEffect(() => {
+    let cancelled = false
+    let attempts = 0
+    const maxAttempts = 5
+
+    async function run() {
+      while (!cancelled && attempts < maxAttempts && !dayAlertsLoadedRef.current) {
+        attempts += 1
+        await hydrateDayAlerts({ force: attempts > 1 })
+        if (dayAlertsLoadedRef.current || cancelled) break
+        await new Promise((r) => setTimeout(r, 400 * attempts))
+      }
+    }
+
+    // Prefer waiting until initial loading completes to avoid auth/bootstrap races
+    if (!loading) {
+      run()
+    }
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading])
 
   function wipeOverlay() {
     clearPatternOverlay(overlayHandleRef.current)
@@ -201,34 +311,16 @@ export function usePatternOverlay({
   }
 
   function pushPatternAlert(message) {
-    if (!message?.symbolId || !message?.timeframe || message.time == null) return
-    if (message.price == null || Number.isNaN(Number(message.price))) return
-
-    const id = [
-      message.instanceId || 'x',
-      message.stage || 'event',
-      message.time ?? '',
-      message.price ?? '',
-    ].join(':')
-
-    const alert = {
-      id,
-      symbolId: message.symbolId,
-      timeframe: message.timeframe,
-      patternType: message.patternType,
-      stage: message.stage,
-      price: message.price,
-      time: message.time,
-      referenceLevel: message.referenceLevel,
-      instanceId: message.instanceId,
-      direction: message.direction,
-      status: message.status,
-      receivedAt: Date.now(),
-    }
+    const alert = normalizeAlert({
+      ...message,
+      receivedAt: message.receivedAt ?? Date.now(),
+    })
+    if (!alert?.symbolId || !alert?.timeframe || alert.time == null) return
+    if (alert.price == null || Number.isNaN(Number(alert.price))) return
 
     setAlerts((prev) => {
       const next = appendAlert(prev, alert, {
-        max: ALERTS_MAX,
+        max: Math.max(ALERTS_MAX, 300),
         pinnedInstanceIds: pinnedInstanceIds(),
       })
       alertsRef.current = next
@@ -346,5 +438,6 @@ export function usePatternOverlay({
     clearAllAlerts,
     resetOverlayForEmptyWatchlist,
     willRestoreForCurrentSeries,
+    hydrateDayAlerts,
   }
 }

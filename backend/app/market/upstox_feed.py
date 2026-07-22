@@ -317,8 +317,18 @@ class UpstoxFeedClient:
                 seg = dict(getattr(mi, "segmentStatus", {}) or {})
                 mapped = {}
                 for k, v in seg.items():
-                    mapped[k] = getattr(v, "name", v)
+                    # Keep enum int/name — map_segment_status handles both.
+                    # Do NOT only pass .name; ints are the common protobuf form.
+                    if hasattr(v, "name") and isinstance(getattr(v, "name", None), str):
+                        mapped[k] = v.name
+                    else:
+                        mapped[k] = v
                 self._market_status.update_from_segment_status(mapped)
+                logger.info(
+                    "Market phase from feed market_info: %s (segments=%s)",
+                    self._market_status.get_market_phase(),
+                    {kk: (getattr(vv, "name", None) or vv) for kk, vv in list(seg.items())[:4]},
+                )
             return
 
         feeds = getattr(feed_resp, "feeds", None) or {}

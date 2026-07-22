@@ -17,7 +17,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.api import admin_users, auth, health, instruments, market, pattern_statistics, symbols, watchlist
+from app.api import (
+    admin_users,
+    auth,
+    health,
+    instruments,
+    market,
+    pattern_alerts,
+    pattern_statistics,
+    symbols,
+    watchlist,
+)
 from app.api.websocket import live as live_ws
 from app.config import get_settings
 from app.container import build_container
@@ -95,6 +105,7 @@ def create_app() -> FastAPI:
     app.include_router(watchlist.router)
     app.include_router(instruments.router)
     app.include_router(pattern_statistics.router)
+    app.include_router(pattern_alerts.router)
     app.include_router(live_ws.router)
 
     return app

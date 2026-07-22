@@ -68,6 +68,15 @@ class PatternJournal(Protocol):
         self, symbol_ids: list[str], pattern_type: str | None, timeframe: str | None
     ) -> list[PatternStatisticsSnapshot]: ...
 
+    def list_session_day_alerts(
+        self,
+        *,
+        day=None,
+        limit: int = 500,
+        symbol_id: str | None = None,
+        timeframe: str | None = None,
+    ) -> list[dict]: ...
+
 
 class NoOpPatternJournal:
     def is_active(self) -> bool:
@@ -98,6 +107,9 @@ class NoOpPatternJournal:
         return None
 
     def find_statistics_for_symbols(self, symbol_ids, pattern_type, timeframe):
+        return []
+
+    def list_session_day_alerts(self, *, day=None, limit=500, symbol_id=None, timeframe=None):
         return []
 
 
@@ -218,6 +230,72 @@ class InMemoryPatternJournal:
                     continue
                 out.append(snap)
             return out
+
+    def list_session_day_alerts(
+        self,
+        *,
+        day=None,
+        limit: int = 500,
+        symbol_id: str | None = None,
+        timeframe: str | None = None,
+    ) -> list[dict]:
+        from datetime import date as date_cls
+        from zoneinfo import ZoneInfo
+
+        ist = ZoneInfo("Asia/Kolkata")
+        ist_day = day or datetime.now(tz=ist).date()
+        if not isinstance(ist_day, date_cls):
+            ist_day = datetime.now(tz=ist).date()
+        start_epoch = int(
+            datetime(ist_day.year, ist_day.month, ist_day.day, tzinfo=ist).timestamp()
+        )
+        end_epoch = start_epoch + 86400 - 1
+        lim = max(1, min(int(limit or 500), 2000))
+        alerts: list[dict] = []
+        with self._lock:
+            for pid, events in self._events.items():
+                inst = self._instances.get(pid)
+                if inst is None:
+                    continue
+                if symbol_id and inst.symbol_id != symbol_id:
+                    continue
+                if timeframe and inst.timeframe != timeframe:
+                    continue
+                for ev in events:
+                    ct = int(ev.candle_time or 0)
+                    if not (start_epoch <= ct <= end_epoch):
+                        continue
+                    stage = (
+                        ev.stage.value if hasattr(ev.stage, "value") else str(ev.stage)
+                    ).lower()
+                    price = float(ev.price)
+                    iid = str(inst.id)
+                    alerts.append(
+                        {
+                            "id": f"{iid}:{stage}:{ct}:{price}",
+                            "symbolId": inst.symbol_id,
+                            "timeframe": inst.timeframe,
+                            "patternType": inst.pattern_type.value
+                            if hasattr(inst.pattern_type, "value")
+                            else str(inst.pattern_type),
+                            "stage": stage,
+                            "price": price,
+                            "time": ct,
+                            "referenceLevel": float(inst.reference_level),
+                            "instanceId": iid,
+                            "direction": inst.direction.value
+                            if hasattr(inst.direction, "value")
+                            else str(inst.direction),
+                            "status": inst.status.value
+                            if hasattr(inst.status, "value")
+                            else str(inst.status),
+                            "receivedAt": int(ev.at.timestamp() * 1000)
+                            if getattr(ev, "at", None)
+                            else int(ct * 1000),
+                        }
+                    )
+        alerts.sort(key=lambda a: (a["time"], a["receivedAt"]), reverse=True)
+        return alerts[:lim]
 
     def _upsert_stats(self, pattern: ActivePattern) -> None:
         key = (pattern.symbol_id, pattern.pattern_type.value, pattern.timeframe)

@@ -32,7 +32,41 @@ def test_map_segment_status():
     assert map_segment_status("PRE_OPEN_START") == MarketPhase.PRE_OPEN
     assert map_segment_status("PRE_OPEN_END") == MarketPhase.PRE_OPEN
     assert map_segment_status("NORMAL_CLOSE") == MarketPhase.CLOSED
-    assert map_segment_status("UNKNOWN_X") == MarketPhase.CLOSED
+    # unknown must not force CLOSED (would pin live session to closed)
+    assert map_segment_status("UNKNOWN_X") is None
+
+
+def test_map_segment_status_protobuf_ints():
+    """Upstox protobuf MarketStatus: NORMAL_OPEN=2 (was mis-mapped to CLOSED)."""
+    assert map_segment_status(0) == MarketPhase.PRE_OPEN
+    assert map_segment_status(1) == MarketPhase.PRE_OPEN
+    assert map_segment_status(2) == MarketPhase.OPEN
+    assert map_segment_status(3) == MarketPhase.CLOSED
+    assert map_segment_status("2") == MarketPhase.OPEN
+    assert map_segment_status("3") == MarketPhase.CLOSED
+
+
+def test_update_from_int_normal_open_sets_open():
+    from app.events import EventBus
+
+    svc = MarketStatusService(EventBus())
+    svc._market_phase = MarketPhase.CLOSED
+    svc.update_from_segment_status({"NSE_EQ": 2})  # NORMAL_OPEN
+    assert svc.get_market_phase() == MarketPhase.OPEN
+
+
+def test_clock_overrides_stale_feed_closed_while_session_open():
+    from app.events import EventBus
+    from app.market.nse_clock import phase_from_clock
+
+    if phase_from_clock() != MarketPhase.OPEN:
+        return  # only meaningful during open session
+    svc = MarketStatusService(EventBus())
+    svc.set_live_feed_connected(True)
+    svc._market_phase = MarketPhase.CLOSED
+    svc._last_feed_phase_at = datetime.now(timezone.utc)
+    svc.refresh_phase_from_clock()
+    assert svc.get_market_phase() == MarketPhase.OPEN
 
 
 def test_update_from_segment_status_publishes_change():

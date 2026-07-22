@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.journal.entities import (
@@ -13,6 +14,8 @@ from app.journal.entities import (
     PatternOutcomeRow,
     PatternStatisticsRow,
 )
+
+_IST = ZoneInfo("Asia/Kolkata")
 from app.journal.mapper import (
     CLOSED_STATUSES,
     OPEN_STATUSES,
@@ -150,6 +153,90 @@ class PostgresPatternJournal:
                     continue
                 out.append(self._to_snapshot(r))
             return out
+
+    def list_session_day_alerts(
+        self,
+        *,
+        day: date | None = None,
+        limit: int = 500,
+        symbol_id: str | None = None,
+        timeframe: str | None = None,
+    ) -> list[dict]:
+        """Pattern stage events for an IST calendar day (default: today).
+
+        Returns alert DTOs newest-first for the FE alerts feed after refresh.
+        """
+        ist_day = day or datetime.now(tz=_IST).date()
+        start_ist = datetime.combine(ist_day, time(0, 0), tzinfo=_IST)
+        end_ist = datetime.combine(ist_day, time(23, 59, 59, 999999), tzinfo=_IST)
+        start_utc = start_ist.astimezone(timezone.utc)
+        end_utc = end_ist.astimezone(timezone.utc)
+        start_epoch = int(start_ist.timestamp())
+        end_epoch = int(end_ist.timestamp())
+
+        lim = max(1, min(int(limit or 500), 2000))
+        with self._sf() as s:
+            q = (
+                select(PatternEventRow, PatternInstanceRow)
+                .join(
+                    PatternInstanceRow,
+                    PatternEventRow.pattern_instance_id == PatternInstanceRow.id,
+                )
+                .where(
+                    or_(
+                        (PatternEventRow.event_time >= start_utc)
+                        & (PatternEventRow.event_time <= end_utc + timedelta(hours=12)),
+                        (PatternEventRow.candle_time >= start_epoch)
+                        & (PatternEventRow.candle_time <= end_epoch),
+                    )
+                )
+            )
+            if symbol_id:
+                q = q.where(PatternInstanceRow.symbol_id == symbol_id)
+            if timeframe:
+                q = q.where(PatternInstanceRow.timeframe == timeframe)
+            q = q.order_by(PatternEventRow.candle_time.desc(), PatternEventRow.id.desc()).limit(
+                lim * 2
+            )
+            rows = s.execute(q).all()
+
+        alerts: list[dict] = []
+        for ev, inst in rows:
+            ct = int(ev.candle_time or 0)
+            et = ev.event_time
+            if et is not None and et.tzinfo is None:
+                et = et.replace(tzinfo=timezone.utc)
+            in_day_candle = start_epoch <= ct <= end_epoch
+            in_day_event = False
+            if et is not None:
+                et_ist = et.astimezone(_IST)
+                in_day_event = et_ist.date() == ist_day
+            if not (in_day_candle or in_day_event):
+                continue
+            stage = (ev.event_type or "").lower()
+            price = float(ev.price_at_event)
+            iid = str(inst.id)
+            alert_id = f"{iid}:{stage}:{ct}:{price}"
+            received_ms = int(et.timestamp() * 1000) if et else int(ct * 1000)
+            alerts.append(
+                {
+                    "id": alert_id,
+                    "symbolId": inst.symbol_id,
+                    "timeframe": inst.timeframe,
+                    "patternType": inst.pattern_type,
+                    "stage": stage,
+                    "price": price,
+                    "time": ct,
+                    "referenceLevel": float(inst.reference_level),
+                    "instanceId": iid,
+                    "direction": inst.direction,
+                    "status": inst.status,
+                    "receivedAt": received_ms,
+                }
+            )
+            if len(alerts) >= lim:
+                break
+        return alerts
 
     # --- internals ---
 

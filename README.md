@@ -57,6 +57,23 @@ npm run dev
 
 Port **8080** and Vite proxy paths must stay aligned with `frontend/vite.config.js`.
 
+## Local start (Windows)
+
+Double-click **`start-tip2.bat`** in the repo root (or run it from a terminal).
+
+| Script | Purpose |
+|--------|---------|
+| `start-tip2.bat` | Opens backend + frontend in two windows |
+| `scripts/start-backend.bat` | API only (`:8080`, loads `backend/.env`) |
+| `scripts/start-frontend.bat` | Vite only (`:5173`, proxies to API) |
+| `scripts/stop-tip2.bat` | Kills processes on ports 8080 and 5173 |
+
+Then open **http://127.0.0.1:5173** (login `admin` / `admin` by default).
+
+Local backend uses **Postgres on localhost** (`postgresql+psycopg://postgres:admin@localhost:5432/tip`).  
+`scripts/start-backend.bat` forces that URL so a Neon `DATABASE_URL` in `.env` is not used for local runs.  
+To override: set `LOCAL_DATABASE_URL` before starting.
+
 ## Deploy on Render (split FE / API)
 
 See **[docs/RENDER-DEPLOY.md](docs/RENDER-DEPLOY.md)** and root **`render.yaml`**.

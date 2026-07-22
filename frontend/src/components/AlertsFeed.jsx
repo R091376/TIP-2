@@ -1,6 +1,6 @@
 /**
- * Live pattern alerts (session-only). Newest first.
- * Click an alert → parent navigates chart + draws overlay.
+ * Pattern alerts for the trading day (loaded from API + live WS).
+ * Newest first. Click an alert → parent navigates chart + draws overlay.
  * Client-side filters: symbol, timeframe, pattern type.
  */
 
@@ -142,8 +142,8 @@ export default function AlertsFeed({
             className="alerts-feed__count"
             title={
               filtersActive
-                ? `${items.length} shown of ${total} session alerts`
-                : `${items.length} session alerts`
+                ? `${items.length} shown of ${total} day's alerts`
+                : `${items.length} day's alerts`
             }
           >
             {filtersActive ? `${items.length}/${total}` : items.length}
@@ -153,7 +153,7 @@ export default function AlertsFeed({
               type="button"
               className="alerts-feed__clear"
               onClick={onClear}
-              title="Clear session alerts"
+              title="Clear alerts from this browser view (server history reloads on refresh)"
             >
               Clear
             </button>
