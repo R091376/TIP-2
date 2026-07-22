@@ -1,0 +1,103 @@
+/* Shared account chip + logout dropdown (chart, stats, admin, …) */
+
+.user-account {
+  position: relative;
+  display: block;
+  flex-shrink: 0;
+  z-index: 30;
+}
+
+.user-account__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #cbd5e1;
+  font: inherit;
+  cursor: pointer;
+}
+
+.user-account.is-open .user-account__trigger,
+.user-account:hover .user-account__trigger {
+  border-color: #2a3144;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.user-account__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.user-account__name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * Outer menu is transparent and starts at 100% (no dead gap).
+ * Padding-top is a hover bridge so the pointer never leaves the account root.
+ */
+.user-account__menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: auto;
+  min-width: max(100%, 7.5rem);
+  padding: 4px 0 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  z-index: 40;
+}
+
+.user-account__menu[hidden] {
+  display: none;
+}
+
+.user-account__menu-inner {
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid #2a3144;
+  background: #12151e;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+.user-account__logout {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.user-account__logout:hover,
+.user-account__logout:focus-visible {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  outline: none;
+}

@@ -1,0 +1,193 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: trading-intelligence-platform
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/tip}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:admin}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+
+# Smoke / ops logging: quiet per-tick feed noise; keep reliability + fix observability.
+logging:
+  level:
+    root: INFO
+    # --- Quiet live feed / per-bar spam ---
+    com.tip.market.UpstoxFeedClient: WARN
+    com.tip.market.CandleEngineEventLogger: WARN
+    com.tip.market.IndexVolumeSupport: WARN
+    com.tip.api.websocket.LiveCandleBroadcaster: WARN
+    com.tip.api.websocket.LiveWebSocketHandler: WARN
+    com.upstox: WARN
+    org.hibernate.SQL: WARN
+    # --- Implemented reliability paths (INFO) ---
+    com.tip.market.CandleCloseReconciler: INFO
+    com.tip.market.MarketStatusService: INFO
+    com.tip.market.MarketPhaseClockReconciler: INFO
+    com.tip.market.MarketBootstrapService: INFO
+    com.tip.market.NseMarketClock: INFO
+    com.tip.patterns.PatternEvaluator: INFO
+    com.tip.patterns.SessionExpiryReconciler: INFO
+    com.tip.patterns.PatternFeatureGuard: INFO
+    com.tip.watchlist.WatchlistService: INFO
+    com.tip.journal.PostgresPatternJournal: INFO
+
+tip:
+  upstox:
+    access-token: ${UPSTOX_ACCESS_TOKEN:}
+  market:
+    # Compat defaults: match first seed (NIFTY 50 index) for chart continuity (KD14)
+    default-symbol: "Nifty 50"
+    default-instrument-key: "NSE_INDEX|Nifty 50"
+    default-timeframe: 5m
+    supported-timeframes: [1m, 5m, 15m, 1h, 4h, 1d]
+    live-feed-enabled: true
+    candle-update-throttle-ms: 1000
+    # Reconcile NSE market phase from wall clock (session close without feed).
+    phase-refresh-ms: 30000
+    # Historical seed: calendar days ending yesterday (today = intraday API).
+    # Was hardcoded to 5 days (~3 trading sessions). Per-TF overrides below.
+    historical-lookback-days: 30
+    historical-lookback-days-by-timeframe:
+      1m: 10
+      5m: 60
+      15m: 90
+      1h: 180
+      4h: 365
+      1d: 730
+    # Startup seed logs: false = candle counts only; true = first/last OHLCV samples.
+    seed-log-detail: false
+  pattern:
+    enabled: true
+    # Per-TF closed-bar evaluation. Set a timeframe to false to skip detect/lifecycle
+    # (REST/WS still show any existing journaled instances). 1m off by default (noise/load).
+    enabled-timeframes:
+      1m: false
+      5m: true
+      15m: true
+      1h: true
+      4h: true
+      1d: true
+    atr-period: 14
+    stats-min-sample-size: 20
+    breakout:
+      lookback-candles: 20
+      volume-avg-period: 20
+      confirmation-mode: both
+      volume-multiplier: 1.5
+      retest-atr-mult: 0.25
+      strengthen-atr-mult: 1.0
+      success-rr: 2.0
+      success-atr-mult-without-retest: 2.0
+      detector-version: breakout-v1
+    breakdown:
+      lookback-candles: 20
+      volume-avg-period: 20
+      confirmation-mode: both
+      volume-multiplier: 1.5
+      retest-atr-mult: 0.25
+      strengthen-atr-mult: 1.0
+      success-rr: 2.0
+      success-atr-mult-without-retest: 2.0
+      detector-version: breakdown-v1
+    # Hammer / Shooting Star (Nison pin-bar geometry) — docs/patterns/hammer-shooting-star.md
+    pinbar:
+      shadow-body-mult: 2.0
+      max-body-range-ratio: 0.35
+      max-opposite-wick-range-ratio: 0.25
+      min-range-atr-mult: 0.5
+      success-atr-mult: 1.5
+      require-trend-context: true
+      trend-lookback: 10
+      max-candles-after-detect: 20
+      detector-version: pinbar-v1
+    engulfing:
+      min-range-atr-mult: 0.5
+      success-atr-mult: 1.5
+      max-candles-after-detect: 20
+      detector-version: engulfing-v1
+    inside-bar:
+      min-mother-range-atr-mult: 0.5
+      success-atr-mult: 1.5
+      max-candles-after-detect: 20
+      max-bars-after-inside: 5
+      detector-version: inside-bar-v1
+    structure:
+      fractal-width: 2
+      success-atr-mult: 1.5
+      max-candles-after-detect: 30
+      detector-version: structure-v1
+    consolidation:
+      window-candles: 10
+      range-atr-mult: 1.5
+      max-duration-candles: 30
+      tighten-ratio: 0.85
+      detector-version: consolidation-v1
+    volume-breakout:
+      volume-avg-period: 20
+      volume-multiplier: 2.0
+      min-range-atr-mult: 0.5
+      success-atr-mult: 1.5
+      max-candles-after-detect: 20
+      detector-version: volume-breakout-v1
+    expiry:
+      # Hard-expire open instances at 15:30 (and on restart as startup_recovery)
+      session-close-timeframes: [1m, 5m, 15m]
+      # 1h / 4h / 1d survive overnight + restart (hydrate); expire by age instead
+      max-sessions-1h: 5
+      max-candles-1h: 60
+      max-sessions-4h: 5
+      max-candles-4h: 60
+      max-candles-1d: 30
+    ws:
+      # Journal always records all stages; WS may filter later.
+      broadcast-stages: [detected, confirmed, retested, strengthened, succeeded, failed, expired]
+  watchlist:
+    # postgres = durable watchlist + pattern journal (required for full pattern pipeline).
+    # memory = in-process only, no DB required. Enable with:
+    #   TIP_WATCHLIST_STORE=memory
+    #   or --spring.profiles.active=memory
+    store: ${TIP_WATCHLIST_STORE:postgres}
+    # Startup seed = entire list (exactly 10): index first, then 9 top Nifty 50 equities.
+    # Order matters: primary / default chart = first entry (NIFTY 50 index).
+    seed-symbols:
+      - "Nifty 50"
+      - RELIANCE
+      - TCS
+      - HDFCBANK
+      - INFY
+      - ICICIBANK
+      - HINDUNILVR
+      - ITC
+      - SBIN
+      - BHARTIARTL
+    # Optional authoritative keys (preferred when present; else resolve via master).
+    # Bracket form required so Spring binds map keys that contain spaces.
+    seed-instrument-keys:
+      "[Nifty 50]": "NSE_INDEX|Nifty 50"
+    soft-warn-size: 40
+    hard-max-size: 50
+  instruments:
+    master-url: "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz"
+    cache-dir: "${java.io.tmpdir}/tip-instruments"
+    refresh-on-startup: true
+  cors:
+    allowed-origins: http://localhost:5173
+  users:
+    # Paper cash (INR) for new users and admin cash reset default.
+    default-seed-cash: 100000
+    admin-username: admin
+    # Override in .env: TIP_ADMIN_PASSWORD=...
+    admin-password: ${TIP_ADMIN_PASSWORD:admin}
+    admin-display-name: Administrator

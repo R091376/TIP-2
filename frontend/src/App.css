@@ -1,0 +1,6 @@
+/* Domain stylesheets — see src/styles/ */
+@import './styles/layout.css';
+@import './styles/chart.css';
+@import './styles/alerts.css';
+@import './styles/watchlist.css';
+@import './styles/instruments.css';

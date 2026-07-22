@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/tip_test
+    username: postgres
+    password: admin
+
+tip:
+  watchlist:
+    # Integration tests use real Postgres (tip_test), not the app default memory store.
+    store: postgres
+    # Avoid MarketConnectivityRunner polluting tip_test with 10 seed symbols.
+    seed-symbols: []
+    seed-instrument-keys: {}
+  pattern:
+    # Pure repository tests should not run pattern startup journal work.
+    enabled: false
+  market:
+    live-feed-enabled: false
+  upstox:
+    access-token: ""
+  users:
+    admin-username: admin
+    admin-password: test-admin-password

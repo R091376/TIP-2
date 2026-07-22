@@ -1,0 +1,261 @@
+/* ── Timeframe selector ──────────────────────────────────────────────── */
+
+.timeframe-selector {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 8px;
+  background: #1a2030;
+  border: 1px solid #2a3144;
+  flex-wrap: wrap;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.timeframe-selector button {
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  min-width: 2.25rem;
+}
+
+.timeframe-selector button:hover:not(:disabled) {
+  color: #e2e8f0;
+}
+
+.timeframe-selector button.active {
+  background: #2563eb;
+  color: #f8fafc;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.35);
+}
+
+.timeframe-selector button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.timeframe-selector--vertical {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  padding: 4px;
+  gap: 2px;
+  width: 100%;
+}
+
+.timeframe-selector--vertical button {
+  min-width: 0;
+  width: 100%;
+  padding: 8px 4px;
+  font-size: 0.75rem;
+}
+
+/* ── Chart type toggle ───────────────────────────────────────────────── */
+
+.chart-type-toggle {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 8px;
+  background: #1a2030;
+  border: 1px solid #2a3144;
+  flex-shrink: 0;
+}
+
+.chart-type-toggle button {
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.chart-type-toggle button:hover {
+  color: #e2e8f0;
+}
+
+.chart-type-toggle button.active {
+  background: #2563eb;
+  color: #f8fafc;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.35);
+}
+
+/* ── Connection status ───────────────────────────────────────────────── */
+
+.connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+  color: #94a3b8;
+}
+
+.connection-status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #64748b;
+}
+
+.connection-status--connected .connection-status__dot {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+}
+
+.connection-status--connecting .connection-status__dot {
+  background: #eab308;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.connection-status--error .connection-status__dot,
+.connection-status--disconnected .connection-status__dot {
+  background: #ef4444;
+}
+
+.connection-status--market_closed .connection-status__dot {
+  background: #64748b;
+}
+
+.connection-status--pre_open .connection-status__dot {
+  background: #eab308;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+
+.chart-panel {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 12px 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-container {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #1e2433;
+}
+
+/* Top of locked volume pane: chart-panel bottom pad (20px) + max vol height (96px) − inset */
+.volume-pane-legend {
+  position: absolute;
+  left: 20px;
+  /* Sit just under the price/volume splitter (top of volume band). */
+  bottom: calc(20px + 96px - 8px);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(15, 17, 23, 0.78);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  letter-spacing: 0.02em;
+}
+
+.volume-pane-legend__swatch {
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.25);
+}
+
+.volume-pane-legend__text {
+  color: #93c5fd;
+}
+
+/* TradingView-style OHLC strip over the price pane */
+.ohlc-legend {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px 14px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(15, 17, 23, 0.72);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  color: #94a3b8;
+}
+
+.ohlc-legend__field {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.ohlc-legend__label {
+  color: #64748b;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.ohlc-legend__value {
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+.ohlc-legend__field--emphasis .ohlc-legend__value {
+  font-weight: 700;
+}
+
+.ohlc-legend--up .ohlc-legend__field--emphasis .ohlc-legend__value,
+.ohlc-legend--up .ohlc-legend__field:last-child .ohlc-legend__value {
+  color: #4ade80;
+}
+
+.ohlc-legend--down .ohlc-legend__field--emphasis .ohlc-legend__value,
+.ohlc-legend--down .ohlc-legend__field:last-child .ohlc-legend__value {
+  color: #f87171;
+}
+
+.chart-loading {
+  position: absolute;
+  inset: 12px 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(15, 17, 23, 0.85);
+  color: #94a3b8;
+  font-size: 0.9375rem;
+  z-index: 3;
+  pointer-events: none;
+}

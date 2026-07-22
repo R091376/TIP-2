@@ -1,0 +1,243 @@
+.watchlist-sidebar__readonly-hint {
+  margin: 0;
+  padding: 0 12px 10px;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.badge-ready {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+.badge-pending {
+  background: rgba(234, 179, 8, 0.15);
+  color: #facc15;
+  border: 1px solid rgba(234, 179, 8, 0.35);
+}
+
+.badge-failed {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.badge-unknown {
+  background: rgba(100, 116, 139, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.35);
+}
+
+/* ── Right watchlist sidebar ─────────────────────────────────────────── */
+
+.watchlist-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 260px;
+  min-width: 220px;
+  max-width: 300px;
+  flex-shrink: 0;
+  border-left: 1px solid #1e2433;
+  min-height: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(59, 130, 246, 0.07) 0%,
+    rgba(15, 17, 23, 0.15) 56px,
+    transparent 140px
+  );
+  /* Do not set overflow-x:hidden — it forces overflow-y:auto and clips the dropdown */
+}
+
+
+.watchlist-sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px 10px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.watchlist-sidebar__title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #bfdbfe;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.watchlist-sidebar__title::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #60a5fa;
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.75);
+}
+
+.watchlist-sidebar__count {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: #93c5fd;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.16);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+}
+
+.watchlist-sidebar__search {
+  position: relative;
+  z-index: 30;
+  padding: 10px 10px 10px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #1e2433;
+  /* Allow dropdown to paint over list without horizontal bleed */
+  overflow: visible;
+}
+
+.watchlist-sidebar__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+/* Vertical list */
+.watchlist-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.watchlist-list--empty {
+  padding: 16px 14px;
+}
+
+.watchlist-list__empty-hint {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.watchlist-row {
+  display: flex;
+  align-items: stretch;
+  margin: 0 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(42, 49, 68, 0.9);
+  background: rgba(18, 22, 34, 0.85);
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.watchlist-row--active {
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(59, 130, 246, 0.55);
+  box-shadow: inset 3px 0 0 #60a5fa, 0 0 0 1px rgba(59, 130, 246, 0.15);
+}
+
+.watchlist-row--pending {
+  border-color: rgba(234, 179, 8, 0.35);
+}
+
+.watchlist-row--failed {
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.watchlist-row:hover:not(.watchlist-row--active) {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.watchlist-row__select {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: #e2e8f0;
+  font: inherit;
+  text-align: left;
+  padding: 9px 6px 9px 10px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.watchlist-row__select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.watchlist-row__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.watchlist-row__symbol {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchlist-row--active .watchlist-row__symbol {
+  color: #93c5fd;
+}
+
+.watchlist-row__name {
+  font-size: 0.6875rem;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchlist-row__badge {
+  flex-shrink: 0;
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 1px 5px;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+
+.watchlist-row__remove {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font: inherit;
+  font-size: 1.05rem;
+  line-height: 1;
+  padding: 0 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.watchlist-row__remove:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}
+
+.watchlist-row__remove:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+

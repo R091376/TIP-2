@@ -1,0 +1,160 @@
+.chart-page {
+  display: flex;
+  flex-direction: column;
+  height: 100svh;
+  min-height: 100svh;
+  text-align: left;
+  background: #0a0c10;
+  color: #e2e8f0;
+  overflow: hidden;
+}
+
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 20px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #1e2433;
+  background: #0f1117;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.chart-header__title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.chart-header h1 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: min(28vw, 14rem);
+}
+
+/* Keep timeframes + chart type next to the symbol (not pushed right), with breathing room */
+.chart-header__controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.chart-header__user {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+  /* Sit flush with header right edge (header already has 16px padding) */
+  margin-right: 0;
+  padding-right: 0;
+}
+
+.chart-header__nav-link {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #93c5fd;
+  text-decoration: none;
+}
+
+.chart-header__nav-link:hover {
+  color: #bfdbfe;
+}
+
+.chart-header__admin-link {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #c4b5fd;
+  text-decoration: none;
+}
+
+.chart-header__admin-link:hover {
+  color: #ddd6fe;
+}
+
+.watchlist-sidebar__readonly-hint {
+  margin: 0;
+  padding: 0 12px 10px;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+/* Main row: chart | alerts + watchlist */
+.chart-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+
+/* Right column: alerts elevated, watchlist below (clear gap so they don’t merge) */
+.right-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 300px;
+  min-width: 260px;
+  max-width: 340px;
+  flex-shrink: 0;
+  min-height: 0;
+  padding: 10px;
+  border-left: 1px solid #2a3348;
+  background: #080a0e;
+  box-shadow: inset 1px 0 0 rgba(167, 139, 250, 0.08);
+}
+
+.right-rail .watchlist-sidebar {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  flex: 1 1 42%;
+  border-left: none;
+  min-height: 0;
+  border: 1px solid rgba(59, 130, 246, 0.28);
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    rgba(59, 130, 246, 0.1) 0%,
+    rgba(12, 14, 20, 0.95) 72px,
+    #0c0e14 100%
+  );
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+
+.chart-error,
+.chart-info {
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid #1e2433;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.chart-error {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+.chart-info {
+  background: rgba(59, 130, 246, 0.1);
+  color: #93c5fd;
+}
+
