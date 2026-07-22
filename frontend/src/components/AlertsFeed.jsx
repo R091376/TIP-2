@@ -5,7 +5,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import { ALERTS_MAX } from '../utils/alertList'
+import { ALERTS_MAX, filterVisibleAlerts, isExpiredAlert } from '../utils/alertList'
 
 const MAX_VISIBLE = ALERTS_MAX
 const ALL = ''
@@ -79,9 +79,14 @@ export default function AlertsFeed({
   const [filterTimeframe, setFilterTimeframe] = useState(ALL)
   const [filterPattern, setFilterPattern] = useState(ALL)
 
+  const visibleAlerts = useMemo(
+    () => filterVisibleAlerts(alerts || []),
+    [alerts],
+  )
+
   const symbolOptions = useMemo(() => {
     const map = new Map()
-    for (const a of alerts || []) {
+    for (const a of visibleAlerts) {
       if (!a?.symbolId || map.has(a.symbolId)) continue
       map.set(
         a.symbolId,
@@ -91,41 +96,41 @@ export default function AlertsFeed({
     return [...map.entries()]
       .map(([id, label]) => ({ id, label }))
       .sort((x, y) => x.label.localeCompare(y.label))
-  }, [alerts, symbolLabels])
+  }, [visibleAlerts, symbolLabels])
 
   const timeframeOptions = useMemo(() => {
     const set = new Set()
-    for (const a of alerts || []) {
+    for (const a of visibleAlerts) {
       if (a?.timeframe) set.add(a.timeframe)
     }
     return [...set].sort(sortTf)
-  }, [alerts])
+  }, [visibleAlerts])
 
   const patternOptions = useMemo(() => {
     const set = new Set()
-    for (const a of alerts || []) {
+    for (const a of visibleAlerts) {
       if (a?.patternType) set.add(a.patternType)
     }
     return [...set].sort((a, b) =>
       formatPatternLabel(a).localeCompare(formatPatternLabel(b)),
     )
-  }, [alerts])
+  }, [visibleAlerts])
 
   const filtersActive =
     filterSymbol !== ALL || filterTimeframe !== ALL || filterPattern !== ALL
 
   const filtered = useMemo(() => {
-    const list = alerts || []
-    return list.filter((a) => {
+    return visibleAlerts.filter((a) => {
+      if (isExpiredAlert(a)) return false
       if (filterSymbol && a.symbolId !== filterSymbol) return false
       if (filterTimeframe && a.timeframe !== filterTimeframe) return false
       if (filterPattern && a.patternType !== filterPattern) return false
       return true
     })
-  }, [alerts, filterSymbol, filterTimeframe, filterPattern])
+  }, [visibleAlerts, filterSymbol, filterTimeframe, filterPattern])
 
   const items = filtered.slice(0, MAX_VISIBLE)
-  const total = alerts?.length ?? 0
+  const total = visibleAlerts.length
 
   function resetFilters() {
     setFilterSymbol(ALL)

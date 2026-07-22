@@ -4,6 +4,8 @@ import {
   appendAlert,
   collectPinnedInstanceIds,
   compactAlerts,
+  filterVisibleAlerts,
+  isExpiredAlert,
 } from '../utils/alertList'
 import { fetchTodayPatternAlerts } from '../services/patternAlertsApi'
 import {
@@ -103,12 +105,15 @@ export function usePatternOverlay({
     if (!items?.length) return
     setAlerts((prev) => {
       const byId = new Map()
-      // History first, then live (live overwrites same id)
+      // History first, then live (live overwrites same id); skip expired stages
       for (const a of items) {
-        if (a?.id) byId.set(a.id, normalizeAlert(a))
+        const n = normalizeAlert(a)
+        if (!n?.id || isExpiredAlert(n)) continue
+        byId.set(n.id, n)
       }
       for (const a of prev || []) {
-        if (a?.id) byId.set(a.id, a)
+        if (!a?.id || isExpiredAlert(a)) continue
+        byId.set(a.id, a)
       }
       const merged = [...byId.values()].sort((a, b) => {
         const ta = Number(a.time) || 0
@@ -116,7 +121,7 @@ export function usePatternOverlay({
         if (tb !== ta) return tb - ta
         return (Number(b.receivedAt) || 0) - (Number(a.receivedAt) || 0)
       })
-      const next = compactAlerts(merged, {
+      const next = compactAlerts(filterVisibleAlerts(merged), {
         max: Math.max(ALERTS_MAX, 300),
         pinnedInstanceIds: collectPinnedInstanceIds(
           focusedInstanceIdRef.current,
@@ -317,6 +322,8 @@ export function usePatternOverlay({
     })
     if (!alert?.symbolId || !alert?.timeframe || alert.time == null) return
     if (alert.price == null || Number.isNaN(Number(alert.price))) return
+    // Never show expired stages in the alerts tab
+    if (isExpiredAlert(alert)) return
 
     setAlerts((prev) => {
       const next = appendAlert(prev, alert, {

@@ -372,8 +372,16 @@ export default function ChartContainer() {
           onClick={() => setMobilePanel('alerts')}
         >
           Alerts
-          {overlay.alerts?.length > 0 ? (
-            <span className="mobile-dock__badge">{overlay.alerts.length}</span>
+          {overlay.alerts?.filter(
+            (a) => String(a?.stage || '').toLowerCase() !== 'expired',
+          ).length > 0 ? (
+            <span className="mobile-dock__badge">
+              {
+                overlay.alerts.filter(
+                  (a) => String(a?.stage || '').toLowerCase() !== 'expired',
+                ).length
+              }
+            </span>
           ) : null}
         </button>
         <button

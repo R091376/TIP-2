@@ -114,14 +114,11 @@ class MarketStatusService:
                     "Phase clock: forcing CLOSED (feed was fresh but wall-clock session ended/holiday)"
                 )
                 self._set_market_phase(MarketPhase.CLOSED)
-            elif (
-                clock_phase == MarketPhase.OPEN
-                and self._market_phase == MarketPhase.CLOSED
-            ):
-                # Recover from a bad feed CLOSED while session is clearly open
-                # (e.g. mis-mapped enum int). Prefer clock OPEN over stale CLOSED.
+            elif clock_phase == MarketPhase.OPEN and self._market_phase != MarketPhase.OPEN:
+                # Recover from a bad feed CLOSED/PRE_OPEN while session is open.
                 logger.info(
-                    "Phase clock: overriding feed CLOSED → OPEN (clock OPEN, session active)"
+                    "Phase clock: overriding feed %s → OPEN (clock OPEN, session active)",
+                    self._market_phase,
                 )
                 self._set_market_phase(MarketPhase.OPEN)
             return

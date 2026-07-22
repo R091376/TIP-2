@@ -75,6 +75,7 @@ class PatternJournal(Protocol):
         limit: int = 500,
         symbol_id: str | None = None,
         timeframe: str | None = None,
+        include_expired: bool = False,
     ) -> list[dict]: ...
 
 
@@ -109,7 +110,9 @@ class NoOpPatternJournal:
     def find_statistics_for_symbols(self, symbol_ids, pattern_type, timeframe):
         return []
 
-    def list_session_day_alerts(self, *, day=None, limit=500, symbol_id=None, timeframe=None):
+    def list_session_day_alerts(
+        self, *, day=None, limit=500, symbol_id=None, timeframe=None, include_expired=False
+    ):
         return []
 
 
@@ -238,6 +241,7 @@ class InMemoryPatternJournal:
         limit: int = 500,
         symbol_id: str | None = None,
         timeframe: str | None = None,
+        include_expired: bool = False,
     ) -> list[dict]:
         from datetime import date as date_cls
         from zoneinfo import ZoneInfo
@@ -268,6 +272,8 @@ class InMemoryPatternJournal:
                     stage = (
                         ev.stage.value if hasattr(ev.stage, "value") else str(ev.stage)
                     ).lower()
+                    if not include_expired and stage == "expired":
+                        continue
                     price = float(ev.price)
                     iid = str(inst.id)
                     alerts.append(

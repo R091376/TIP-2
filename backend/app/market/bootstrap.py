@@ -182,10 +182,12 @@ class MarketBootstrapService:
         return BootstrapSymbolResult.failed(symbol_id)
 
     def on_tick(self, tick: Tick) -> None:
-        # After session close / pre-open: do not open new live bars from residual ticks
-        from app.market.nse_clock import MarketPhase
+        # Gate live bars on wall-clock NSE session (09:15–15:30 IST), not feed
+        # market_info alone. A mis-mapped feed CLOSED used to freeze candles
+        # mid-session (e.g. last bar stuck at 15:05 while the market ran to 15:30).
+        from app.market.nse_clock import MarketPhase, phase_from_clock
 
-        if self._status.get_market_phase() != MarketPhase.OPEN:
+        if phase_from_clock() != MarketPhase.OPEN:
             return
         for tf in self._settings.supported_timeframes:
             try:

@@ -161,10 +161,12 @@ class PostgresPatternJournal:
         limit: int = 500,
         symbol_id: str | None = None,
         timeframe: str | None = None,
+        include_expired: bool = False,
     ) -> list[dict]:
         """Pattern stage events for an IST calendar day (default: today).
 
         Returns alert DTOs newest-first for the FE alerts feed after refresh.
+        By default **excludes** ``expired`` stages (product: hide from alerts UI).
         """
         ist_day = day or datetime.now(tz=_IST).date()
         start_ist = datetime.combine(ist_day, time(0, 0), tzinfo=_IST)
@@ -191,6 +193,9 @@ class PostgresPatternJournal:
                     )
                 )
             )
+            # Server-side: never return expired stages unless explicitly requested
+            if not include_expired:
+                q = q.where(PatternEventRow.event_type != "expired")
             if symbol_id:
                 q = q.where(PatternInstanceRow.symbol_id == symbol_id)
             if timeframe:
@@ -214,6 +219,8 @@ class PostgresPatternJournal:
             if not (in_day_candle or in_day_event):
                 continue
             stage = (ev.event_type or "").lower()
+            if not include_expired and stage == "expired":
+                continue
             price = float(ev.price_at_event)
             iid = str(inst.id)
             alert_id = f"{iid}:{stage}:{ct}:{price}"

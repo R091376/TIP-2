@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { appendAlert, collectPinnedInstanceIds, compactAlerts } from './alertList'
+import {
+  appendAlert,
+  collectPinnedInstanceIds,
+  compactAlerts,
+  filterVisibleAlerts,
+  isExpiredAlert,
+} from './alertList'
 
 describe('collectPinnedInstanceIds', () => {
   it('includes focused and remembered instance ids', () => {
@@ -58,5 +64,28 @@ describe('appendAlert', () => {
   it('ignores null alert', () => {
     const prev = [{ id: 'a' }]
     expect(appendAlert(prev, null)).toBe(prev)
+  })
+
+  it('ignores expired stage alerts', () => {
+    const prev = [{ id: 'a', stage: 'detected' }]
+    const next = appendAlert(prev, {
+      id: 'b',
+      stage: 'expired',
+      instanceId: 'x',
+    })
+    expect(next.map((a) => a.id)).toEqual(['a'])
+  })
+})
+
+describe('filterVisibleAlerts', () => {
+  it('drops expired stages', () => {
+    const list = [
+      { id: '1', stage: 'detected' },
+      { id: '2', stage: 'expired' },
+      { id: '3', stage: 'EXPIRED' },
+      { id: '4', stage: 'succeeded' },
+    ]
+    expect(filterVisibleAlerts(list).map((a) => a.id)).toEqual(['1', '4'])
+    expect(isExpiredAlert({ stage: 'expired' })).toBe(true)
   })
 })
