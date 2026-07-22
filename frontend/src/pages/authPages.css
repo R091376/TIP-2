@@ -98,9 +98,12 @@
 
 .admin-page {
   min-height: 100svh;
+  min-height: 100dvh;
   background: #0a0c10;
   color: #e2e8f0;
   padding: 20px 24px 40px;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .admin-header {

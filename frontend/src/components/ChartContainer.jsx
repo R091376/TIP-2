@@ -49,6 +49,8 @@ export default function ChartContainer() {
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState(null)
   const [infoMessage, setInfoMessage] = useState(null)
+  /** Mobile dock: chart | alerts | watchlist (CSS shows dock ≤768px) */
+  const [mobilePanel, setMobilePanel] = useState('chart')
 
   chartTypeRef.current = chartType
   timeframeRef.current = timeframe
@@ -275,8 +277,26 @@ export default function ChartContainer() {
   const controlsDisabled =
     loading || adding || !activeSymbolId || activeIsFailed || activeIsPending
 
+  // After mobile dock shows chart again, force Lightweight Charts to measure the pane
+  useEffect(() => {
+    if (mobilePanel !== 'chart') return
+    const chart = chartRef.current
+    const el = containerRef.current
+    if (!chart || !el) return
+    const id = requestAnimationFrame(() => {
+      try {
+        const w = el.clientWidth
+        const h = el.clientHeight
+        if (w > 0 && h > 0) chart.resize(w, h)
+      } catch {
+        /* chart disposed */
+      }
+    })
+    return () => cancelAnimationFrame(id)
+  }, [mobilePanel, chartRef, containerRef])
+
   return (
-    <div className="chart-page">
+    <div className={`chart-page chart-page--mobile-${mobilePanel}`}>
       <ChartHeader
         displayName={activeSymbolId ? displayName : 'Loading…'}
         connectionStatus={connectionStatus}
@@ -295,36 +315,75 @@ export default function ChartContainer() {
       {!error && infoMessage && <div className="chart-info">{infoMessage}</div>}
 
       <div className="chart-body">
-        <ChartPanel
-          containerRef={containerRef}
-          loading={loading}
-          switching={switching}
-          adding={adding}
-          activeIsPending={activeIsPending}
-          ohlcLegend={ohlcLegend}
-        />
-
-        <div className="right-rail">
-          <AlertsFeed
-            alerts={overlay.alerts}
-            selectedId={overlay.selectedAlertId}
-            selectedInstanceId={overlay.selectedInstanceId}
-            onSelect={handleAlertSelect}
-            onClear={overlay.clearAllAlerts}
-            symbolLabels={symbolLabels}
-          />
-          <SymbolSwitcher
-            watchlist={watchlist}
-            activeSymbolId={activeSymbolId}
-            onSelect={handleSymbolChange}
-            onAdd={handleAdd}
-            onRemove={handleRemove}
-            disabled={loading}
+        <div className="chart-main" data-mobile-panel="chart">
+          <ChartPanel
+            containerRef={containerRef}
+            loading={loading}
+            switching={switching}
             adding={adding}
-            canManage={isAdmin}
+            activeIsPending={activeIsPending}
+            ohlcLegend={ohlcLegend}
           />
         </div>
+
+        <div className="right-rail">
+          <div className="right-rail__alerts" data-mobile-panel="alerts">
+            <AlertsFeed
+              alerts={overlay.alerts}
+              selectedId={overlay.selectedAlertId}
+              selectedInstanceId={overlay.selectedInstanceId}
+              onSelect={(a) => {
+                setMobilePanel('chart')
+                handleAlertSelect(a)
+              }}
+              onClear={overlay.clearAllAlerts}
+              symbolLabels={symbolLabels}
+            />
+          </div>
+          <div className="right-rail__watchlist" data-mobile-panel="watchlist">
+            <SymbolSwitcher
+              watchlist={watchlist}
+              activeSymbolId={activeSymbolId}
+              onSelect={(id) => {
+                setMobilePanel('chart')
+                handleSymbolChange(id)
+              }}
+              onAdd={handleAdd}
+              onRemove={handleRemove}
+              disabled={loading}
+              adding={adding}
+              canManage={isAdmin}
+            />
+          </div>
+        </div>
       </div>
+
+      <nav className="mobile-dock" aria-label="Main panels">
+        <button
+          type="button"
+          className={`mobile-dock__btn${mobilePanel === 'chart' ? ' is-active' : ''}`}
+          onClick={() => setMobilePanel('chart')}
+        >
+          Chart
+        </button>
+        <button
+          type="button"
+          className={`mobile-dock__btn${mobilePanel === 'alerts' ? ' is-active' : ''}`}
+          onClick={() => setMobilePanel('alerts')}
+        >
+          Alerts
+          {overlay.alerts?.length > 0 ? (
+            <span className="mobile-dock__badge">{overlay.alerts.length}</span>
+          ) : null}
+        </button>
+        <button
+          type="button"
+          className={`mobile-dock__btn${mobilePanel === 'watchlist' ? ' is-active' : ''}`}
+          onClick={() => setMobilePanel('watchlist')}
+        >
+          Symbols
+        </button>
+      </nav>
     </div>
   )
 }

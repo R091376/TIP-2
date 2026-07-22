@@ -35,12 +35,14 @@
 .watchlist-sidebar {
   display: flex;
   flex-direction: column;
-  width: 260px;
-  min-width: 220px;
-  max-width: 300px;
-  flex-shrink: 0;
-  border-left: 1px solid #1e2433;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  flex: 1 1 auto;
+  flex-shrink: 1;
+  border-left: none;
   min-height: 0;
+  height: 100%;
   background: linear-gradient(
     180deg,
     rgba(59, 130, 246, 0.07) 0%,

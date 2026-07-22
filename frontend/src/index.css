@@ -15,7 +15,9 @@
 body {
   margin: 0;
   min-height: 100svh;
+  min-height: 100dvh;
   background: #0a0c10;
+  overflow-x: hidden;
 }
 
 #root {
@@ -23,6 +25,14 @@ body {
   max-width: none;
   margin: 0;
   min-height: 100svh;
+  min-height: 100dvh;
   border: none;
   text-align: initial;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
 }

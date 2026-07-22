@@ -13,7 +13,7 @@ export default function ConnectionStatus({ status }) {
   return (
     <span className={`connection-status connection-status--${status}`}>
       <span className="connection-status__dot" aria-hidden="true" />
-      {label}
+      <span className="connection-status__label">{label}</span>
     </span>
   )
 }
