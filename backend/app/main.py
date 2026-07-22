@@ -54,12 +54,19 @@ def create_app() -> FastAPI:
     same_site = settings.session_same_site()
     # Browsers require Secure when SameSite=None (cross-site FE/API on Render)
     https_only = bool(settings.session_cookie_https_only) or same_site == "none"
+    logger.info(
+        "CORS allow_origins=%s same_site=%s https_only=%s",
+        origins,
+        same_site,
+        https_only,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
         allow_headers=["*"],
+        expose_headers=["*"],
         max_age=3600,
     )
     app.add_middleware(

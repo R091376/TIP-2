@@ -283,14 +283,27 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    # Allow TIP_WATCHLIST_STORE=memory via env without pydantic re-parse quirks
+    # Force critical env vars even if pydantic alias binding is flaky in some runtimes
     store = os.environ.get("TIP_WATCHLIST_STORE", "")
     profile = os.environ.get("TIP_PROFILE", "")
+    cors = os.environ.get("CORS_ALLOWED_ORIGINS", "")
+    same_site = os.environ.get("SESSION_COOKIE_SAMESITE", "")
+    https_only = os.environ.get("SESSION_COOKIE_HTTPS_ONLY", "")
     settings = Settings()
     if store:
         object.__setattr__(settings, "tip_watchlist_store", store)
     if profile:
         object.__setattr__(settings, "tip_profile", profile)
+    if cors:
+        object.__setattr__(settings, "cors_allowed_origins", cors)
+    if same_site:
+        object.__setattr__(settings, "session_cookie_samesite", same_site)
+    if https_only != "":
+        object.__setattr__(
+            settings,
+            "session_cookie_https_only",
+            https_only.strip().lower() in ("1", "true", "yes", "on"),
+        )
     return settings
 
 

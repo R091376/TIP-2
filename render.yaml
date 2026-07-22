@@ -46,10 +46,9 @@ services:
         sync: false
       - key: SESSION_SECRET
         generateValue: true
-      # After FE is live: https://tip2-web.onrender.com  (no trailing slash list item)
-      # Comma-separated if you keep local FE: https://tip2-web.onrender.com,http://localhost:5173
+      # Must match the browser Origin exactly (scheme + host, no trailing slash)
       - key: CORS_ALLOWED_ORIGINS
-        sync: false
+        value: https://tip2-web.onrender.com,http://localhost:5173
 
   # ── Frontend (Vite static) ────────────────────────────────────────────────
   # Static sites: no region, no plan: free. Quote rewrite paths (YAML treats * specially).
