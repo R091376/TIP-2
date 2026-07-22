@@ -59,9 +59,27 @@ Blueprint file: [`render.yaml`](../render.yaml) at repo root.
 
 ## Smoke checklist
 
-- [ ] `/api/health` on API
-- [ ] Login from FE (cookie set, Secure + SameSite=None)
-- [ ] Watchlist loads
-- [ ] Candles load
-- [ ] Live WS connects (browser Network → WS)
-- [ ] USER role cannot POST watchlist (403)
+- [ ] `GET https://tip2-api.onrender.com/api/health` → `{"status":"UP"}`
+- [ ] `GET https://tip2-api.onrender.com/` → service JSON (not 404)
+- [ ] `GET https://tip2-web.onrender.com/` → app HTML (not plain "Not Found")
+- [ ] JS/CSS under `/assets/` return 200
+- [ ] Login from FE (cookie Secure + SameSite=None)
+- [ ] Watchlist + candles + live WS
+
+## If FE shows blank / Not Found
+
+1. **Dashboard → tip2-web → Logs** — confirm `npm run build` produced `dist/assets/*`.
+2. **Environment** on tip2-api:  
+   `CORS_ALLOWED_ORIGINS=https://tip2-web.onrender.com`  
+   (exact FE origin, no trailing slash)
+3. **Environment** on tip2-web:  
+   `VITE_API_BASE_URL=https://tip2-api.onrender.com` then **Manual Deploy → Clear build cache & deploy**.
+4. SPA rewrite source must be quoted as `"/*"` in `render.yaml` (unquoted `/*` breaks YAML).
+
+## Working URLs (after healthy deploy)
+
+| What | URL |
+|------|-----|
+| API health | https://tip2-api.onrender.com/api/health |
+| API docs | https://tip2-api.onrender.com/docs |
+| Frontend | https://tip2-web.onrender.com/ |

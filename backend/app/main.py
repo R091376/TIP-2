@@ -70,6 +70,16 @@ def create_app() -> FastAPI:
         https_only=https_only,
     )
 
+    @app.get("/")
+    def root():
+        """Avoid bare 404 on the API host (browsers often open /)."""
+        return {
+            "service": "tip2-api",
+            "status": "UP",
+            "health": "/api/health",
+            "docs": "/docs",
+        }
+
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(admin_users.router)
