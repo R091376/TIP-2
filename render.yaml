@@ -52,11 +52,11 @@ services:
         sync: false
 
   # ── Frontend (Vite static) ────────────────────────────────────────────────
+  # Static sites are global CDN — no region (Render rejects region on static).
   - type: web
     name: tip2-web
     runtime: static
     plan: free
-    region: singapore
     rootDir: frontend
     buildCommand: |
       npm ci
