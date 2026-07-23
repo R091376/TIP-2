@@ -93,6 +93,8 @@ export function usePatternOverlay({
   const [alerts, setAlerts] = useState([])
   const [selectedAlertId, setSelectedAlertId] = useState(null)
   const [selectedInstanceId, setSelectedInstanceId] = useState(null)
+  /** True when a price line / markers handle is currently on the chart. */
+  const [hasChartDrawings, setHasChartDrawings] = useState(false)
   /** True after a successful HTTP fetch (empty is a valid quiet IST day). */
   const dayAlertsLoadedRef = useRef(false)
   /** Generation token so remounts supersede in-flight requests (StrictMode-safe). */
@@ -191,6 +193,7 @@ export function usePatternOverlay({
   function wipeOverlay() {
     clearPatternOverlay(overlayHandleRef.current)
     overlayHandleRef.current = null
+    setHasChartDrawings(false)
   }
 
   function memoryKey(symbolId = activeSymbolIdRef.current, tf = timeframeRef.current) {
@@ -252,7 +255,8 @@ export function usePatternOverlay({
 
     const events = collectInstanceEvents(alertsRef.current, focusAlert.instanceId)
     const drawEvents = events.length ? events : [focusAlert]
-    const focusView = opts.focusView !== false
+    // Default: do not zoom/scale candles when painting overlays (alert click UX).
+    const focusView = opts.focusView === true
     const candles = sortedCandlesFromMap(candlesRef.current)
     // Never paint on empty series — clears pending and flashes wrong viewport/markers.
     if (!candles.length) return false
@@ -270,6 +274,7 @@ export function usePatternOverlay({
     })
 
     if (overlayHandleRef.current) {
+      setHasChartDrawings(true)
       setFocusSelection(focusAlert)
       rememberOverlay(
         focusAlert.symbolId,
@@ -283,11 +288,12 @@ export function usePatternOverlay({
       )
       return true
     }
+    setHasChartDrawings(false)
     return false
   }
 
   function restoreOverlayAfterData(opts = {}) {
-    const focusView = opts.focusView !== false
+    const focusView = opts.focusView === true
     const pending = pendingOverlayAlertRef.current
     if (
       pending &&
@@ -383,15 +389,22 @@ export function usePatternOverlay({
     pendingOverlayAlertRef.current = null
   }
 
+  /** Clear the alerts feed list only — leaves chart drawings intact. */
   function clearAllAlerts() {
     setAlerts([])
     alertsRef.current = []
-    setFocusSelection(null)
+    setSelectedAlertId(null)
     selectedAlertIdRef.current = null
-    focusedInstanceIdRef.current = null
+    // Keep focusedInstanceId / drawings until clearChartDrawings()
+  }
+
+  /** Remove reference line + markers from the chart; does not clear the alerts list. */
+  function clearChartDrawings() {
     pendingOverlayAlertRef.current = null
     lastPaintedInstanceSigRef.current = ''
     overlayMemoryRef.current.clear()
+    focusedInstanceIdRef.current = null
+    setFocusSelection(null)
     wipeOverlay()
   }
 
@@ -429,6 +442,7 @@ export function usePatternOverlay({
     alerts,
     selectedAlertId,
     selectedInstanceId,
+    hasChartDrawings,
     alertsRef,
     pendingOverlayAlertRef,
     focusedInstanceIdRef,
@@ -445,6 +459,7 @@ export function usePatternOverlay({
     setPendingAlert,
     clearPendingAlert,
     clearAllAlerts,
+    clearChartDrawings,
     resetOverlayForEmptyWatchlist,
     willRestoreForCurrentSeries,
     hydrateDayAlerts,

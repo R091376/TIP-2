@@ -216,7 +216,8 @@ export function applyInstanceOverlay(
       : []
   if (!events.length) return null
 
-  const focusView = spec.focusView !== false
+  // Only zoom when explicitly requested — alert clicks must not reshape the viewport.
+  const focusView = spec.focusView === true
   const focus = spec.focusAlert || events[events.length - 1]
   const ref =
     Number(

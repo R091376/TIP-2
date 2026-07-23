@@ -161,7 +161,7 @@
   border: 1px solid #1e2433;
 }
 
-/* Top of locked volume pane: chart-panel bottom pad (20px) + max vol height (96px) − inset */
+/* Top of locked volume pane: volume SMA chip only */
 .volume-pane-legend {
   position: absolute;
   left: 20px;
@@ -194,12 +194,61 @@
   color: #93c5fd;
 }
 
-/* TradingView-style OHLC strip over the price pane */
-.ohlc-legend {
+/* OHLC strip + clear drawings at top of price pane.
+   High z-index so the LWC canvas does not steal clicks from the button. */
+.chart-top-toolbar {
   position: absolute;
   top: 20px;
   left: 20px;
-  z-index: 2;
+  z-index: 10;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100% - 40px);
+  /* Toolbar itself is not a hit target; children opt in (button). */
+  pointer-events: none;
+}
+
+.chart-clear-drawings {
+  /* Must be auto or the chart canvas under this area swallows clicks. */
+  pointer-events: auto;
+  position: relative;
+  z-index: 11;
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #2a3144;
+  background: rgba(15, 17, 23, 0.92);
+  color: #cbd5e1;
+  cursor: pointer;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.chart-clear-drawings:hover:not(:disabled) {
+  background: rgba(26, 32, 48, 0.95);
+  border-color: #3b455c;
+  color: #f1f5f9;
+}
+
+.chart-clear-drawings:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* TradingView-style OHLC strip (positioned by toolbar; not absolute alone) */
+.ohlc-legend {
+  position: relative;
+  top: auto;
+  left: auto;
+  z-index: auto;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;

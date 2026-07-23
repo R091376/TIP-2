@@ -209,7 +209,7 @@ export function useChartNavigation(ctx) {
         alert.symbolId === activeSymbolIdRef.current &&
         alert.timeframe === timeframeRef.current
       ) {
-        overlay.paintOverlayIfReady(alert)
+        overlay.paintOverlayIfReady(alert, { focusView: false })
         overlay.clearPendingAlert()
         return
       }

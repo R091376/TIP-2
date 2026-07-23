@@ -323,6 +323,8 @@ export default function ChartContainer() {
             adding={adding}
             activeIsPending={activeIsPending}
             ohlcLegend={ohlcLegend}
+            onClearDrawings={overlay.clearChartDrawings}
+            clearDrawingsEnabled={overlay.hasChartDrawings}
           />
         </div>
 

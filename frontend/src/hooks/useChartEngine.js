@@ -151,7 +151,8 @@ export function useChartEngine({ chartTypeRef, overlay }) {
         setOhlcLegend(candles.length ? candles[candles.length - 1] : null)
       }
       if (restoreOverlay) {
-        ov.restoreOverlayAfterData({ focusView: resetView })
+        // Never zoom for overlay restore — preserves bar size after alert navigation.
+        ov.restoreOverlayAfterData({ focusView: false })
       }
     },
     [applyVolumeSeriesData],

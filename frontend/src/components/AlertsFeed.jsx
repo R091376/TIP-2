@@ -158,9 +158,9 @@ export default function AlertsFeed({
               type="button"
               className="alerts-feed__clear"
               onClick={onClear}
-              title="Clear alerts from this browser view (server history reloads on refresh)"
+              title="Clear the alerts list only (chart drawings are unchanged — use Clear drawings on the chart)"
             >
-              Clear
+              Clear alerts
             </button>
           )}
         </div>

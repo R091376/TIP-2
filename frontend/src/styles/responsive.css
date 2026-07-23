@@ -113,12 +113,16 @@ button,
     min-height: 220px;
   }
 
-  .ohlc-legend {
+  .chart-top-toolbar {
     top: 12px;
     left: 12px;
+    gap: 10px;
+    max-width: calc(100% - 24px);
+  }
+
+  .ohlc-legend {
     gap: 6px 10px;
     font-size: 0.6875rem;
-    max-width: calc(100% - 24px);
   }
 
   .volume-pane-legend {
