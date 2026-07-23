@@ -1,12 +1,25 @@
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './useAuth'
+import StartupStatus from './StartupStatus'
 import '../pages/authPages.css'
 
 export default function RequireAuth({ children, adminOnly = false }) {
-  const { user, loading, isAdmin } = useAuth()
+  const { user, loading, blocking, isAdmin, startup } = useAuth()
   const location = useLocation()
 
-  if (loading) {
+  // `blocking` covers the feature-flagged startup gate; `loading` covers
+  // flag-off session probe (and any brief post-gate load).
+  if (blocking || loading) {
+    if (startup?.enabled && blocking) {
+      return (
+        <StartupStatus
+          steps={startup.steps}
+          lastError={startup.lastError}
+          timedOut={startup.timedOut}
+          onRetry={startup.retry}
+        />
+      )
+    }
     return (
       <div className="auth-page">
         <div className="auth-card">

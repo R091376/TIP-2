@@ -20,6 +20,7 @@ import {
   normalizeStatus,
 } from '../chart/helpers'
 import { failedBannerForEntry, infoAfterCandleLoad } from '../chart/sessionMessages'
+import { isUnauthorizedError } from '../services/http'
 
 /**
  * @param {object} opts
@@ -247,7 +248,17 @@ export function useChartBootstrap({
         setLoading(false)
       } catch (err) {
         if (!isStale()) {
-          setError(err instanceof Error ? err.message : 'Failed to load chart data')
+          // 401 is handled globally (clear session → RequireAuth → login).
+          // Avoid leaving a cryptic JSON/object banner on an empty chart shell.
+          if (!isUnauthorizedError(err)) {
+            const msg =
+              err instanceof Error
+                ? err.message
+                : typeof err === 'string'
+                  ? err
+                  : 'Failed to load chart data'
+            setError(msg)
+          }
           setLoading(false)
           updateConnectionStatus('error', marketPhaseRef.current)
         }

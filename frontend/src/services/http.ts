@@ -9,14 +9,89 @@ export type ApiOptions = RequestInit & {
   credentials?: RequestCredentials
 }
 
+export class ApiError extends Error {
+  status: number
+  path: string
+
+  constructor(message: string, status: number, path: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.path = path
+  }
+}
+
+/** Called when a non-login request gets 401 (session missing/expired). */
+type UnauthorizedHandler = (info: { path: string; message: string }) => void
+let unauthorizedHandler: UnauthorizedHandler | null = null
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  unauthorizedHandler = handler
+}
+
+export function isUnauthorizedError(err: unknown): boolean {
+  if (err instanceof ApiError) return err.status === 401
+  if (err instanceof Error) {
+    // Status-based is preferred; message match is a fallback for non-ApiError throws.
+    // Do not match "session cookie" — that is a login-config error, not a mid-app 401.
+    return /not signed in|not logged in|please log in again/i.test(err.message)
+  }
+  return false
+}
+
+function coerceServerMessage(value: unknown): string | null {
+  if (value == null) return null
+  if (typeof value === 'string') {
+    const t = value.trim()
+    return t || null
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  if (Array.isArray(value)) {
+    // FastAPI validation errors: [{loc, msg, type}, ...]
+    const parts = value
+      .map((item) => {
+        if (typeof item === 'string') return item
+        if (item && typeof item === 'object' && 'msg' in item) {
+          return String((item as { msg: unknown }).msg)
+        }
+        return null
+      })
+      .filter(Boolean)
+    return parts.length ? parts.join('; ') : null
+  }
+  if (typeof value === 'object') {
+    const o = value as Record<string, unknown>
+    const nested =
+      coerceServerMessage(o.message) ||
+      coerceServerMessage(o.error) ||
+      coerceServerMessage(o.detail) ||
+      coerceServerMessage(o.title)
+    if (nested) return nested
+    // Avoid React "object as child" / "[object Object]" banners
+    try {
+      return JSON.stringify(o)
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
 function messageFromBody(status: number, body: string): string {
-  let parsed: { message?: string; error?: string } | null = null
+  let parsed: Record<string, unknown> | null = null
   try {
-    parsed = body ? (JSON.parse(body) as { message?: string; error?: string }) : null
+    parsed = body ? (JSON.parse(body) as Record<string, unknown>) : null
   } catch {
     parsed = null
   }
-  const serverMsg = parsed?.message || parsed?.error || body
+
+  const serverMsg =
+    coerceServerMessage(parsed?.message) ||
+    coerceServerMessage(parsed?.error) ||
+    coerceServerMessage(parsed?.detail) ||
+    (parsed == null && body ? body.trim() : null)
 
   if (status === 503) {
     return serverMsg || 'Service temporarily unavailable.'
@@ -42,6 +117,16 @@ function messageFromBody(status: number, body: string): string {
   return serverMsg || `Request failed (${status})`
 }
 
+function shouldNotifyUnauthorized(path: string): boolean {
+  // Login/logout failures are expected UX, not a dropped session mid-app.
+  const p = path.split('?')[0]
+  if (p.endsWith('/api/auth/login')) return false
+  if (p.endsWith('/api/auth/logout')) return false
+  if (p.endsWith('/api/auth/me')) return false
+  if (p.endsWith('/api/health')) return false
+  return true
+}
+
 /**
  * Fetch JSON from the API. Throws Error with a user-facing message on non-OK.
  * Returns null for 204 / empty body.
@@ -63,7 +148,15 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
 
   if (!response.ok) {
     const text = await response.text()
-    throw new Error(messageFromBody(response.status, text))
+    const message = messageFromBody(response.status, text)
+    if (response.status === 401 && shouldNotifyUnauthorized(path)) {
+      try {
+        unauthorizedHandler?.({ path, message })
+      } catch {
+        /* ignore handler errors */
+      }
+    }
+    throw new ApiError(message, response.status, path)
   }
 
   if (response.status === 204) {
@@ -101,7 +194,7 @@ export async function apiAllow401<T = unknown>(
   }
   if (!response.ok) {
     const text = await response.text()
-    throw new Error(messageFromBody(response.status, text))
+    throw new ApiError(messageFromBody(response.status, text), response.status, path)
   }
   if (response.status === 204) return null
   const text = await response.text()

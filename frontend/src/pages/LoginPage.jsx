@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
+import StartupStatus from '../auth/StartupStatus'
 import './authPages.css'
 
 /**
@@ -8,22 +9,48 @@ import './authPages.css'
  * Do not restore /admin from location.state — that caused a flash of admin then chart.
  */
 export default function LoginPage() {
-  const { user, loading, login } = useAuth()
+  const {
+    user,
+    loading,
+    blocking,
+    login,
+    startup,
+    error: sessionError,
+    clearError,
+  } = useAuth()
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const displayError = error || sessionError
+
+  // Feature-flagged readiness gate (API → Postgres → session) before login form.
+  if (blocking && startup?.enabled) {
+    return (
+      <StartupStatus
+        steps={startup.steps}
+        lastError={startup.lastError}
+        timedOut={startup.timedOut}
+        onRetry={startup.retry}
+      />
+    )
+  }
 
   // Already signed in → chart only (never bounce through admin).
   if (!loading && user) {
     return <Navigate to="/" replace />
   }
 
+  function dismissErrors() {
+    setError(null)
+    clearError?.()
+  }
+
   async function onSubmit(e) {
     e.preventDefault()
     setSubmitting(true)
-    setError(null)
+    dismissErrors()
     try {
       await login(username.trim(), password)
       navigate('/', { replace: true })
@@ -45,7 +72,10 @@ export default function LoginPage() {
           <input
             autoComplete="username"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) => {
+              setUsername(e.target.value)
+              if (displayError) dismissErrors()
+            }}
             required
             minLength={3}
           />
@@ -57,13 +87,20 @@ export default function LoginPage() {
             type="password"
             autoComplete="current-password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              setPassword(e.target.value)
+              if (displayError) dismissErrors()
+            }}
             required
             minLength={4}
           />
         </label>
 
-        {error && <div className="auth-error">{error}</div>}
+        {displayError && (
+          <div className="auth-error" role="alert">
+            {displayError}
+          </div>
+        )}
 
         <button type="submit" className="auth-submit" disabled={submitting || loading}>
           {submitting ? 'Signing in…' : 'Sign in'}
