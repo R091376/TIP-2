@@ -12,16 +12,20 @@ export type AlertLike = {
   [key: string]: unknown
 }
 
-/** Expired stage events are hidden from the alerts feed UI. */
+/** True when stage is expired (terminal session/max-duration outcome). */
 export function isExpiredAlert(alert: AlertLike | null | undefined): boolean {
   return String(alert?.stage ?? '').toLowerCase() === 'expired'
 }
 
+/**
+ * Alerts shown in the feed. Expired stages are kept (muted in UI).
+ * Reserved for future filters (e.g. hide noise types) — currently identity.
+ */
 export function filterVisibleAlerts<T extends AlertLike>(
   list: T[] | null | undefined,
 ): T[] {
   if (!list?.length) return []
-  return list.filter((a) => !isExpiredAlert(a))
+  return list
 }
 
 export type OverlayMemoryEntry = {
@@ -75,7 +79,7 @@ export function compactAlerts<T extends AlertLike>(
   return out
 }
 
-/** Prepend a new alert and compact. Dedupes by id. Drops expired stages. */
+/** Prepend a new alert and compact. Dedupes by id. Keeps expired stages. */
 export function appendAlert<T extends AlertLike>(
   prev: T[] | null | undefined,
   alert: T | null | undefined,
@@ -83,11 +87,6 @@ export function appendAlert<T extends AlertLike>(
 ): T[] {
   if (!alert) return prev || []
   const prevList = prev || []
-  // Silently ignore expired stage events in the feed UI
-  if (isExpiredAlert(alert)) {
-    const cleaned = filterVisibleAlerts(prevList)
-    return cleaned.length === prevList.length ? prevList : cleaned
-  }
   const list = filterVisibleAlerts(prevList)
   if (list.some((a) => a.id === alert.id)) {
     return list.length === prevList.length ? prevList : list

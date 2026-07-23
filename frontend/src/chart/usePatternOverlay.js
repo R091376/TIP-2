@@ -5,7 +5,6 @@ import {
   collectPinnedInstanceIds,
   compactAlerts,
   filterVisibleAlerts,
-  isExpiredAlert,
 } from '../utils/alertList'
 import { fetchTodayPatternAlerts } from '../services/patternAlertsApi'
 import {
@@ -94,8 +93,10 @@ export function usePatternOverlay({
   const [alerts, setAlerts] = useState([])
   const [selectedAlertId, setSelectedAlertId] = useState(null)
   const [selectedInstanceId, setSelectedInstanceId] = useState(null)
+  /** True after a successful HTTP fetch (empty is a valid quiet IST day). */
   const dayAlertsLoadedRef = useRef(false)
-  const dayAlertsInflightRef = useRef(false)
+  /** Generation token so remounts supersede in-flight requests (StrictMode-safe). */
+  const dayAlertsGenRef = useRef(0)
 
   alertsRef.current = alerts
   selectedAlertIdRef.current = selectedAlertId
@@ -105,14 +106,14 @@ export function usePatternOverlay({
     if (!items?.length) return
     setAlerts((prev) => {
       const byId = new Map()
-      // History first, then live (live overwrites same id); skip expired stages
+      // History first, then live (live overwrites same id). Include expired.
       for (const a of items) {
         const n = normalizeAlert(a)
-        if (!n?.id || isExpiredAlert(n)) continue
+        if (!n?.id) continue
         byId.set(n.id, n)
       }
       for (const a of prev || []) {
-        if (!a?.id || isExpiredAlert(a)) continue
+        if (!a?.id) continue
         byId.set(a.id, a)
       }
       const merged = [...byId.values()].sort((a, b) => {
@@ -134,55 +135,58 @@ export function usePatternOverlay({
   }
 
   /**
-   * Hydrate alerts from Postgres journal for the IST calendar day.
-   * Retries until success; does not depend on disposedRef (that races StrictMode).
+   * Hydrate alerts from Postgres for the IST calendar day.
+   *
+   * Cold-start / DB readiness is handled by the startup gate *before* login.
+   * Here we only fetch once the user is already in the app: no empty-result
+   * cold-start loops. One retry on hard network/HTTP error only.
    */
-  async function hydrateDayAlerts({ force = false } = {}) {
-    if (!force && dayAlertsLoadedRef.current) return
-    if (dayAlertsInflightRef.current) return
-    dayAlertsInflightRef.current = true
-    try {
+  async function hydrateDayAlerts() {
+    if (dayAlertsLoadedRef.current) return 'ok'
+
+    const gen = ++dayAlertsGenRef.current
+    const attempt = async () => {
       const items = await fetchTodayPatternAlerts({ limit: 500 })
+      if (gen !== dayAlertsGenRef.current) return 'stale'
       mergeDayAlerts(items)
       dayAlertsLoadedRef.current = true
       if (import.meta.env.DEV) {
         // eslint-disable-next-line no-console
-        console.info('[alerts] hydrated day alerts:', items.length)
+        console.info(
+          '[alerts] hydrated day alerts:',
+          Array.isArray(items) ? items.length : 0,
+        )
       }
+      return 'ok'
+    }
+
+    try {
+      return await attempt()
     } catch (err) {
-      dayAlertsLoadedRef.current = false
-      // eslint-disable-next-line no-console
-      console.warn('[alerts] failed to load day alerts', err)
-    } finally {
-      dayAlertsInflightRef.current = false
+      if (gen !== dayAlertsGenRef.current) return 'stale'
+      // Single retry for a transient network glitch — not free-tier wake.
+      try {
+        await new Promise((r) => setTimeout(r, 400))
+        if (gen !== dayAlertsGenRef.current) return 'stale'
+        return await attempt()
+      } catch (err2) {
+        if (gen !== dayAlertsGenRef.current) return 'stale'
+        // eslint-disable-next-line no-console
+        console.warn('[alerts] failed to load day alerts', err2 || err)
+        return 'error'
+      }
     }
   }
 
-  // After chart bootstrap finishes (loading false), load today's alerts.
-  // Also try once on mount so feed is ready ASAP when already warm.
+  // Fetch as soon as the chart page mounts. Do not wait for candle bootstrap
+  // (slow PENDING/seed) — that is unrelated to API cold start.
   useEffect(() => {
-    let cancelled = false
-    let attempts = 0
-    const maxAttempts = 5
-
-    async function run() {
-      while (!cancelled && attempts < maxAttempts && !dayAlertsLoadedRef.current) {
-        attempts += 1
-        await hydrateDayAlerts({ force: attempts > 1 })
-        if (dayAlertsLoadedRef.current || cancelled) break
-        await new Promise((r) => setTimeout(r, 400 * attempts))
-      }
-    }
-
-    // Prefer waiting until initial loading completes to avoid auth/bootstrap races
-    if (!loading) {
-      run()
-    }
+    void hydrateDayAlerts()
     return () => {
-      cancelled = true
+      dayAlertsGenRef.current += 1
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading])
+  }, [])
 
   function wipeOverlay() {
     clearPatternOverlay(overlayHandleRef.current)
@@ -322,8 +326,6 @@ export function usePatternOverlay({
     })
     if (!alert?.symbolId || !alert?.timeframe || alert.time == null) return
     if (alert.price == null || Number.isNaN(Number(alert.price))) return
-    // Never show expired stages in the alerts tab
-    if (isExpiredAlert(alert)) return
 
     setAlerts((prev) => {
       const next = appendAlert(prev, alert, {

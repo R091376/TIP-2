@@ -61,14 +61,24 @@ class PatternEvaluator:
             self._publish(p, events)
 
     def expire_session_timeframes(self) -> int:
-        """Expire open instances on session-close TFs (1m/5m/15m)."""
-        tfs = set(self._settings.expiry_session_close_timeframes)
+        """Expire open pattern instances on session-close TFs (default 1m/5m/15m).
+
+        Called when market phase flips to CLOSED (after stale open *candles* are
+        force-closed by the reconciler). Patterns that never hit succeed/fail
+        get terminal stage=expired for the day feed / journal.
+        """
+        tfs = set(self._settings.expiry_session_close_timeframes or [])
         now = datetime.now(timezone.utc)
         count = 0
         for p in list(self._store.all_open()):
             if p.timeframe not in tfs:
                 continue
-            events = expire(p, None, "session_close", now, False)
+            if p.is_terminal():
+                continue
+            last = self._last_closed_candle(p.symbol_id, p.timeframe)
+            events = expire(p, last, "session_close", now, False)
+            if not events:
+                continue
             series = self._store.get_open(p.symbol_id, p.timeframe)
             still = [x for x in series if x.id != p.id and not x.is_terminal()]
             self._store.replace_series(p.symbol_id, p.timeframe, still)
@@ -76,6 +86,13 @@ class PatternEvaluator:
             self._publish(p, events)
             count += 1
         return count
+
+    def _last_closed_candle(self, symbol_id: str, timeframe: str):
+        try:
+            closed = self._engine.get_closed_candles(symbol_id, timeframe)
+            return closed[-1] if closed else None
+        except Exception:
+            return None
 
     def list_for_symbol(
         self, symbol_id: str, status: str | None = "active", timeframe: str | None = None
@@ -127,6 +144,14 @@ class PatternEvaluator:
 
         type_filter = (pattern_type or "").strip().lower() or None
         tf_filter = (timeframe or "").strip() or None
+        # Stats are scoped to the current watchlist (product decision). Empty
+        # watchlist → empty items (avoid IN () queries on the journal).
+        if not symbols:
+            return {
+                "minSampleSize": self._settings.stats_min_sample_size,
+                "count": 0,
+                "items": [],
+            }
         snaps = self._journal.find_statistics_for_symbols(symbols, type_filter, tf_filter)
         min_n = self._settings.stats_min_sample_size
 

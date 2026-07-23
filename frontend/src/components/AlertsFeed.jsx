@@ -5,7 +5,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import { ALERTS_MAX, filterVisibleAlerts, isExpiredAlert } from '../utils/alertList'
+import { ALERTS_MAX, filterVisibleAlerts } from '../utils/alertList'
 
 const MAX_VISIBLE = ALERTS_MAX
 const ALL = ''
@@ -121,7 +121,7 @@ export default function AlertsFeed({
 
   const filtered = useMemo(() => {
     return visibleAlerts.filter((a) => {
-      if (isExpiredAlert(a)) return false
+      // Keep expired (muted stage pill); only apply user filters.
       if (filterSymbol && a.symbolId !== filterSymbol) return false
       if (filterTimeframe && a.timeframe !== filterTimeframe) return false
       if (filterPattern && a.patternType !== filterPattern) return false

@@ -37,6 +37,8 @@ export async function fetchTodayPatternAlerts(params?: {
   if (params?.limit != null) q.set('limit', String(params.limit))
   if (params?.symbolId) q.set('symbolId', params.symbolId)
   if (params?.timeframe) q.set('timeframe', params.timeframe)
+  // Include session-close / max-duration expired stages in the day feed.
+  q.set('includeExpired', 'true')
   const qs = q.toString()
   const path = qs ? `/api/pattern-alerts?${qs}` : '/api/pattern-alerts'
   const body = await api<PatternAlertsResponse>(path)

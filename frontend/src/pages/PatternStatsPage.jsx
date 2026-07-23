@@ -139,13 +139,25 @@ export default function PatternStatsPage() {
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
+    const params = {}
+    if (patternType !== 'all') params.patternType = patternType
+    if (timeframe !== 'all') params.timeframe = timeframe
+
+    // Cold start is handled by the pre-login startup gate. Empty stats usually
+    // mean no watchlist-scoped rows (product filter), not a sleeping API.
+    // One retry only on hard request failure.
+    const fetchOnce = () => fetchPatternStatistics(params)
     try {
-      const params = {}
-      if (patternType !== 'all') params.patternType = patternType
-      if (timeframe !== 'all') params.timeframe = timeframe
-      const data = await fetchPatternStatistics(params)
-      setItems(data.items)
+      let data
+      try {
+        data = await fetchOnce()
+      } catch {
+        await new Promise((r) => setTimeout(r, 400))
+        data = await fetchOnce()
+      }
+      setItems(Array.isArray(data.items) ? data.items : [])
       setMinSampleSize(data.minSampleSize || 20)
+      setError(null)
     } catch (e) {
       setItems([])
       setError(e instanceof Error ? e.message : 'Failed to load pattern statistics')

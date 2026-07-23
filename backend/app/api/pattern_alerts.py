@@ -25,15 +25,15 @@ def list_pattern_alerts(
     symbolId: str | None = None,
     timeframe: str | None = None,
     includeExpired: bool = Query(
-        False,
-        description="If true, include stage=expired events. Default false (hidden from alerts UI).",
+        True,
+        description="Include stage=expired events (session-close / max-duration). Default true.",
     ),
 ):
     """
     Pattern stage events for the trading calendar day (IST).
 
-    By default **excludes expired** stages so the FE alerts feed stays actionable.
-    Used so refresh restores today's non-expired alerts (not only live WS).
+    Includes **expired** stages by default so the FE can show full day lifecycle
+    (muted styling for expired). Pass includeExpired=false for actionable-only.
     """
     c = request.app.state.container
     if not c.settings.pattern_enabled:
@@ -41,7 +41,12 @@ def list_pattern_alerts(
 
     journal = c.pattern_journal
     if journal is None or not getattr(journal, "is_active", lambda: False)():
-        return {"day": _today_ist_str(), "count": 0, "items": [], "includeExpired": False}
+        return {
+            "day": _today_ist_str(),
+            "count": 0,
+            "items": [],
+            "includeExpired": includeExpired,
+        }
 
     parsed_day: date | None = None
     if day and day.strip():

@@ -66,26 +66,26 @@ describe('appendAlert', () => {
     expect(appendAlert(prev, null)).toBe(prev)
   })
 
-  it('ignores expired stage alerts', () => {
+  it('keeps expired stage alerts', () => {
     const prev = [{ id: 'a', stage: 'detected' }]
     const next = appendAlert(prev, {
       id: 'b',
       stage: 'expired',
       instanceId: 'x',
     })
-    expect(next.map((a) => a.id)).toEqual(['a'])
+    expect(next.map((a) => a.id)).toEqual(['b', 'a'])
   })
 })
 
 describe('filterVisibleAlerts', () => {
-  it('drops expired stages', () => {
+  it('keeps expired stages in the feed', () => {
     const list = [
       { id: '1', stage: 'detected' },
       { id: '2', stage: 'expired' },
       { id: '3', stage: 'EXPIRED' },
       { id: '4', stage: 'succeeded' },
     ]
-    expect(filterVisibleAlerts(list).map((a) => a.id)).toEqual(['1', '4'])
+    expect(filterVisibleAlerts(list).map((a) => a.id)).toEqual(['1', '2', '3', '4'])
     expect(isExpiredAlert({ stage: 'expired' })).toBe(true)
   })
 })

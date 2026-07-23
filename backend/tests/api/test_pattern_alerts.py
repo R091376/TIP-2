@@ -8,11 +8,9 @@ def test_pattern_alerts_endpoint_shape(client):
     assert "day" in body
     assert "count" in body
     assert "items" in body
-    assert body.get("includeExpired") is False
+    assert body.get("includeExpired") is True
     assert isinstance(body["items"], list)
     assert body["count"] == len(body["items"])
-    # Default feed never returns expired stages
-    assert all((a.get("stage") or "").lower() != "expired" for a in body["items"])
 
 
 def test_pattern_alerts_accepts_day_param(client):
