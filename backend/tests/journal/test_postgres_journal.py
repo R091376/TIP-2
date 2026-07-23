@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from app.db.base import Base
@@ -201,8 +201,9 @@ class _FakeWatchlist:
         return object() if sid in self.ids else None
 
 
-def test_startup_reconcile_expires_session_tf(journal):
-    j, _ = journal
+def test_startup_reconcile_purges_session_tf(journal):
+    """Restart must delete session-TF instances + events, not leave expired noise."""
+    j, sf = journal
     now = datetime.now(timezone.utc)
     p = _pattern(timeframe="5m", symbol_id="NSE_EQ|S")
     j.persist_lifecycle(
@@ -214,8 +215,45 @@ def test_startup_reconcile_expires_session_tf(journal):
         settings, j, store, _FakeWatchlist({"NSE_EQ|S"})
     )
     assert j.find_open("NSE_EQ|S", "5m") == []
-    closed = j.find_recent("NSE_EQ|S", "closed", 5)
-    assert closed and closed[0].status == PatternStage.EXPIRED
+    assert j.find_recent("NSE_EQ|S", "closed", 5) == []
+    with sf() as s:
+        assert s.get(PatternInstanceRow, p.id) is None
+        n_ev = s.scalars(
+            select(PatternEventRow).where(PatternEventRow.pattern_instance_id == p.id)
+        ).all()
+        assert n_ev == []
+
+
+def test_startup_purges_historical_startup_recovery(journal):
+    j, sf = journal
+    now = datetime.now(timezone.utc)
+    p = _pattern(timeframe="5m", symbol_id="NSE_EQ|R")
+    j.persist_lifecycle(
+        p, [PatternStageEvent(p.id, PatternStage.DETECTED, 1, 101.0, now)]
+    )
+    p.mark_terminal(FinalOutcome.EXPIRED, PatternStage.EXPIRED, "startup_recovery", None, True)
+    j.apply_events(
+        p, [PatternStageEvent(p.id, PatternStage.EXPIRED, 1, 101.0, now)]
+    )
+    # max_candles expiry must survive cleanup
+    p2 = _pattern(timeframe="5m", symbol_id="NSE_EQ|M")
+    j.persist_lifecycle(
+        p2, [PatternStageEvent(p2.id, PatternStage.DETECTED, 2, 101.0, now)]
+    )
+    p2.mark_terminal(FinalOutcome.EXPIRED, PatternStage.EXPIRED, "max_candles", 100.0)
+    j.apply_events(
+        p2, [PatternStageEvent(p2.id, PatternStage.EXPIRED, 3, 100.0, now)]
+    )
+
+    store = ActiveInstanceStore()
+    reconcile_patterns_on_startup(
+        Settings(), j, store, _FakeWatchlist({"NSE_EQ|R", "NSE_EQ|M"})
+    )
+    with sf() as s:
+        assert s.get(PatternInstanceRow, p.id) is None
+        assert s.get(PatternInstanceRow, p2.id) is not None
+        o2 = s.get(PatternOutcomeRow, p2.id)
+        assert o2 is not None and o2.reason == "max_candles"
 
 
 def test_startup_hydrate_multi_day(journal):

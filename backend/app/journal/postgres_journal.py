@@ -70,6 +70,50 @@ class PostgresPatternJournal:
     ) -> None:
         self._persist_mutable_and_events(pattern, stage_events or [], datetime.now(timezone.utc))
 
+    def purge_instance(self, pattern_id: UUID) -> bool:
+        """Delete instance + all events/outcomes. No expired event written."""
+        with self._sf() as s:
+            row = s.get(PatternInstanceRow, pattern_id)
+            if row is None:
+                return False
+            self._delete_instance_graph(s, pattern_id)
+            s.commit()
+            return True
+
+    def purge_by_outcome_reason(self, reason: str) -> int:
+        """Remove instances whose terminal outcome reason matches (and all events)."""
+        if not reason:
+            return 0
+        with self._sf() as s:
+            ids = list(
+                s.scalars(
+                    select(PatternOutcomeRow.pattern_instance_id).where(
+                        PatternOutcomeRow.reason == reason
+                    )
+                ).all()
+            )
+            n = 0
+            for pid in ids:
+                if s.get(PatternInstanceRow, pid) is not None:
+                    self._delete_instance_graph(s, pid)
+                    n += 1
+            if n:
+                s.commit()
+            return n
+
+    @staticmethod
+    def _delete_instance_graph(s: Session, pattern_id: UUID) -> None:
+        """Portable cascade (SQLite tests often lack FK PRAGMA)."""
+        s.query(PatternEventRow).filter(
+            PatternEventRow.pattern_instance_id == pattern_id
+        ).delete(synchronize_session=False)
+        s.query(PatternOutcomeRow).filter(
+            PatternOutcomeRow.pattern_instance_id == pattern_id
+        ).delete(synchronize_session=False)
+        row = s.get(PatternInstanceRow, pattern_id)
+        if row is not None:
+            s.delete(row)
+
     def persist_lifecycle(
         self, pattern: ActivePattern, all_events: list[PatternStageEvent] | None
     ) -> None:

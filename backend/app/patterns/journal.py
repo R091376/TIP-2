@@ -115,6 +115,12 @@ class NoOpPatternJournal:
     ):
         return []
 
+    def purge_instance(self, pattern_id) -> bool:
+        return False
+
+    def purge_by_outcome_reason(self, reason: str) -> int:
+        return 0
+
 
 class InMemoryPatternJournal:
     """Full journal semantics in process memory (memory profile + tests)."""
@@ -147,6 +153,29 @@ class InMemoryPatternJournal:
                 self._events.setdefault(pattern.id, []).extend(events)
             if pattern.is_terminal():
                 self._upsert_stats(pattern)
+
+    def purge_instance(self, pattern_id: UUID) -> bool:
+        with self._lock:
+            if pattern_id not in self._instances:
+                return False
+            del self._instances[pattern_id]
+            self._events.pop(pattern_id, None)
+            return True
+
+    def purge_by_outcome_reason(self, reason: str) -> int:
+        """In-memory: drop terminal patterns whose terminal_reason matches."""
+        if not reason:
+            return 0
+        with self._lock:
+            ids = [
+                pid
+                for pid, p in self._instances.items()
+                if p.is_terminal() and (p.terminal_reason or "") == reason
+            ]
+            for pid in ids:
+                del self._instances[pid]
+                self._events.pop(pid, None)
+            return len(ids)
 
     def persist_lifecycle(
         self, pattern: ActivePattern, all_events: list[PatternStageEvent]
