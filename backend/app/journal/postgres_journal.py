@@ -16,6 +16,20 @@ from app.journal.entities import (
 )
 
 _IST = ZoneInfo("Asia/Kolkata")
+
+
+def _as_epoch_seconds(value: int | float | None) -> int:
+    """Normalize candle timestamps: ms (≈1e12) → seconds (≈1e9)."""
+    try:
+        v = int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+    # Threshold: year ~2001 in ms is 1e12; seconds stay < 1e11 for centuries
+    if v >= 1_000_000_000_000:
+        return v // 1000
+    return v
+
+
 from app.journal.mapper import (
     CLOSED_STATUSES,
     OPEN_STATUSES,
@@ -166,15 +180,21 @@ class PostgresPatternJournal:
         """Pattern stage events for an IST calendar day (default: today).
 
         Returns alert DTOs newest-first for the FE alerts feed after refresh.
-        By default **excludes** ``expired`` stages (product: hide from alerts UI).
+
+        Matching is robust to:
+        - ``event_time`` on the IST calendar day (primary — when the stage fired)
+        - ``candle_time`` in epoch **seconds** or **milliseconds**
         """
         ist_day = day or datetime.now(tz=_IST).date()
         start_ist = datetime.combine(ist_day, time(0, 0), tzinfo=_IST)
-        end_ist = datetime.combine(ist_day, time(23, 59, 59, 999999), tzinfo=_IST)
+        # Exclusive end = next midnight IST (avoids microsecond edge cases)
+        end_ist_excl = start_ist + timedelta(days=1)
         start_utc = start_ist.astimezone(timezone.utc)
-        end_utc = end_ist.astimezone(timezone.utc)
+        end_utc_excl = end_ist_excl.astimezone(timezone.utc)
         start_epoch = int(start_ist.timestamp())
-        end_epoch = int(end_ist.timestamp())
+        end_epoch = int(end_ist_excl.timestamp()) - 1  # inclusive seconds
+        start_epoch_ms = start_epoch * 1000
+        end_epoch_ms = end_epoch * 1000 + 999
 
         lim = max(1, min(int(limit or 500), 2000))
         with self._sf() as s:
@@ -186,36 +206,41 @@ class PostgresPatternJournal:
                 )
                 .where(
                     or_(
+                        # When the stage was recorded (most reliable for refresh)
                         (PatternEventRow.event_time >= start_utc)
-                        & (PatternEventRow.event_time <= end_utc + timedelta(hours=12)),
+                        & (PatternEventRow.event_time < end_utc_excl),
+                        # Candle bucket in seconds
                         (PatternEventRow.candle_time >= start_epoch)
                         & (PatternEventRow.candle_time <= end_epoch),
+                        # Candle bucket mistakenly stored as ms
+                        (PatternEventRow.candle_time >= start_epoch_ms)
+                        & (PatternEventRow.candle_time <= end_epoch_ms),
                     )
                 )
             )
-            # Server-side: never return expired stages unless explicitly requested
             if not include_expired:
                 q = q.where(PatternEventRow.event_type != "expired")
             if symbol_id:
                 q = q.where(PatternInstanceRow.symbol_id == symbol_id)
             if timeframe:
                 q = q.where(PatternInstanceRow.timeframe == timeframe)
-            q = q.order_by(PatternEventRow.candle_time.desc(), PatternEventRow.id.desc()).limit(
-                lim * 2
-            )
+            q = q.order_by(
+                PatternEventRow.event_time.desc(),
+                PatternEventRow.candle_time.desc(),
+                PatternEventRow.id.desc(),
+            ).limit(lim * 3)
             rows = s.execute(q).all()
 
         alerts: list[dict] = []
         for ev, inst in rows:
-            ct = int(ev.candle_time or 0)
+            ct = _as_epoch_seconds(ev.candle_time)
             et = ev.event_time
             if et is not None and et.tzinfo is None:
                 et = et.replace(tzinfo=timezone.utc)
             in_day_candle = start_epoch <= ct <= end_epoch
             in_day_event = False
             if et is not None:
-                et_ist = et.astimezone(_IST)
-                in_day_event = et_ist.date() == ist_day
+                in_day_event = et.astimezone(_IST).date() == ist_day
             if not (in_day_candle or in_day_event):
                 continue
             stage = (ev.event_type or "").lower()

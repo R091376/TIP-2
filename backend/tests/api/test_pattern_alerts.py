@@ -71,3 +71,52 @@ def test_memory_journal_excludes_expired_by_default():
     assert any(a["stage"] == "detected" for a in items)
     with_exp = j.list_session_day_alerts(limit=50, include_expired=True)
     assert any(a["stage"] == "expired" for a in with_exp)
+
+
+def test_memory_journal_matches_event_time_when_candle_time_off_day():
+    """Refresh must still find alerts if event fired today but candle_time is odd."""
+    from datetime import datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
+
+    from app.patterns.journal import InMemoryPatternJournal
+    from app.patterns.models import (
+        PatternDirection,
+        PatternStage,
+        PatternStageEvent,
+        PatternType,
+        new_pattern,
+    )
+
+    ist = ZoneInfo("Asia/Kolkata")
+    now = datetime.now(tz=ist)
+    # Candle time far in the past (seconds) — would miss pure candle filter
+    old_ct = int((now - timedelta(days=30)).timestamp())
+    j = InMemoryPatternJournal()
+    p = new_pattern(
+        pattern_type=PatternType.BREAKOUT,
+        symbol_id="NSE_EQ|Y",
+        timeframe="5m",
+        direction=PatternDirection.LONG,
+        reference_level=100,
+        lookback_high=100,
+        atr_at_detect=1,
+        entry_price=101,
+        stop_level=100,
+        target_level=105,
+        detect_candle_time=old_ct,
+        mfe_price=101,
+        mae_price=100,
+    )
+    j.insert_detected(
+        p,
+        PatternStageEvent(p.id, PatternStage.DETECTED, old_ct, 101.0, now),
+    )
+    items = j.list_session_day_alerts(limit=50, include_expired=True)
+    assert any(a["stage"] == "detected" and a["symbolId"] == "NSE_EQ|Y" for a in items)
+
+
+def test_as_epoch_seconds_ms():
+    from app.journal.postgres_journal import _as_epoch_seconds
+
+    assert _as_epoch_seconds(1_700_000_000) == 1_700_000_000
+    assert _as_epoch_seconds(1_700_000_000_000) == 1_700_000_000

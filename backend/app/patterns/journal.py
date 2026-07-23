@@ -250,9 +250,8 @@ class InMemoryPatternJournal:
         ist_day = day or datetime.now(tz=ist).date()
         if not isinstance(ist_day, date_cls):
             ist_day = datetime.now(tz=ist).date()
-        start_epoch = int(
-            datetime(ist_day.year, ist_day.month, ist_day.day, tzinfo=ist).timestamp()
-        )
+        start = datetime(ist_day.year, ist_day.month, ist_day.day, tzinfo=ist)
+        start_epoch = int(start.timestamp())
         end_epoch = start_epoch + 86400 - 1
         lim = max(1, min(int(limit or 500), 2000))
         alerts: list[dict] = []
@@ -267,7 +266,16 @@ class InMemoryPatternJournal:
                     continue
                 for ev in events:
                     ct = int(ev.candle_time or 0)
-                    if not (start_epoch <= ct <= end_epoch):
+                    if ct >= 1_000_000_000_000:
+                        ct = ct // 1000
+                    et = getattr(ev, "at", None)
+                    in_day_candle = start_epoch <= ct <= end_epoch
+                    in_day_event = False
+                    if et is not None:
+                        if et.tzinfo is None:
+                            et = et.replace(tzinfo=timezone.utc)
+                        in_day_event = et.astimezone(ist).date() == ist_day
+                    if not (in_day_candle or in_day_event):
                         continue
                     stage = (
                         ev.stage.value if hasattr(ev.stage, "value") else str(ev.stage)
@@ -295,8 +303,8 @@ class InMemoryPatternJournal:
                             "status": inst.status.value
                             if hasattr(inst.status, "value")
                             else str(inst.status),
-                            "receivedAt": int(ev.at.timestamp() * 1000)
-                            if getattr(ev, "at", None)
+                            "receivedAt": int(et.timestamp() * 1000)
+                            if et is not None
                             else int(ct * 1000),
                         }
                     )

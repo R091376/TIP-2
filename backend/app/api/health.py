@@ -141,7 +141,7 @@ def health(
         body["journal"] = type(journal).__name__
         try:
             if hasattr(journal, "list_session_day_alerts"):
-                items = journal.list_session_day_alerts(limit=1, include_expired=False)
+                items = journal.list_session_day_alerts(limit=5, include_expired=True)
                 body["dayAlertsSample"] = len(items)
             if hasattr(journal, "_sf") and journal._sf is not None:
                 with journal._sf() as s:
