@@ -11,7 +11,10 @@ logger = logging.getLogger(__name__)
 
 
 def create_engine_and_session(database_url: str) -> tuple[Engine, sessionmaker[Session]]:
-    engine = create_engine(database_url, pool_pre_ping=True)
+    from app.config import normalize_sqlalchemy_url
+
+    url = normalize_sqlalchemy_url(database_url)
+    engine = create_engine(url, pool_pre_ping=True, pool_size=5, max_overflow=5)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     return engine, factory
 

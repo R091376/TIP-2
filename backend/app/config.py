@@ -250,15 +250,23 @@ class Settings(BaseSettings):
 
     @property
     def sqlalchemy_url(self) -> str:
+        """SQLAlchemy URL using psycopg v3 driver.
+
+        Neon / Render often supply ``postgres://`` or ``postgresql://``.
+        Without ``+psycopg``, SQLAlchemy 2 may pick an unavailable driver and
+        Postgres init fails → silent memory fallback → health stays DOWN.
+        """
         if self.database_url and not self.spring_datasource_url:
-            return self.database_url
+            return normalize_sqlalchemy_url(self.database_url)
         jdbc = self.spring_datasource_url or ""
         if jdbc.startswith("jdbc:postgresql://"):
             host_db = jdbc.removeprefix("jdbc:postgresql://")
             user = self.spring_datasource_username
             password = self.spring_datasource_password
-            return f"postgresql+psycopg://{user}:{password}@{host_db}"
-        return self.database_url
+            return normalize_sqlalchemy_url(
+                f"postgresql+psycopg://{user}:{password}@{host_db}"
+            )
+        return normalize_sqlalchemy_url(self.database_url)
 
     def lookback_days_for(self, timeframe: str) -> int:
         return self.historical_lookback_days_by_timeframe.get(
@@ -279,6 +287,22 @@ class Settings(BaseSettings):
         if v in ("lax", "strict", "none"):
             return v
         return "lax"
+
+
+def normalize_sqlalchemy_url(url: str) -> str:
+    """Map common Postgres URL schemes to ``postgresql+psycopg://`` (psycopg3)."""
+    u = (url or "").strip()
+    if not u:
+        return u
+    if u.startswith("postgres://"):
+        return "postgresql+psycopg://" + u[len("postgres://") :]
+    if u.startswith("postgresql+psycopg://"):
+        return u
+    if u.startswith("postgresql+psycopg2://"):
+        return "postgresql+psycopg://" + u[len("postgresql+psycopg2://") :]
+    if u.startswith("postgresql://"):
+        return "postgresql+psycopg://" + u[len("postgresql://") :]
+    return u
 
 
 @lru_cache

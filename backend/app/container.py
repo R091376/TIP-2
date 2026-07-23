@@ -59,6 +59,9 @@ class AppContainer:
     ws_hub: LiveWebSocketHub
     broadcaster: LiveCandleBroadcaster
     market_status_broadcaster: MarketStatusBroadcaster
+    # SQLAlchemy sessionmaker when Postgres init succeeded; None = memory fallback
+    session_factory: object | None = None
+    postgres_init_error: str | None = None
     _bg_stop: threading.Event | None = None
     _bg_thread: threading.Thread | None = None
 
@@ -158,6 +161,7 @@ def build_container(settings: Settings | None = None) -> AppContainer:
     market_status_broadcaster = MarketStatusBroadcaster(ws_hub)
 
     session_factory = None
+    postgres_init_error: str | None = None
     if settings.watchlist_store == "memory" or settings.is_memory_profile:
         watchlist_repo: WatchlistRepository = InMemoryWatchlistRepository()
         pattern_journal: object = InMemoryPatternJournal()
@@ -168,16 +172,27 @@ def build_container(settings: Settings | None = None) -> AppContainer:
             from app.journal.postgres_journal import PostgresPatternJournal
             from app.watchlist.postgres_repo import PostgresWatchlistRepository
 
-            engine, session_factory = create_engine_and_session(settings.sqlalchemy_url)
+            db_url = settings.sqlalchemy_url
+            logger.info(
+                "Connecting Postgres (%s)",
+                db_url.split("@")[-1] if "@" in db_url else "(no host)",
+            )
+            engine, session_factory = create_engine_and_session(db_url)
+            # Fail fast if credentials/network are wrong (don't wait for first request)
+            from sqlalchemy import text as sa_text
+
+            with engine.connect() as conn:
+                conn.execute(sa_text("SELECT 1"))
             mig_dir = Path(__file__).resolve().parent.parent / "db" / "migration"
             apply_flyway_sql(engine, mig_dir)
             watchlist_repo = PostgresWatchlistRepository(session_factory)
             pattern_journal = PostgresPatternJournal(session_factory)
             logger.info(
                 "Using Postgres watchlist + journal + users (%s)",
-                settings.sqlalchemy_url.split("@")[-1],
+                db_url.split("@")[-1] if "@" in db_url else db_url,
             )
-        except Exception:
+        except Exception as e:
+            postgres_init_error = str(e)[:300]
             logger.exception(
                 "Postgres init failed; falling back to in-memory watchlist + journal"
             )
@@ -236,6 +251,8 @@ def build_container(settings: Settings | None = None) -> AppContainer:
         ws_hub=ws_hub,
         broadcaster=broadcaster,
         market_status_broadcaster=market_status_broadcaster,
+        session_factory=session_factory,
+        postgres_init_error=postgres_init_error,
     )
     container.wire_events()
     return container

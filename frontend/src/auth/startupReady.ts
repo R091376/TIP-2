@@ -155,12 +155,25 @@ export async function waitForApiAndDatabase(
         })
         return health
       }
+      const extra = [
+        health.postgresInitError
+          ? `init: ${String(health.postgresInitError).slice(0, 120)}`
+          : null,
+        health.journal ? `journal=${health.journal}` : null,
+        health.hasSessionFactory === false ? 'no session factory' : null,
+        health.databaseUrlScheme
+          ? `scheme=${health.databaseUrlScheme}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
       onProgress?.({
         api: 'done',
         postgres: 'running',
         lastError:
-          health.databaseError ||
-          `Database status: ${health.database || 'unknown'}`,
+          (health.databaseError ||
+            `Database status: ${health.database || 'unknown'}`) +
+          (extra ? ` (${extra})` : ''),
       })
     } catch (e) {
       attempt.clear()
