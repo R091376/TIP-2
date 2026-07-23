@@ -4,7 +4,7 @@
 import { useCallback } from 'react'
 import { addSymbol, fetchWatchlist, removeSymbol } from '../services/watchlistApi'
 import { normalizeStatus } from '../chart/helpers'
-import { failedBannerForEntry, infoAfterCandleLoad } from '../chart/sessionMessages'
+import { handleNonReadyBootstrap, loadReadySeries } from '../chart/seriesLoad'
 
 /**
  * @param {object} ctx shared refs/state setters + engine + overlay
@@ -57,30 +57,33 @@ export function useChartNavigation(ctx) {
       activeSymbolIdRef.current = nextSymbolId
       clearSeriesDataFor(nextSymbolId, timeframeRef.current)
 
-      if (normalizeStatus(entry?.bootstrapStatus) === 'FAILED') {
-        const msg = failedBannerForEntry(entry)
-        if (msg) setError(msg)
-        socketRef.current?.subscribe(nextSymbolId, timeframeRef.current)
+      if (
+        handleNonReadyBootstrap({
+          entry,
+          symbolId: nextSymbolId,
+          timeframe: timeframeRef.current,
+          socketRef,
+          setError,
+          setInfoMessage,
+        })
+      ) {
         if (generation === loadGenerationRef.current) setSwitching(false)
         return
       }
-      if (normalizeStatus(entry?.bootstrapStatus) === 'PENDING') {
-        setInfoMessage('Loading market data…')
-        socketRef.current?.subscribe(nextSymbolId, timeframeRef.current)
-        if (generation === loadGenerationRef.current) setSwitching(false)
-        return
-      }
-      try {
-        const candles = await loadCandles(nextSymbolId, timeframeRef.current, generation)
-        if (candles === null) return
-        setInfoMessage(infoAfterCandleLoad(candles, marketPhaseRef.current))
-        socketRef.current?.subscribe(nextSymbolId, timeframeRef.current)
-      } catch (err) {
-        if (generation === loadGenerationRef.current)
-          setError(err instanceof Error ? err.message : 'Failed to load symbol')
-      } finally {
-        if (generation === loadGenerationRef.current) setSwitching(false)
-      }
+
+      await loadReadySeries({
+        symbolId: nextSymbolId,
+        timeframe: timeframeRef.current,
+        generation,
+        loadGenerationRef,
+        loadCandles,
+        marketPhaseRef,
+        socketRef,
+        setInfoMessage,
+        setError,
+        setSwitching,
+        errorFallback: 'Failed to load symbol',
+      })
     },
     [
       loading,
@@ -120,40 +123,39 @@ export function useChartNavigation(ctx) {
       const entry =
         watchlistRef.current.find((e) => e.symbolId === activeSymbolIdRef.current) || null
       clearSeriesDataFor(activeSymbolIdRef.current, nextTf)
-      if (normalizeStatus(entry?.bootstrapStatus) === 'FAILED') {
+
+      if (
+        handleNonReadyBootstrap({
+          entry,
+          symbolId: activeSymbolIdRef.current,
+          timeframe: nextTf,
+          socketRef,
+          setError,
+          setInfoMessage,
+        })
+      ) {
         ++loadGenerationRef.current
-        const msg = failedBannerForEntry(entry)
-        if (msg) setError(msg)
-        socketRef.current?.subscribe(activeSymbolIdRef.current, nextTf)
         return
       }
-      if (normalizeStatus(entry?.bootstrapStatus) === 'PENDING') {
-        ++loadGenerationRef.current
-        setInfoMessage('Loading market data…')
-        socketRef.current?.subscribe(activeSymbolIdRef.current, nextTf)
-        return
-      }
+
       const generation = ++loadGenerationRef.current
       setSwitching(true)
       setError(null)
-      try {
-        const candles = await loadCandles(activeSymbolIdRef.current, nextTf, generation)
-        if (candles === null) return
-        setInfoMessage(infoAfterCandleLoad(candles, marketPhaseRef.current))
-        socketRef.current?.subscribe(activeSymbolIdRef.current, nextTf)
-      } catch (err) {
-        if (generation === loadGenerationRef.current) {
-          const active = watchlistRef.current.find(
-            (e) => e.symbolId === activeSymbolIdRef.current,
-          )
-          setError(
-            failedBannerForEntry(active) ||
-              (err instanceof Error ? err.message : 'Failed to load timeframe'),
-          )
-        }
-      } finally {
-        if (generation === loadGenerationRef.current) setSwitching(false)
-      }
+      await loadReadySeries({
+        symbolId: activeSymbolIdRef.current,
+        timeframe: nextTf,
+        generation,
+        loadGenerationRef,
+        loadCandles,
+        marketPhaseRef,
+        socketRef,
+        setInfoMessage,
+        setError,
+        setSwitching,
+        errorFallback: 'Failed to load timeframe',
+        preferFailedBanner: true,
+        watchlistRef,
+      })
     },
     [
       timeframe,
@@ -212,9 +214,16 @@ export function useChartNavigation(ctx) {
         return
       }
 
+      // FAILED: switch context without loading candles (same as before).
       if (normalizeStatus(entry.bootstrapStatus) === 'FAILED') {
-        const msg = failedBannerForEntry(entry)
-        if (msg) setError(msg)
+        handleNonReadyBootstrap({
+          entry,
+          symbolId: alert.symbolId,
+          timeframe: alert.timeframe,
+          socketRef,
+          setError,
+          setInfoMessage,
+        })
         setActiveSymbolId(alert.symbolId)
         activeSymbolIdRef.current = alert.symbolId
         setTimeframe(alert.timeframe)
@@ -224,7 +233,6 @@ export function useChartNavigation(ctx) {
         overlay.wipeOverlay()
         if (seriesRef.current)
           applySeriesData(seriesRef.current, chartTypeRef.current, { restoreOverlay: false })
-        socketRef.current?.subscribe(alert.symbolId, alert.timeframe)
         overlay.clearPendingAlert()
         return
       }
@@ -241,23 +249,33 @@ export function useChartNavigation(ctx) {
       timeframeRef.current = alert.timeframe
       clearSeriesDataFor(alert.symbolId, alert.timeframe)
 
-      if (normalizeStatus(entry.bootstrapStatus) === 'PENDING') {
-        setInfoMessage('Loading market data…')
-        socketRef.current?.subscribe(alert.symbolId, alert.timeframe)
+      if (
+        handleNonReadyBootstrap({
+          entry,
+          symbolId: alert.symbolId,
+          timeframe: alert.timeframe,
+          socketRef,
+          setError,
+          setInfoMessage,
+        })
+      ) {
         if (generation === loadGenerationRef.current) setSwitching(false)
         return
       }
-      try {
-        const candles = await loadCandles(alert.symbolId, alert.timeframe, generation)
-        if (candles === null) return
-        setInfoMessage(infoAfterCandleLoad(candles, marketPhaseRef.current))
-        socketRef.current?.subscribe(alert.symbolId, alert.timeframe)
-      } catch (err) {
-        if (generation === loadGenerationRef.current)
-          setError(err instanceof Error ? err.message : 'Failed to open alert on chart')
-      } finally {
-        if (generation === loadGenerationRef.current) setSwitching(false)
-      }
+
+      await loadReadySeries({
+        symbolId: alert.symbolId,
+        timeframe: alert.timeframe,
+        generation,
+        loadGenerationRef,
+        loadCandles,
+        marketPhaseRef,
+        socketRef,
+        setInfoMessage,
+        setError,
+        setSwitching,
+        errorFallback: 'Failed to open alert on chart',
+      })
     },
     [
       loading,

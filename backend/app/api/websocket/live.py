@@ -19,6 +19,30 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def schedule_on_loop(loop, coro) -> None:
+    """Run a coroutine on an event loop from sync or async contexts (best-effort)."""
+    if loop is None:
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            try:
+                coro.close()
+            except Exception:
+                pass
+            return
+    try:
+        if loop.is_running():
+            asyncio.run_coroutine_threadsafe(coro, loop)
+        else:
+            loop.create_task(coro)
+    except Exception:
+        logger.debug("Failed to schedule websocket coroutine", exc_info=True)
+        try:
+            coro.close()
+        except Exception:
+            pass
+
+
 @dataclass
 class LiveSubscription:
     symbol_id: str
@@ -106,23 +130,7 @@ class LiveWebSocketHub:
         self._schedule_coro(ws.send_json(payload))
 
     def _schedule_coro(self, coro) -> None:
-        loop = self._loop
-        if loop is None:
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                try:
-                    coro.close()
-                except Exception:
-                    pass
-                return
-        try:
-            if loop.is_running():
-                asyncio.run_coroutine_threadsafe(coro, loop)
-            else:
-                loop.create_task(coro)
-        except Exception:
-            logger.debug("Failed to schedule websocket coroutine", exc_info=True)
+        schedule_on_loop(self._loop, coro)
 
 
 class LiveCandleBroadcaster:
@@ -185,21 +193,7 @@ class LiveCandleBroadcaster:
             del self._last_sent[k]
 
     def _schedule_broadcast(self, symbol_id: str, timeframe: str, payload: dict) -> None:
-        loop = self._loop
-        if loop is None:
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                return
-        if loop.is_running():
-            asyncio.run_coroutine_threadsafe(
-                self._hub.broadcast(symbol_id, timeframe, payload), loop
-            )
-        else:
-            try:
-                loop.create_task(self._hub.broadcast(symbol_id, timeframe, payload))
-            except Exception:
-                pass
+        schedule_on_loop(self._loop, self._hub.broadcast(symbol_id, timeframe, payload))
 
 
 class MarketStatusBroadcaster:

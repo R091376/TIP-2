@@ -4,7 +4,8 @@
 import { useEffect } from 'react'
 import { fetchWatchlist } from '../services/watchlistApi'
 import { MARKET_CLOSED_MSG, normalizeStatus } from '../chart/helpers'
-import { failedBannerForEntry, infoAfterCandleLoad } from '../chart/sessionMessages'
+import { failedBannerForEntry } from '../chart/sessionMessages'
+import { loadReadySeries } from '../chart/seriesLoad'
 
 export function usePendingBootstrapPoll({
   needsPendingPoll,
@@ -34,21 +35,20 @@ export function usePendingBootstrapPoll({
         setSwitching(true)
         setError(null)
         setInfoMessage(null)
-        try {
-          const candles = await loadCandles(
-            nextActive.symbolId,
-            timeframeRef.current,
-            generation,
-          )
-          if (candles === null || disposedRef.current) return
-          setInfoMessage(infoAfterCandleLoad(candles, marketPhaseRef.current))
-          socketRef.current?.subscribe(nextActive.symbolId, timeframeRef.current)
-        } catch (err) {
-          if (generation === loadGenerationRef.current && !disposedRef.current)
-            setError(err instanceof Error ? err.message : 'Failed to load candles')
-        } finally {
-          if (generation === loadGenerationRef.current) setSwitching(false)
-        }
+        await loadReadySeries({
+          symbolId: nextActive.symbolId,
+          timeframe: timeframeRef.current,
+          generation,
+          loadGenerationRef,
+          loadCandles,
+          marketPhaseRef,
+          socketRef,
+          setInfoMessage,
+          setError,
+          setSwitching,
+          errorFallback: 'Failed to load candles',
+          disposedRef,
+        })
       } else if (prevStatus === 'PENDING' && nextStatus === 'FAILED') {
         const msg = failedBannerForEntry(nextActive)
         if (msg) setError(msg)

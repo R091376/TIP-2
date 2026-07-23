@@ -135,19 +135,13 @@ class WatchlistService:
             if entry.bootstrap_status == SymbolBootstrapStatus.REMOVING:
                 self._finish_remove(symbol_id)
                 return
-            removing = WatchlistEntry(
-                symbol_id=entry.symbol_id,
-                trading_symbol=entry.trading_symbol,
-                exchange=entry.exchange,
-                segment=entry.segment,
-                instrument_type=entry.instrument_type,
-                display_name=entry.display_name,
-                added_at=entry.added_at,
-                active=True,
-                bootstrap_status=SymbolBootstrapStatus.REMOVING,
-                bootstrap_error=entry.bootstrap_error,
+            self._repo.save(
+                entry.with_bootstrap(
+                    SymbolBootstrapStatus.REMOVING,
+                    entry.bootstrap_error,
+                    active=True,
+                )
             )
-            self._repo.save(removing)
             logger.info("Watchlist remove REMOVING: %s", symbol_id)
             self._finish_remove(symbol_id)
 
@@ -348,20 +342,7 @@ class WatchlistService:
             self._mark_failed_unlocked(opt, error)
 
     def _mark_failed_unlocked(self, e: WatchlistEntry, error: str) -> None:
-        self._repo.save(
-            WatchlistEntry(
-                symbol_id=e.symbol_id,
-                trading_symbol=e.trading_symbol,
-                exchange=e.exchange,
-                segment=e.segment,
-                instrument_type=e.instrument_type,
-                display_name=e.display_name,
-                added_at=e.added_at,
-                active=e.active,
-                bootstrap_status=SymbolBootstrapStatus.FAILED,
-                bootstrap_error=error,
-            )
-        )
+        self._repo.save(e.with_bootstrap(SymbolBootstrapStatus.FAILED, error))
         logger.warning("Watchlist entry marked FAILED: %s — %s", e.symbol_id, error)
 
 

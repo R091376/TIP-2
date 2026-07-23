@@ -79,6 +79,15 @@ function coerceServerMessage(value: unknown): string | null {
   return null
 }
 
+const STATUS_FALLBACK: Record<number, string> = {
+  400: 'Invalid request.',
+  401: 'Not signed in. Please log in again.',
+  403: 'You do not have permission for this action.',
+  404: 'Not found.',
+  409: 'Conflict.',
+  503: 'Service temporarily unavailable.',
+}
+
 function messageFromBody(status: number, body: string): string {
   let parsed: Record<string, unknown> | null = null
   try {
@@ -93,45 +102,28 @@ function messageFromBody(status: number, body: string): string {
     coerceServerMessage(parsed?.detail) ||
     (parsed == null && body ? body.trim() : null)
 
-  if (status === 503) {
-    return serverMsg || 'Service temporarily unavailable.'
-  }
-  if (status === 400) {
-    return serverMsg || 'Invalid request.'
-  }
-  if (status === 404) {
-    return serverMsg || 'Not found.'
-  }
-  if (status === 409) {
-    return serverMsg || 'Conflict.'
-  }
-  if (status === 401) {
-    return serverMsg || 'Not signed in. Please log in again.'
-  }
-  if (status === 403) {
-    return serverMsg || 'You do not have permission for this action.'
-  }
+  if (serverMsg) return serverMsg
+  if (STATUS_FALLBACK[status]) return STATUS_FALLBACK[status]
   if (status >= 500) {
-    return serverMsg || 'Backend error. Make sure the server is running on port 8080.'
+    return 'Backend error. Make sure the server is running on port 8080.'
   }
-  return serverMsg || `Request failed (${status})`
+  return `Request failed (${status})`
 }
+
+const NO_UNAUTHORIZED_NOTIFY = new Set([
+  '/api/auth/login',
+  '/api/auth/logout',
+  '/api/auth/me',
+  '/api/health',
+])
 
 function shouldNotifyUnauthorized(path: string): boolean {
-  // Login/logout failures are expected UX, not a dropped session mid-app.
+  // Login/logout/me/health failures are expected UX, not a dropped mid-app session.
   const p = path.split('?')[0]
-  if (p.endsWith('/api/auth/login')) return false
-  if (p.endsWith('/api/auth/logout')) return false
-  if (p.endsWith('/api/auth/me')) return false
-  if (p.endsWith('/api/health')) return false
-  return true
+  return !NO_UNAUTHORIZED_NOTIFY.has(p)
 }
 
-/**
- * Fetch JSON from the API. Throws Error with a user-facing message on non-OK.
- * Returns null for 204 / empty body.
- */
-export async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise<T> {
+function buildHeaders(options: ApiOptions): Headers {
   const headers = new Headers(options.headers || {})
   if (options.body != null && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
@@ -139,11 +131,29 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
   if (!headers.has('Accept')) {
     headers.set('Accept', 'application/json')
   }
+  return headers
+}
 
+async function parseJsonBody<T>(response: Response): Promise<T | null> {
+  if (response.status === 204) return null
+  const text = await response.text()
+  if (!text) return null
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    throw new Error('Invalid JSON from server')
+  }
+}
+
+/**
+ * Fetch JSON from the API. Throws Error with a user-facing message on non-OK.
+ * Returns null for 204 / empty body.
+ */
+export async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise<T> {
   const response = await fetch(apiUrl(path), {
     ...options,
     credentials: options.credentials ?? 'include',
-    headers,
+    headers: buildHeaders(options),
   })
 
   if (!response.ok) {
@@ -159,20 +169,7 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
     throw new ApiError(message, response.status, path)
   }
 
-  if (response.status === 204) {
-    return null as T
-  }
-
-  const text = await response.text()
-  if (!text) {
-    return null as T
-  }
-
-  try {
-    return JSON.parse(text) as T
-  } catch {
-    throw new Error('Invalid JSON from server')
-  }
+  return (await parseJsonBody<T>(response)) as T
 }
 
 /** Session probe: 401 → null; other errors throw. */
@@ -196,8 +193,5 @@ export async function apiAllow401<T = unknown>(
     const text = await response.text()
     throw new ApiError(messageFromBody(response.status, text), response.status, path)
   }
-  if (response.status === 204) return null
-  const text = await response.text()
-  if (!text) return null
-  return JSON.parse(text) as T
+  return parseJsonBody<T>(response)
 }

@@ -130,56 +130,10 @@ class PatternEvaluator:
         snaps = self._journal.find_statistics_for_symbols(symbols, type_filter, tf_filter)
         min_n = self._settings.stats_min_sample_size
 
-        items: list[dict] = []
-        for s in snaps:
-            entry = by_id.get(s.symbol_id)
-            ready = s.sample_size >= min_n
-            item = {
-                "status": "ok" if ready else "insufficient_history",
-                "symbolId": s.symbol_id,
-                "tradingSymbol": entry.trading_symbol if entry else None,
-                "displayName": entry.display_name if entry else None,
-                "patternType": s.pattern_type,
-                "timeframe": s.timeframe,
-                "sampleSize": s.sample_size,
-                "successCount": s.success_count,
-                "failCount": s.fail_count,
-                "expiredCount": s.expired_count,
-                "minSampleSize": min_n,
-                "resolvedSampleSize": s.resolved_sample_size,
-                "moveSampleSize": s.move_sample_size,
-                "mfeSampleSize": s.mfe_sample_size,
-                "maeSampleSize": s.mae_sample_size,
-                "updatedAt": s.updated_at.isoformat().replace("+00:00", "Z")
-                if s.updated_at
-                else None,
-            }
-            if ready:
-                item["successRate"] = s.success_rate
-                item["resolvedSuccessRate"] = s.resolved_success_rate
-                item["avgMoveR"] = s.avg_move_r
-                item["avgDurationCandles"] = s.avg_duration_candles
-                item["avgMfeR"] = s.avg_mfe_r
-                item["avgMaeR"] = s.avg_mae_r
-            else:
-                item["successRate"] = None
-                item["resolvedSuccessRate"] = None
-                item["avgMoveR"] = None
-                item["avgDurationCandles"] = None
-                item["avgMfeR"] = None
-                item["avgMaeR"] = None
-            items.append(item)
-
-        # Sort: ready first by successRate desc, then by sampleSize
-        def sort_key(r: dict):
-            rate = r.get("successRate")
-            return (
-                0 if r.get("status") == "ok" else 1,
-                -(rate if rate is not None else -1.0),
-                -int(r.get("sampleSize") or 0),
-            )
-
-        items.sort(key=sort_key)
+        items = [
+            _snapshot_to_bulk_item(s, by_id.get(s.symbol_id), min_n) for s in snaps
+        ]
+        items.sort(key=_bulk_stats_sort_key)
         return {
             "minSampleSize": min_n,
             "count": len(items),
@@ -193,92 +147,65 @@ class PatternEvaluator:
         now = datetime.now(timezone.utc)
         index = self._is_index(symbol_id)
         open_all = self._store.get_open(symbol_id, timeframe)
+        atr = self._settings.atr_period
 
-        cfg = self._settings
-        bo_cfg = {**cfg.breakout, "atr_period": cfg.atr_period}
-        bd_cfg = {**cfg.breakdown, "atr_period": cfg.atr_period}
-        pin_cfg = {**cfg.pinbar, "atr_period": cfg.atr_period}
-        eng_cfg = {**cfg.engulfing, "atr_period": cfg.atr_period}
-        ib_cfg = {**cfg.inside_bar, "atr_period": cfg.atr_period}
-        st_cfg = {**cfg.structure, "atr_period": cfg.atr_period}
-        co_cfg = {**cfg.consolidation, "atr_period": cfg.atr_period}
-        vb_cfg = {**cfg.volume_breakout, "atr_period": cfg.atr_period}
-
-        def filt(pred):
-            return [p for p in open_all if pred(p)]
-
-        evals = [
-            evaluate_breakout_bar(
-                symbol_id,
-                timeframe,
-                filt(lambda p: p.pattern_type == PatternType.BREAKOUT),
-                closed,
-                index,
-                bo_cfg,
-                now,
+        # (open-filter, settings attr, evaluate_fn, needs_index_flag)
+        specs: list[tuple] = [
+            (
+                lambda p: p.pattern_type == PatternType.BREAKOUT,
+                "breakout",
+                evaluate_breakout_bar,
+                True,
             ),
-            evaluate_breakdown_bar(
-                symbol_id,
-                timeframe,
-                filt(lambda p: p.pattern_type == PatternType.BREAKDOWN),
-                closed,
-                index,
-                bd_cfg,
-                now,
+            (
+                lambda p: p.pattern_type == PatternType.BREAKDOWN,
+                "breakdown",
+                evaluate_breakdown_bar,
+                True,
             ),
-            evaluate_pinbar_bar(
-                symbol_id,
-                timeframe,
-                filt(lambda p: p.pattern_type.is_pin_bar()),
-                closed,
-                pin_cfg,
-                now,
+            (lambda p: p.pattern_type.is_pin_bar(), "pinbar", evaluate_pinbar_bar, False),
+            (
+                lambda p: p.pattern_type.is_engulfing(),
+                "engulfing",
+                evaluate_engulfing_bar,
+                False,
             ),
-            evaluate_engulfing_bar(
-                symbol_id,
-                timeframe,
-                filt(lambda p: p.pattern_type.is_engulfing()),
-                closed,
-                eng_cfg,
-                now,
+            (
+                lambda p: p.pattern_type == PatternType.INSIDE_BAR,
+                "inside_bar",
+                evaluate_inside_bar,
+                False,
             ),
-            evaluate_inside_bar(
-                symbol_id,
-                timeframe,
-                filt(lambda p: p.pattern_type == PatternType.INSIDE_BAR),
-                closed,
-                ib_cfg,
-                now,
+            (
+                lambda p: p.pattern_type.is_structure(),
+                "structure",
+                evaluate_structure_bar,
+                False,
             ),
-            evaluate_structure_bar(
-                symbol_id,
-                timeframe,
-                filt(lambda p: p.pattern_type.is_structure()),
-                closed,
-                st_cfg,
-                now,
+            (
+                lambda p: p.pattern_type == PatternType.CONSOLIDATION,
+                "consolidation",
+                evaluate_consolidation_bar,
+                False,
             ),
-            evaluate_consolidation_bar(
-                symbol_id,
-                timeframe,
-                filt(lambda p: p.pattern_type == PatternType.CONSOLIDATION),
-                closed,
-                co_cfg,
-                now,
-            ),
-            evaluate_volume_breakout_bar(
-                symbol_id,
-                timeframe,
-                filt(lambda p: p.pattern_type == PatternType.VOLUME_BREAKOUT),
-                closed,
-                index,
-                vb_cfg,
-                now,
+            (
+                lambda p: p.pattern_type == PatternType.VOLUME_BREAKOUT,
+                "volume_breakout",
+                evaluate_volume_breakout_bar,
+                True,
             ),
         ]
 
         still: list[ActivePattern] = []
-        for ev in evals:
+        for pred, cfg_attr, evaluate_fn, needs_index in specs:
+            cfg = {**getattr(self._settings, cfg_attr), "atr_period": atr}
+            open_items = [p for p in open_all if pred(p)]
+            if needs_index:
+                ev = evaluate_fn(
+                    symbol_id, timeframe, open_items, closed, index, cfg, now
+                )
+            else:
+                ev = evaluate_fn(symbol_id, timeframe, open_items, closed, cfg, now)
             self._persist_eval(ev.advanced, ev.newly_detected, ev.events)
             still.extend(ev.still_open)
 
@@ -340,6 +267,48 @@ class PatternEvaluator:
         if entry and entry.segment and "INDEX" in entry.segment.upper():
             return True
         return bool(symbol_id and symbol_id.startswith("NSE_INDEX"))
+
+
+def _snapshot_to_bulk_item(s, entry, min_n: int) -> dict:
+    """Map a journal statistics snapshot to the bulk stats API item shape."""
+    ready = s.sample_size >= min_n
+    item = {
+        "status": "ok" if ready else "insufficient_history",
+        "symbolId": s.symbol_id,
+        "tradingSymbol": entry.trading_symbol if entry else None,
+        "displayName": entry.display_name if entry else None,
+        "patternType": s.pattern_type,
+        "timeframe": s.timeframe,
+        "sampleSize": s.sample_size,
+        "successCount": s.success_count,
+        "failCount": s.fail_count,
+        "expiredCount": s.expired_count,
+        "minSampleSize": min_n,
+        "resolvedSampleSize": s.resolved_sample_size,
+        "moveSampleSize": s.move_sample_size,
+        "mfeSampleSize": s.mfe_sample_size,
+        "maeSampleSize": s.mae_sample_size,
+        "updatedAt": s.updated_at.isoformat().replace("+00:00", "Z")
+        if s.updated_at
+        else None,
+        "successRate": s.success_rate if ready else None,
+        "resolvedSuccessRate": s.resolved_success_rate if ready else None,
+        "avgMoveR": s.avg_move_r if ready else None,
+        "avgDurationCandles": s.avg_duration_candles if ready else None,
+        "avgMfeR": s.avg_mfe_r if ready else None,
+        "avgMaeR": s.avg_mae_r if ready else None,
+    }
+    return item
+
+
+def _bulk_stats_sort_key(r: dict):
+    """Ready rows first, then success rate desc, then sample size desc."""
+    rate = r.get("successRate")
+    return (
+        0 if r.get("status") == "ok" else 1,
+        -(rate if rate is not None else -1.0),
+        -int(r.get("sampleSize") or 0),
+    )
 
 
 # alias used by container

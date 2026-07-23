@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import Enum
 
@@ -24,6 +24,21 @@ class WatchlistEntry:
     active: bool
     bootstrap_status: SymbolBootstrapStatus
     bootstrap_error: str | None
+
+    def with_bootstrap(
+        self,
+        status: SymbolBootstrapStatus,
+        error: str | None = None,
+        *,
+        active: bool | None = None,
+    ) -> WatchlistEntry:
+        """Copy with updated bootstrap fields (and optional active flag)."""
+        return replace(
+            self,
+            bootstrap_status=status,
+            bootstrap_error=error,
+            active=self.active if active is None else active,
+        )
 
     def to_dict(self) -> dict:
         return {

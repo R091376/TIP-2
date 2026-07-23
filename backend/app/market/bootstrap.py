@@ -288,16 +288,4 @@ class MarketBootstrapService:
         entry = self._watchlist.find_by_symbol_id(symbol_id)
         if entry is None:
             return
-        updated = WatchlistEntry(
-            symbol_id=entry.symbol_id,
-            trading_symbol=entry.trading_symbol,
-            exchange=entry.exchange,
-            segment=entry.segment,
-            instrument_type=entry.instrument_type,
-            display_name=entry.display_name,
-            added_at=entry.added_at,
-            active=entry.active,
-            bootstrap_status=status,
-            bootstrap_error=error,
-        )
-        self._watchlist.save(updated)
+        self._watchlist.save(entry.with_bootstrap(status, error))
