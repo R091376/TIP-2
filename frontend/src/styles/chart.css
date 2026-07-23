@@ -232,15 +232,10 @@
   touch-action: manipulation;
 }
 
-.chart-clear-drawings:hover:not(:disabled) {
+.chart-clear-drawings:hover {
   background: rgba(26, 32, 48, 0.95);
   border-color: #3b455c;
   color: #f1f5f9;
-}
-
-.chart-clear-drawings:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 /* TradingView-style OHLC strip (positioned by toolbar; not absolute alone) */

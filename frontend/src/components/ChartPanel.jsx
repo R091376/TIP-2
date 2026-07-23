@@ -14,7 +14,7 @@ export default function ChartPanel({
   onClearDrawings,
   clearDrawingsEnabled = false,
 }) {
-  const canClearDrawings =
+  const showClearDrawings =
     typeof onClearDrawings === 'function' && Boolean(clearDrawingsEnabled)
 
   return (
@@ -32,16 +32,11 @@ export default function ChartPanel({
       )}
       <div className="chart-top-toolbar" aria-label="OHLC and drawings">
         <OhlcLegend candle={ohlcLegend} />
-        {typeof onClearDrawings === 'function' && (
+        {showClearDrawings && (
           <button
             type="button"
             className="chart-clear-drawings"
-            disabled={!canClearDrawings}
-            title={
-              canClearDrawings
-                ? 'Remove pattern drawings (lines & markers) from the chart'
-                : 'No drawings on the chart'
-            }
+            title="Remove pattern drawings (lines & markers) from the chart"
             /* LWC captures pointer on the canvas; stop events before they reach the chart. */
             onPointerDown={(e) => {
               e.stopPropagation()
@@ -52,7 +47,6 @@ export default function ChartPanel({
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              if (!canClearDrawings) return
               onClearDrawings()
             }}
           >
