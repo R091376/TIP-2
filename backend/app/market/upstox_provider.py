@@ -9,6 +9,7 @@ import httpx
 
 from app.config import Settings
 from app.market.models import Candle
+from app.market.session_rebucket import rebucket_session_candles
 from app.market.timeframe import parse_timeframe
 from app.market.upstox_candle_mapper import from_raw_candles
 
@@ -65,7 +66,8 @@ class UpstoxMarketDataProvider:
             resp = self._client.get(url, headers=self._headers())
             resp.raise_for_status()
             data = resp.json().get("data") or {}
-            return from_raw_candles(data.get("candles"))
+            raw = from_raw_candles(data.get("candles"))
+            return rebucket_session_candles(raw, spec.interval_minutes())
         except Exception as e:
             raise UpstoxMarketDataException(
                 f"Failed to fetch intraday candles for {instrument_key}: {e}"
@@ -94,7 +96,8 @@ class UpstoxMarketDataProvider:
                     f"{resp.status_code} {body}"
                 )
             data = resp.json().get("data") or {}
-            return from_raw_candles(data.get("candles"))
+            raw = from_raw_candles(data.get("candles"))
+            return rebucket_session_candles(raw, spec.interval_minutes())
         except UpstoxMarketDataException:
             raise
         except Exception as e:

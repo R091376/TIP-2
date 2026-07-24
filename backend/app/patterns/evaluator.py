@@ -63,9 +63,10 @@ class PatternEvaluator:
     def expire_session_timeframes(self) -> int:
         """Expire open pattern instances on session-close TFs (default 1m/5m/15m).
 
-        Called when market phase flips to CLOSED (after stale open *candles* are
-        force-closed by the reconciler). Patterns that never hit succeed/fail
-        get terminal stage=expired for the day feed / journal.
+        Called when market phase flips to CLOSED (after
+        ``CandleEngine.finalize_session_candles`` force-closes open intraday
+        bars so the last RTH ``CandleClosed`` has already been evaluated).
+        Patterns that never hit succeed/fail get terminal stage=expired.
         """
         tfs = set(self._settings.expiry_session_close_timeframes or [])
         now = datetime.now(timezone.utc)

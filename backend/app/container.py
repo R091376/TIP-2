@@ -70,6 +70,11 @@ class AppContainer:
         self.event_bus.subscribe(CandleClosedEvent, self.broadcaster.on_candle_closed)
         self.event_bus.subscribe(CandleClosedEvent, self.pattern_service.on_candle_closed)
         self.event_bus.subscribe(PatternStageEvent, self.broadcaster.on_pattern_stage)
+        # Finalize open intraday bars *before* session pattern expiry so the
+        # last RTH bar publishes CandleClosed and evaluators see it first.
+        self.event_bus.subscribe(
+            MarketPhaseChangedEvent, self._on_market_phase_for_candles
+        )
         self.event_bus.subscribe(MarketPhaseChangedEvent, self.session_expiry.on_phase_changed)
         self.event_bus.subscribe(
             MarketPhaseChangedEvent, self.market_status_broadcaster.on_market_phase_changed
@@ -79,6 +84,13 @@ class AppContainer:
             self.pattern_service.cancel_for_symbol(ev.symbol_id)
 
         self.event_bus.subscribe(WatchlistSymbolRemovedEvent, on_removed)
+
+    def _on_market_phase_for_candles(self, event: MarketPhaseChangedEvent) -> None:
+        if event.phase != "CLOSED":
+            return
+        n = self.candle_engine.finalize_session_candles()
+        if n:
+            logger.info("Session finalize: closed %s open intraday candle(s)", n)
 
     def startup(self, loop: asyncio.AbstractEventLoop) -> None:
         self.broadcaster.set_loop(loop)
@@ -119,9 +131,21 @@ class AppContainer:
             last_phase = None
             while self._bg_stop and not self._bg_stop.is_set():
                 try:
+                    # Phase flip to CLOSED runs finalize via event bus first,
+                    # then SessionExpiryReconciler (subscription order).
                     self.market_status.refresh_phase_from_clock()
-                    self.candle_engine.close_stale_open_candles(int(time.time() * 1000))
+                    now_ms = int(time.time() * 1000)
+                    self.candle_engine.close_stale_open_candles(now_ms)
                     phase = self.market_status.get_market_phase()
+                    # Startup / already CLOSED: no phase-change event, but last
+                    # RTH bars may still be open after seed or a quiet close.
+                    if phase.value == "CLOSED":
+                        n_fin = self.candle_engine.finalize_session_candles()
+                        if n_fin:
+                            logger.info(
+                                "Session finalize: closed %s open intraday candle(s)",
+                                n_fin,
+                            )
                     # session close expiry when phase flips to CLOSED
                     if last_phase is not None and last_phase != phase and phase.value == "CLOSED":
                         n = self.pattern_service.expire_session_timeframes()
