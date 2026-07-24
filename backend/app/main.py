@@ -31,7 +31,6 @@ from app.api import (
 from app.api.websocket import live as live_ws
 from app.config import get_settings
 from app.container import build_container
-from app.spa import mount_spa, resolve_static_dir
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,11 +65,10 @@ def create_app() -> FastAPI:
     # Browsers require Secure when SameSite=None (cross-site FE/API on Render)
     https_only = bool(settings.session_cookie_https_only) or same_site == "none"
     logger.info(
-        "CORS allow_origins=%s same_site=%s https_only=%s spa=%s",
+        "CORS allow_origins=%s same_site=%s https_only=%s",
         origins,
         same_site,
         https_only,
-        bool(resolve_static_dir()),
     )
     app.add_middleware(
         CORSMiddleware,
@@ -89,6 +87,16 @@ def create_app() -> FastAPI:
         https_only=https_only,
     )
 
+    @app.get("/")
+    def root():
+        """Avoid bare 404 on the API host (browsers often open /)."""
+        return {
+            "service": "tip2-api",
+            "status": "UP",
+            "health": "/api/health",
+            "docs": "/docs",
+        }
+
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(admin_users.router)
@@ -99,21 +107,6 @@ def create_app() -> FastAPI:
     app.include_router(pattern_statistics.router)
     app.include_router(pattern_alerts.router)
     app.include_router(live_ws.router)
-
-    # Same-origin SPA when backend/static/index.html exists (Render unified build).
-    # Otherwise keep a small JSON root for bare API hosts.
-    if not mount_spa(app):
-
-        @app.get("/")
-        def root():
-            """Avoid bare 404 on the API host (browsers often open /)."""
-            return {
-                "service": "tip2-api",
-                "status": "UP",
-                "health": "/api/health",
-                "docs": "/docs",
-                "note": "SPA not bundled — open tip2-web or rebuild with frontend/dist → backend/static",
-            }
 
     return app
 

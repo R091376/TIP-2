@@ -1,2 +1,0 @@
-# Vite production build is copied here on Render (frontend/dist → backend/static).
-# Empty locally → API-only mode; use Vite dev server + proxy instead.

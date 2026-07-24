@@ -37,9 +37,8 @@ export async function login(
   if (!me || !me.username) {
     throw new Error(
       'Login succeeded but the session cookie was not kept by the browser. ' +
-        'Use the same-origin app URL (https://tip2-api.onrender.com/) so the cookie is first-party. ' +
-        'Split tip2-web → tip2-api is cross-site and often blocked on mobile. ' +
-        'See docs/RENDER-DEPLOY.md.',
+        'On Render, set SESSION_COOKIE_SAMESITE=none, SESSION_COOKIE_HTTPS_ONLY=true, ' +
+        'and CORS_ALLOWED_ORIGINS to the exact frontend origin (no trailing slash).',
     )
   }
   return me
