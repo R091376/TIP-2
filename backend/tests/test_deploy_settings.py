@@ -1,6 +1,4 @@
-"""Deploy-related settings: CORS list + session cookie SameSite."""
-
-import os
+"""Deploy-related settings: CORS list + JWT secrets."""
 
 from app.config import Settings, clear_settings_cache, normalize_sqlalchemy_url
 
@@ -39,22 +37,26 @@ def test_cors_origins_list_split():
     ]
 
 
-def test_session_same_site_none():
-    s = Settings(session_cookie_samesite="none", session_cookie_https_only=True)
-    assert s.session_same_site() == "none"
-    assert s.session_cookie_https_only is True
+def test_jwt_signing_secret_prefers_jwt_secret():
+    s = Settings(jwt_secret="jwt-only", session_secret="session-only")
+    assert s.jwt_signing_secret() == "jwt-only"
 
 
-def test_session_same_site_invalid_falls_back_to_lax():
-    s = Settings(session_cookie_samesite="weird")
-    assert s.session_same_site() == "lax"
+def test_jwt_signing_secret_falls_back_to_session_secret():
+    s = Settings(jwt_secret="", session_secret="session-only")
+    assert s.jwt_signing_secret() == "session-only"
+
+
+def test_jwt_expire_hours_default():
+    s = Settings()
+    assert s.jwt_expire_hours == 8
 
 
 def test_env_aliases_for_deploy(monkeypatch):
     clear_settings_cache()
     monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "https://fe.example")
-    monkeypatch.setenv("SESSION_COOKIE_SAMESITE", "none")
-    monkeypatch.setenv("SESSION_COOKIE_HTTPS_ONLY", "true")
+    monkeypatch.setenv("JWT_SECRET", "from-env-jwt")
+    monkeypatch.setenv("JWT_EXPIRE_HOURS", "8")
     monkeypatch.setenv("TIP_WATCHLIST_STORE", "memory")
     monkeypatch.setenv("TIP_PROFILE", "memory")
     clear_settings_cache()
@@ -62,6 +64,6 @@ def test_env_aliases_for_deploy(monkeypatch):
 
     s = get_settings()
     assert "https://fe.example" in s.cors_origins_list()
-    assert s.session_same_site() == "none"
-    assert s.session_cookie_https_only is True
+    assert s.jwt_signing_secret() == "from-env-jwt"
+    assert s.jwt_expire_hours == 8
     clear_settings_cache()

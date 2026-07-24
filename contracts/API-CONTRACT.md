@@ -12,7 +12,8 @@ Narrative: `../Data-Flow-and-Frontend-API-Spec-v1.0.md` (also copied to repo roo
 
 - Base URL (dev): `http://localhost:8080` (Vite proxies `/api` and `/ws`).
 - JSON request/response; `Content-Type: application/json`.
-- Session auth via cookie after `POST /api/auth/login` (`credentials: "include"`).
+- Auth via **JWT access token** (8h). After `POST /api/auth/login`, send  
+  `Authorization: Bearer <accessToken>` on protected routes (no session cookies).
 - Symbol path params may contain `|` and spaces — use `{symbolId:.+}` equivalent (greedy match) and `encodeURIComponent` on the client.
 - Candle `time`: **UTC epoch seconds** (integer), IST-aligned bar starts.
 
@@ -33,17 +34,26 @@ Narrative: `../Data-Flow-and-Frontend-API-Spec-v1.0.md` (also copied to repo roo
 
 - **Auth:** public  
 - **Body:** `{ "username": string, "password": string }`  
-- **Success:** 200 + user DTO; **Set-Cookie** session  
+- **Success:** 200  
+  ```json
+  {
+    "accessToken": "<jwt>",
+    "tokenType": "Bearer",
+    "expiresIn": 28800,
+    "user": { /* UserDto */ }
+  }
+  ```  
 - **Failure:** 401  
 
 ### `POST /api/auth/logout`
 
 - **Auth:** public (idempotent)  
-- **Success:** 200; session cleared  
+- **Success:** 200 `{ "status": "ok" }`  
+- **Note:** JWT is stateless — client must discard `accessToken`. Server does not revoke.
 
 ### `GET /api/auth/me`
 
-- **Auth:** session required for user body  
+- **Auth:** `Authorization: Bearer <accessToken>` required  
 - **Success:** 200 user DTO  
 - **Unauthenticated:** 401 (frontend `apiAllow401` treats as logged out)
 

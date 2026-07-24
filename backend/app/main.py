@@ -15,7 +15,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
 
 from app.api import (
     admin_users,
@@ -61,14 +60,10 @@ def create_app() -> FastAPI:
     )
 
     origins = settings.cors_origins_list() or ["http://localhost:5173"]
-    same_site = settings.session_same_site()
-    # Browsers require Secure when SameSite=None (cross-site FE/API on Render)
-    https_only = bool(settings.session_cookie_https_only) or same_site == "none"
     logger.info(
-        "CORS allow_origins=%s same_site=%s https_only=%s",
+        "CORS allow_origins=%s auth=jwt expire_hours=%s",
         origins,
-        same_site,
-        https_only,
+        settings.jwt_expire_hours,
     )
     app.add_middleware(
         CORSMiddleware,
@@ -79,13 +74,6 @@ def create_app() -> FastAPI:
         expose_headers=["*"],
         max_age=3600,
     )
-    app.add_middleware(
-        SessionMiddleware,
-        secret_key=settings.session_secret,
-        session_cookie="TIPSESSION",
-        same_site=same_site,
-        https_only=https_only,
-    )
 
     @app.get("/")
     def root():
@@ -95,6 +83,7 @@ def create_app() -> FastAPI:
             "status": "UP",
             "health": "/api/health",
             "docs": "/docs",
+            "auth": "Bearer JWT (8h access token)",
         }
 
     app.include_router(health.router)

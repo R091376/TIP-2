@@ -3,6 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from app.api.deps import AuthUser
+from app.auth.jwt_tokens import issue_access_token
+
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
@@ -11,10 +14,27 @@ class LoginRequest(BaseModel):
     password: str
 
 
+def _token_response(settings, user: dict) -> dict:
+    token, expires_in = issue_access_token(
+        secret=settings.jwt_signing_secret(),
+        user_id=str(user.get("id") or user.get("username") or "user"),
+        username=str(user.get("username") or ""),
+        role=str(user.get("role") or "USER"),
+        expire_hours=settings.jwt_expire_hours,
+    )
+    return {
+        "accessToken": token,
+        "tokenType": "Bearer",
+        "expiresIn": expires_in,
+        "user": user,
+    }
+
+
 @router.post("/login")
 def login(body: LoginRequest, request: Request):
     container = request.app.state.container
-    if container.settings.is_memory_profile:
+    settings = container.settings
+    if settings.is_memory_profile:
         # Open profile: accept any login as synthetic admin for FE continuity
         user = {
             "id": "00000000-0000-0000-0000-000000000001",
@@ -27,8 +47,7 @@ def login(body: LoginRequest, request: Request):
             "createdAt": "2020-01-01T00:00:00Z",
             "updatedAt": "2020-01-01T00:00:00Z",
         }
-        request.session["user"] = user
-        return user
+        return _token_response(settings, user)
 
     if not body.username or not body.password:
         raise HTTPException(status_code=400, detail="username and password required")
@@ -36,30 +55,34 @@ def login(body: LoginRequest, request: Request):
     if app_user is None:
         raise HTTPException(status_code=401, detail="Invalid username or password")
     dto = app_user.to_dto()
-    request.session["user"] = dto
-    return dto
+    return _token_response(settings, dto)
 
 
 @router.post("/logout")
-def logout(request: Request):
-    request.session.clear()
+def logout():
+    """Stateless JWT: client discards the token. Always 200."""
     return {"status": "ok"}
 
 
 @router.get("/me")
-def me(request: Request):
+def me(request: Request, user: AuthUser):
     container = request.app.state.container
     if container.settings.is_memory_profile:
-        user = request.session.get("user")
-        if user:
-            return user
-        raise HTTPException(status_code=401, detail="Not logged in")
-    user = request.session.get("user")
-    if not user:
-        raise HTTPException(status_code=401, detail="Not logged in")
-    # refresh from store
-    app_user = container.user_service.find_by_username(user.get("username", ""))
+        return user if user.get("username") else {
+            "id": user.get("id"),
+            "username": user.get("username") or "memory",
+            "role": user.get("role") or "ADMIN",
+            "displayName": "Memory Admin",
+            "cashBalance": 100000.0,
+            "tradingEnabled": True,
+            "active": True,
+        }
+
+    # AuthUser already refreshed from store when possible; ensure full DTO.
+    username = user.get("username", "")
+    if user.get("displayName") is not None or user.get("cashBalance") is not None:
+        return user
+    app_user = container.user_service.find_by_username(username)
     if app_user is None:
-        request.session.clear()
         raise HTTPException(status_code=401, detail="Not logged in")
     return app_user.to_dto()

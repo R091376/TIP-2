@@ -74,15 +74,18 @@ Local backend uses **Postgres on localhost** (`postgresql+psycopg://postgres:adm
 `scripts/start-backend.bat` forces that URL so a Neon `DATABASE_URL` in `.env` is not used for local runs.  
 To override: set `LOCAL_DATABASE_URL` before starting.
 
-## Deploy on Render (split FE / API)
+## Deploy on Render (split FE / API + JWT)
 
 See **[docs/RENDER-DEPLOY.md](docs/RENDER-DEPLOY.md)** and root **`render.yaml`**.
 
+Auth: **JWT Bearer** (8h), stored in the browser (`localStorage`). No session cookies.
+
 Quick path:
 
-1. Blueprint-deploy from this repo (creates `tip2-api` + `tip2-web`).
-2. Set secrets: `DATABASE_URL`, `UPSTOX_ACCESS_TOKEN`, `CORS_ALLOWED_ORIGINS`.
-3. Redeploy static FE after API URL is known so `VITE_API_BASE_URL` is baked in.
+1. Blueprint-deploy (or Sync) from this repo (`tip2-api` + `tip2-web`).
+2. Set secrets: `DATABASE_URL`, `UPSTOX_ACCESS_TOKEN`; ensure `JWT_SECRET` is set.
+3. Redeploy static FE so `VITE_API_BASE_URL` is baked in.
+4. Login from `https://tip2-web.onrender.com` (works on mobile).
 
 ## Validation
 

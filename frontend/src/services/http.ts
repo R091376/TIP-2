@@ -1,11 +1,14 @@
 /**
- * Shared fetch helper for TIP API (session cookies + JSON errors).
+ * Shared fetch helper for TIP API (Bearer JWT + JSON errors).
  */
 
+import { clearAccessToken, getAccessToken } from '../auth/tokenStorage'
 import { apiUrl } from '../config'
 
 export type ApiOptions = RequestInit & {
-  /** When true (default), send session cookie. */
+  /** When true (default), attach Authorization Bearer if a token is stored. */
+  auth?: boolean
+  /** Override credentials; default omit (JWT in header, no cookies). */
   credentials?: RequestCredentials
 }
 
@@ -21,7 +24,7 @@ export class ApiError extends Error {
   }
 }
 
-/** Called when a non-login request gets 401 (session missing/expired). */
+/** Called when a non-login request gets 401 (token missing/expired). */
 type UnauthorizedHandler = (info: { path: string; message: string }) => void
 let unauthorizedHandler: UnauthorizedHandler | null = null
 
@@ -32,8 +35,6 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
 export function isUnauthorizedError(err: unknown): boolean {
   if (err instanceof ApiError) return err.status === 401
   if (err instanceof Error) {
-    // Status-based is preferred; message match is a fallback for non-ApiError throws.
-    // Do not match "session cookie" — that is a login-config error, not a mid-app 401.
     return /not signed in|not logged in|please log in again/i.test(err.message)
   }
   return false
@@ -49,7 +50,6 @@ function coerceServerMessage(value: unknown): string | null {
     return String(value)
   }
   if (Array.isArray(value)) {
-    // FastAPI validation errors: [{loc, msg, type}, ...]
     const parts = value
       .map((item) => {
         if (typeof item === 'string') return item
@@ -69,7 +69,6 @@ function coerceServerMessage(value: unknown): string | null {
       coerceServerMessage(o.detail) ||
       coerceServerMessage(o.title)
     if (nested) return nested
-    // Avoid React "object as child" / "[object Object]" banners
     try {
       return JSON.stringify(o)
     } catch {
@@ -118,7 +117,6 @@ const NO_UNAUTHORIZED_NOTIFY = new Set([
 ])
 
 function shouldNotifyUnauthorized(path: string): boolean {
-  // Login/logout/me/health failures are expected UX, not a dropped mid-app session.
   const p = path.split('?')[0]
   return !NO_UNAUTHORIZED_NOTIFY.has(p)
 }
@@ -130,6 +128,13 @@ function buildHeaders(options: ApiOptions): Headers {
   }
   if (!headers.has('Accept')) {
     headers.set('Accept', 'application/json')
+  }
+  const useAuth = options.auth !== false
+  if (useAuth && !headers.has('Authorization')) {
+    const token = getAccessToken()
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`)
+    }
   }
   return headers
 }
@@ -152,7 +157,7 @@ async function parseJsonBody<T>(response: Response): Promise<T | null> {
 export async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise<T> {
   const response = await fetch(apiUrl(path), {
     ...options,
-    credentials: options.credentials ?? 'include',
+    credentials: options.credentials ?? 'omit',
     headers: buildHeaders(options),
   })
 
@@ -160,6 +165,7 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
     const text = await response.text()
     const message = messageFromBody(response.status, text)
     if (response.status === 401 && shouldNotifyUnauthorized(path)) {
+      clearAccessToken()
       try {
         unauthorizedHandler?.({ path, message })
       } catch {
@@ -177,16 +183,15 @@ export async function apiAllow401<T = unknown>(
   path: string,
   options: ApiOptions = {},
 ): Promise<T | null> {
-  const headers = new Headers(options.headers || {})
-  if (!headers.has('Accept')) headers.set('Accept', 'application/json')
-
   const response = await fetch(apiUrl(path), {
     ...options,
-    credentials: options.credentials ?? 'include',
-    headers,
+    credentials: options.credentials ?? 'omit',
+    headers: buildHeaders(options),
   })
 
   if (response.status === 401) {
+    // Drop expired/invalid token so the next login does not send a stale Bearer.
+    clearAccessToken()
     return null
   }
   if (!response.ok) {

@@ -68,7 +68,7 @@ uvicorn app.main:app --workers 1 --port 8080
 - Watchlist: memory + postgres (Flyway V1–V5 on startup)
 - Patterns: breakout, breakdown, pinbar (hammer/shooting star), engulfing, inside-bar, HH/LL structure, consolidation, volume-breakout + lifecycles
 - **Pattern journal**: in-memory when `TIP_WATCHLIST_STORE=memory`; **Postgres** (`pattern_instances` / `events` / `outcomes` / `statistics`) when store is `postgres` — startup hydrates multi-day opens and expires session TFs
-- Auth: session cookie (`TIPSESSION`), bcrypt; **Postgres `app_users` + `cash_ledger`** when store=postgres (admin auto-seeded)
+- Auth: JWT Bearer access token (8h, `Authorization: Bearer …`), bcrypt; **Postgres `app_users` + `cash_ledger`** when store=postgres (admin auto-seeded)
 - Session expiry: short TFs expire on market close; 1h/4h track max sessions; 1d max candles
 - WS: `/ws/live` subscribe, candle throttle 1s, pattern_event broadcast
 

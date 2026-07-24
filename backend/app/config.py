@@ -40,11 +40,11 @@ class Settings(BaseSettings):
     tip_watchlist_store: str = Field(default="postgres", alias="TIP_WATCHLIST_STORE")
     tip_profile: str = Field(default="", alias="TIP_PROFILE")  # "memory" forces open security
 
-    # Session secret for cookie signing
+    # Legacy alias kept so existing Render env still works; prefer JWT_SECRET.
     session_secret: str = Field(default="tip-dev-session-secret-change-me", alias="SESSION_SECRET")
-    # Cookie flags for split deploy (cross-site FE/API on HTTPS → none + https_only)
-    session_cookie_samesite: str = Field(default="lax", alias="SESSION_COOKIE_SAMESITE")
-    session_cookie_https_only: bool = Field(default=False, alias="SESSION_COOKIE_HTTPS_ONLY")
+    # JWT access tokens (Bearer). Falls back to SESSION_SECRET when unset.
+    jwt_secret: str = Field(default="", alias="JWT_SECRET")
+    jwt_expire_hours: int = Field(default=8, alias="JWT_EXPIRE_HOURS")
 
     # Admin seed
     tip_admin_password: str = Field(default="admin", alias="TIP_ADMIN_PASSWORD")
@@ -281,12 +281,10 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in (self.cors_allowed_origins or "").split(",") if o.strip()]
 
-    def session_same_site(self) -> str:
-        """Starlette SameSite value: lax | strict | none."""
-        v = (self.session_cookie_samesite or "lax").strip().lower()
-        if v in ("lax", "strict", "none"):
-            return v
-        return "lax"
+    def jwt_signing_secret(self) -> str:
+        """Prefer JWT_SECRET; fall back to SESSION_SECRET for easy Render migration."""
+        s = (self.jwt_secret or "").strip() or (self.session_secret or "").strip()
+        return s or "tip-dev-session-secret-change-me"
 
 
 def normalize_sqlalchemy_url(url: str) -> str:
@@ -311,8 +309,9 @@ def get_settings() -> Settings:
     store = os.environ.get("TIP_WATCHLIST_STORE", "")
     profile = os.environ.get("TIP_PROFILE", "")
     cors = os.environ.get("CORS_ALLOWED_ORIGINS", "")
-    same_site = os.environ.get("SESSION_COOKIE_SAMESITE", "")
-    https_only = os.environ.get("SESSION_COOKIE_HTTPS_ONLY", "")
+    jwt_secret = os.environ.get("JWT_SECRET", "")
+    jwt_hours = os.environ.get("JWT_EXPIRE_HOURS", "")
+    session_secret = os.environ.get("SESSION_SECRET", "")
     settings = Settings()
     if store:
         object.__setattr__(settings, "tip_watchlist_store", store)
@@ -320,14 +319,15 @@ def get_settings() -> Settings:
         object.__setattr__(settings, "tip_profile", profile)
     if cors:
         object.__setattr__(settings, "cors_allowed_origins", cors)
-    if same_site:
-        object.__setattr__(settings, "session_cookie_samesite", same_site)
-    if https_only != "":
-        object.__setattr__(
-            settings,
-            "session_cookie_https_only",
-            https_only.strip().lower() in ("1", "true", "yes", "on"),
-        )
+    if jwt_secret:
+        object.__setattr__(settings, "jwt_secret", jwt_secret)
+    if session_secret:
+        object.__setattr__(settings, "session_secret", session_secret)
+    if jwt_hours != "":
+        try:
+            object.__setattr__(settings, "jwt_expire_hours", int(jwt_hours))
+        except ValueError:
+            pass
     return settings
 
 

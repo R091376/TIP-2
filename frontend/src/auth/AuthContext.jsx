@@ -9,6 +9,7 @@ import {
 import { fetchMe, login as apiLogin, logout as apiLogout } from '../services/authApi'
 import { fetchHealth } from '../services/healthApi'
 import { setUnauthorizedHandler } from '../services/http'
+import { clearAccessToken } from './tokenStorage'
 import {
   isStartupReadyEnabled,
   STARTUP_READY_POLL_MS,
@@ -187,7 +188,7 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (username, password) => {
     setError(null)
-    // apiLogin verifies cookie via /me — only set user after a real session exists.
+    // apiLogin stores JWT and verifies via /me.
     const me = await apiLogin(username, password)
     authEpochRef.current += 1
     setUser(me)
@@ -203,15 +204,17 @@ export function AuthProvider({ children }) {
     try {
       await apiLogout()
     } finally {
+      clearAccessToken()
       setUser(null)
       setLoading(false)
       setError(null)
     }
   }, [])
 
-  /** Drop client session when a protected API returns 401 (cookie missing/expired). */
+  /** Drop client auth when a protected API returns 401 (token missing/expired). */
   const clearSession = useCallback((reason) => {
     authEpochRef.current += 1
+    clearAccessToken()
     setUser(null)
     setLoading(false)
     setError(reason || 'Not signed in. Please log in again.')
