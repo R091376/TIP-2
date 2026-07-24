@@ -74,15 +74,16 @@ Local backend uses **Postgres on localhost** (`postgresql+psycopg://postgres:adm
 `scripts/start-backend.bat` forces that URL so a Neon `DATABASE_URL` in `.env` is not used for local runs.  
 To override: set `LOCAL_DATABASE_URL` before starting.
 
-## Deploy on Render (split FE / API)
+## Deploy on Render (same-origin SPA + API)
 
 See **[docs/RENDER-DEPLOY.md](docs/RENDER-DEPLOY.md)** and root **`render.yaml`**.
 
 Quick path:
 
-1. Blueprint-deploy from this repo (creates `tip2-api` + `tip2-web`).
-2. Set secrets: `DATABASE_URL`, `UPSTOX_ACCESS_TOKEN`, `CORS_ALLOWED_ORIGINS`.
-3. Redeploy static FE after API URL is known so `VITE_API_BASE_URL` is baked in.
+1. Blueprint-deploy (or **Sync** existing Blueprint) from this repo.
+2. Set secrets: `DATABASE_URL`, `UPSTOX_ACCESS_TOKEN`.
+3. Open **`https://tip2-api.onrender.com/`** (SPA + API same host — first-party cookies; works on mobile).
+4. `tip2-web` only redirects to the API host.
 
 ## Validation
 

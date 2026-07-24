@@ -1,25 +1,50 @@
-# Render Blueprint — split FE/API for TIP-2
+# Render Blueprint — same-origin API + SPA (first-party session cookies)
 # https://render.com/docs/blueprint-spec
+#
+# Why same-origin?
+#   Split tip2-web + tip2-api makes TIPSESSION a third-party cookie.
+#   Mobile browsers often block it even with SameSite=None; Secure; CORS correct.
+#   Google Privacy Sandbox guidance for first-party auth: use same site.
+#
+# Primary app URL after deploy:
+#   https://tip2-api.onrender.com/
+#
+# tip2-web is kept only as a permanent redirect to the API host so old bookmarks work.
 #
 # Usage:
 #   1. Push this repo to GitHub
-#   2. Render Dashboard → New → Blueprint → select repo
-#   3. Fill secrets marked sync: false (Dashboard prompts)
-#   4. After first deploy, set CORS_ALLOWED_ORIGINS + VITE_API_BASE_URL if not
-#      already filled (see comments), then redeploy FE so Vite bakes the API URL.
-#
-# Service names default to tip2-api / tip2-web — change only if unique on your account.
+#   2. Render Dashboard → New → Blueprint → select repo  (or Sync existing Blueprint)
+#   3. Fill secrets marked sync: false
+#   4. After deploy, open https://tip2-api.onrender.com/ and login
 
 services:
-  # ── Backend (FastAPI / Uvicorn) ───────────────────────────────────────────
+  # ── Backend + SPA (FastAPI serves Vite dist from /) ───────────────────────
   - type: web
     name: tip2-api
     runtime: python
     plan: free
     region: singapore
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    # Repo root so the build can compile frontend/ and install backend/
+    rootDir: .
+    buildCommand: |
+      set -e
+      NODE_VERSION=20.18.1
+      curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+      tar -xJf /tmp/node.tar.xz -C /tmp
+      export PATH="/tmp/node-v${NODE_VERSION}-linux-x64/bin:$PATH"
+      node -v && npm -v
+      cd frontend
+      npm ci
+      # Empty base URL → relative /api + same-host /ws (first-party cookies)
+      export VITE_API_BASE_URL=
+      npm run build
+      cd ../backend
+      pip install -r requirements.txt
+      rm -rf static
+      mkdir -p static
+      cp -r ../frontend/dist/. static/
+      test -f static/index.html
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
     healthCheckPath: /api/health
     envVars:
       - key: PYTHON_VERSION
@@ -28,9 +53,9 @@ services:
         value: postgres
       - key: TIP_PROFILE
         value: ""
-      # Cross-site cookies (static FE on *.onrender.com → API on *.onrender.com)
+      # First-party cookies on the API host (SPA + API same origin)
       - key: SESSION_COOKIE_SAMESITE
-        value: none
+        value: lax
       - key: SESSION_COOKIE_HTTPS_ONLY
         value: "true"
       - key: TIP_ADMIN_PASSWORD
@@ -39,37 +64,25 @@ services:
         value: test
       - key: TIP_TEST_USERNAME
         value: test
-      # Secrets / deploy-specific — set in Dashboard (Blueprint will prompt)
       - key: DATABASE_URL
         sync: false
       - key: UPSTOX_ACCESS_TOKEN
         sync: false
       - key: SESSION_SECRET
         generateValue: true
-      # Must match the browser Origin exactly (scheme + host, no trailing slash)
+      # Only needed for local Vite → production API; not for same-origin SPA
       - key: CORS_ALLOWED_ORIGINS
-        value: https://tip2-web.onrender.com,http://localhost:5173
+        value: http://localhost:5173,http://127.0.0.1:5173
 
-  # ── Frontend (Vite static) ────────────────────────────────────────────────
-  # Static sites: no region, no plan: free. Quote rewrite paths (YAML treats * specially).
+  # ── Legacy static host → redirect to same-origin app ──────────────────────
+  # Keeps https://tip2-web.onrender.com bookmarks working.
   - type: web
     name: tip2-web
     runtime: static
     rootDir: frontend
-    buildCommand: npm ci && export VITE_API_BASE_URL="${VITE_API_BASE_URL:-https://${API_HOST:-tip2-api.onrender.com}}" && echo "VITE_API_BASE_URL=$VITE_API_BASE_URL" && npm run build
+    buildCommand: mkdir -p dist && printf '%s\n' '<!doctype html><meta http-equiv="refresh" content="0;url=https://tip2-api.onrender.com/"><title>Redirecting…</title><a href="https://tip2-api.onrender.com/">Open TIP-2</a>' > dist/index.html
     staticPublishPath: ./dist
     routes:
-      # Existing files (e.g. /assets/*) are served as-is; non-files rewrite to SPA shell.
-      # Quote paths — unquoted /* breaks YAML alias parsing.
-      - type: rewrite
+      - type: redirect
         source: "/*"
-        destination: "/index.html"
-    envVars:
-      - key: API_HOST
-        fromService:
-          name: tip2-api
-          type: web
-          property: host
-      # Optional full override, e.g. https://tip2-api.onrender.com
-      - key: VITE_API_BASE_URL
-        value: https://tip2-api.onrender.com
+        destination: "https://tip2-api.onrender.com/"
