@@ -8,8 +8,6 @@ import { apiUrl } from '../config'
 export type ApiOptions = RequestInit & {
   /** When true (default), attach Authorization Bearer if a token is stored. */
   auth?: boolean
-  /** Override credentials; default omit (JWT in header, no cookies). */
-  credentials?: RequestCredentials
 }
 
 export class ApiError extends Error {
@@ -157,7 +155,7 @@ async function parseJsonBody<T>(response: Response): Promise<T | null> {
 export async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise<T> {
   const response = await fetch(apiUrl(path), {
     ...options,
-    credentials: options.credentials ?? 'omit',
+    credentials: 'omit',
     headers: buildHeaders(options),
   })
 
@@ -178,14 +176,14 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
   return (await parseJsonBody<T>(response)) as T
 }
 
-/** Session probe: 401 → null; other errors throw. */
+/** Auth probe: 401 → null; other errors throw. */
 export async function apiAllow401<T = unknown>(
   path: string,
   options: ApiOptions = {},
 ): Promise<T | null> {
   const response = await fetch(apiUrl(path), {
     ...options,
-    credentials: options.credentials ?? 'omit',
+    credentials: 'omit',
     headers: buildHeaders(options),
   })
 

@@ -19,8 +19,9 @@ Check boxes only after evidence (CI log or manual note).
 
 - [ ] M01 health
 - [ ] M02 Vite proxy / CORS
-- [ ] M03 login cookie
-- [ ] M04 logout
+- [ ] M03 login JWT (Bearer + localStorage)
+- [ ] M04 logout (clears client token)
+
 - [ ] M05 non-admin watchlist 403
 - [ ] M06 watchlist list
 - [ ] M07 chart candles

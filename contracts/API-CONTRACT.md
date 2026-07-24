@@ -245,7 +245,7 @@ Stages broadcast: per `tip.pattern.ws.broadcast-stages`
 
 **memory profile:** all endpoints permitAll (local chart without users/DB).
 
-CORS: allow `http://localhost:5173`, credentials true, methods GET/POST/PUT/PATCH/DELETE/OPTIONS.
+CORS: allow FE origins (e.g. `http://localhost:5173`, production tip2-web). Auth via `Authorization` header (not cookies).
 
 ---
 

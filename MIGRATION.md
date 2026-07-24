@@ -15,7 +15,7 @@
 ### 1.1 Goals
 
 1. Replace the Java backend with a **Python 3** backend that is **API-compatible** with the existing React frontend.
-2. Keep **all public REST paths**, status codes, cookie/session auth behavior, and **WebSocket** message shapes the same so the frontend needs **no logic changes**.
+2. Keep **all public REST paths**, status codes, and **WebSocket** message shapes the same so the frontend needs **minimal** auth-only changes (JWT Bearer vs legacy session cookie).
 3. Preserve product behavior: multi-symbol watchlist, IST candle engine, Upstox V3 live feed, pattern intelligence, journal, admin users.
 4. Port the Java unit/integration **test intent** into Python tests so parity is measurable.
 
@@ -29,7 +29,7 @@
 | Live WS | `/ws/live` |
 | Candle times | Real **UTC epoch seconds**, IST-aligned boundaries |
 | Symbol IDs | Upstox instrument keys (`NSE_EQ\|…`, `NSE_INDEX\|Nifty 50`) |
-| Session auth | Cookie session + credentials; `401`/`403` semantics |
+| Auth | JWT Bearer (8h); `401`/`403` semantics |
 | Security matrix | See §4.3 — ADMIN-only watchlist mutate; `/ws/**` open today |
 | DB schema | Same Flyway SQL under `backend/db/migration/` (V1–V5) until a deliberate schema change |
 
@@ -65,7 +65,7 @@
 | WebSocket | Starlette/FastAPI WS | `/ws/live` |
 | Config | **pydantic-settings** + YAML/env | Mirror `tip.*` and Spring env overrides |
 | DB | **SQLAlchemy 2** + **Alembic** *or* run existing SQL as-is | Prefer applying Flyway SQL V1–V5 unchanged first |
-| Auth | Session cookie (e.g. itsdangerous/starlette SessionMiddleware) + bcrypt | Match Spring session cookie flow for Vite proxy |
+| Auth | JWT Bearer (PyJWT HS256, 8h) + bcrypt | Works with split FE/API and mobile browsers |
 | HTTP client (Upstox REST) | `httpx` | Historical/intraday candles, authorize feed |
 | Live feed | `websockets` / `httpx` WS + **protobuf** from `MarketDataFeed.proto` | Replace `MarketDataStreamerV3` |
 | Optional SDK | `upstox-python-sdk` for REST if stable | Still implement V3 feed decode yourself if SDK incomplete |
@@ -133,7 +133,7 @@ backend/
 | **P3** | Upstox REST historical/intraday + bootstrap seed | Seeded candles for primary symbol |
 | **P4** | Upstox V3 Protobuf live feed + tick → candles | Live `candle_update` on WS |
 | **P5** | Frontend `/ws/live` broadcaster (throttle 1s) | Chart updates without FE changes |
-| **P6** | Auth/session + admin users + security matrix | Login cookie works through Vite proxy |
+| **P6** | Auth JWT + admin users + security matrix | Login Bearer works local + Render split |
 | **P7** | Postgres watchlist + Flyway SQL apply | Store=postgres parity |
 | **P8** | Indicators + all pattern detectors/lifecycles | Pattern unit tests green |
 | **P9** | Pattern journal + REST patterns/statistics | Journal + stats API parity |
@@ -187,7 +187,7 @@ Product narrative: [`Data-Flow-and-Frontend-API-Spec-v1.0.md`](Data-Flow-and-Fro
 | Method | Path | Auth | Notes |
 |---|---|---|---|
 | GET | `/api/health` | public | Liveness |
-| POST | `/api/auth/login` | public | Session cookie |
+| POST | `/api/auth/login` | public | Returns JWT access token + user |
 | POST | `/api/auth/logout` | public | |
 | GET | `/api/auth/me` | authenticated (or 401) | FE uses allow-401 |
 | GET | `/api/admin/users` | ADMIN | |
@@ -442,7 +442,7 @@ npm run build
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Upstox V3 Protobuf / indexFF vs marketFF | Silent wrong/frozen prices | Early P4 spike; port `ExtractTick` tests first; compare raw ticks to Java logs |
-| Session cookies via Vite proxy | Login “works” in curl but not browser | Match cookie path/SameSite; keep credentials:include |
+| Cross-site cookie auth on mobile | Login 200 then session lost | Use JWT Bearer (no third-party cookies) |
 | Multi-worker ASGI | Split brain candles | Document single worker; refuse multi-worker in README |
 | Float OHLC drift | Pattern false diffs | Use same rounding discipline as Java DTOs; compare fixtures |
 | Timezone bugs | Wrong bar boundaries | Port `CandleBoundaryUtilsTest` before live feed |

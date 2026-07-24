@@ -21,7 +21,6 @@ export type HealthDto = {
 export async function fetchHealth(signal?: AbortSignal): Promise<HealthDto> {
   const response = await fetch(apiUrl('/api/health'), {
     method: 'GET',
-    credentials: 'omit',
     headers: { Accept: 'application/json' },
     signal,
   })

@@ -32,9 +32,6 @@ services:
         value: "8"
       - key: JWT_SECRET
         generateValue: true
-      # Optional legacy fallback if JWT_SECRET unset
-      - key: SESSION_SECRET
-        generateValue: true
       - key: TIP_ADMIN_PASSWORD
         value: admin
       - key: TIP_TEST_PASSWORD

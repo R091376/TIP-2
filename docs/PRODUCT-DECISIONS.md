@@ -8,7 +8,7 @@ Last updated: 2026-07-16. Revisit when starting paper trading or last-day replay
 |----------|--------|
 | Roles | `ADMIN` (you), `USER` (paper traders) |
 | Signup | Admin creates users (no public self-signup v1) |
-| Auth | Session cookie login (simple). Not JWT. “Auth light” — no OAuth. |
+| Auth | JWT Bearer access token (8h), stored in browser. No OAuth. No session cookies. |
 | Admin powers | Create users, set passwords, seed cash, reset cash, enable/disable trading, deactivate |
 | Default admin | `admin` / `TIP_ADMIN_PASSWORD` (default `admin`) |
 | Starting cash | ₹100,000 INR (configurable `tip.users.default-seed-cash`) |

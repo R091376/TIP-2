@@ -35,7 +35,6 @@ def login(body: LoginRequest, request: Request):
     container = request.app.state.container
     settings = container.settings
     if settings.is_memory_profile:
-        # Open profile: accept any login as synthetic admin for FE continuity
         user = {
             "id": "00000000-0000-0000-0000-000000000001",
             "username": body.username or "admin",
@@ -54,8 +53,7 @@ def login(body: LoginRequest, request: Request):
     app_user = container.user_service.authenticate(body.username.strip(), body.password)
     if app_user is None:
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    dto = app_user.to_dto()
-    return _token_response(settings, dto)
+    return _token_response(settings, app_user.to_dto())
 
 
 @router.post("/logout")
@@ -65,24 +63,6 @@ def logout():
 
 
 @router.get("/me")
-def me(request: Request, user: AuthUser):
-    container = request.app.state.container
-    if container.settings.is_memory_profile:
-        return user if user.get("username") else {
-            "id": user.get("id"),
-            "username": user.get("username") or "memory",
-            "role": user.get("role") or "ADMIN",
-            "displayName": "Memory Admin",
-            "cashBalance": 100000.0,
-            "tradingEnabled": True,
-            "active": True,
-        }
-
-    # AuthUser already refreshed from store when possible; ensure full DTO.
-    username = user.get("username", "")
-    if user.get("displayName") is not None or user.get("cashBalance") is not None:
-        return user
-    app_user = container.user_service.find_by_username(username)
-    if app_user is None:
-        raise HTTPException(status_code=401, detail="Not logged in")
-    return app_user.to_dto()
+def me(user: AuthUser):
+    """Return the authenticated user (JWT required outside memory open profile)."""
+    return user
