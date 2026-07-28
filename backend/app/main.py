@@ -22,6 +22,7 @@ from app.api import (
     health,
     instruments,
     market,
+    paper,
     pattern_alerts,
     pattern_statistics,
     symbols,
@@ -96,6 +97,8 @@ def create_app() -> FastAPI:
     app.include_router(instruments.router)
     app.include_router(pattern_statistics.router)
     app.include_router(pattern_alerts.router)
+    if settings.paper_enabled:
+        app.include_router(paper.router)
     app.include_router(live_ws.router)
 
     return app

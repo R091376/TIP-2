@@ -57,12 +57,15 @@ class MarketBootstrapService:
         settings: Settings,
         market_status: MarketStatusService,
         watchlist_repository: WatchlistRepository,
+        on_tick_extra=None,
     ) -> None:
         self._mdp = market_data_provider
         self._engine = candle_engine
         self._settings = settings
         self._status = market_status
         self._watchlist = watchlist_repository
+        self._on_tick_extra = on_tick_extra
+
 
     def recover_all_active(self) -> None:
         self._status.set_bootstrap_pending()
@@ -189,6 +192,11 @@ class MarketBootstrapService:
 
         if phase_from_clock() != MarketPhase.OPEN:
             return
+        if self._on_tick_extra is not None:
+            try:
+                self._on_tick_extra(tick)  # must be non-blocking
+            except Exception:
+                logger.exception("on_tick_extra failed")
         for tf in self._settings.supported_timeframes:
             try:
                 self._engine.process_tick(tick, tf)

@@ -15,14 +15,14 @@ Decision IDs (`KD*`) match the multi-symbol design where applicable. Newer items
 
 ## 1. Scope and product stance
 
-### AD0 — Read-only intelligence platform (no order execution)
+### AD0 — No real broker execution (paper simulation allowed)
 
 | | |
 |---|---|
-| **Status** | Accepted (project baseline) |
-| **Decision** | TIP is **read-only**: ingest market data, build candles, stream to UI. No order placement, OMS, or brokerage execution. |
-| **Rationale** | Focus product on charts, watchlist, and future pattern/alerts without regulatory/execution complexity. |
-| **Consequences** | Upstox is used as a **data** provider only; auth token is for market APIs/feed. |
+| **Status** | Accepted (evolved 2026-07-28) |
+| **Decision** | TIP **never** places real broker / Upstox orders. **Paper (simulated) OMS is allowed** for multi-user practice against live market data ticks. See `Manual-Paper-Trading-Design-v1.0.md`. |
+| **Rationale** | Keep regulatory/execution risk out of scope while enabling paper trading and cash/position learning. |
+| **Consequences** | Upstox remains a **data** provider only; paper fills use in-process matching on live ticks. UI must label **Paper** clearly. |
 
 ### AD1 — Platform stack: Java Spring Boot backend + React/Vite frontend
 
@@ -408,7 +408,7 @@ When older docs conflict, **this file + multi-symbol design rev 5 + Watchlist UX
 
 | ID | One-line |
 |---|---|
-| AD0 | Read-only platform, no execution |
+| AD0 | No real broker execution; paper sim OK |
 | AD1 | Spring Boot + React/Vite + Upstox Java SDK |
 | AD2 | Parse **indexFF** for live indices; **index volume stays 0** |
 | AD3 | Token via env (not committed) |

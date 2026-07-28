@@ -1,6 +1,6 @@
 # Product decisions (review before each implementation phase)
 
-Last updated: 2026-07-24. Revisit when starting paper trading or last-day replay.
+Last updated: 2026-07-28. Revisit when starting last-day replay or strategy bots.
 
 ## Market candles (NSE cash)
 
@@ -22,7 +22,7 @@ Last updated: 2026-07-24. Revisit when starting paper trading or last-day replay
 | Roles | `ADMIN` (you), `USER` (paper traders) |
 | Signup | Admin creates users (no public self-signup v1) |
 | Auth | JWT Bearer access token (8h), stored in browser. No OAuth. No session cookies. |
-| Admin powers | Create users, set passwords, seed cash, reset cash, enable/disable trading, deactivate |
+| Admin powers | Create users, set passwords, seed cash, reset cash (wipes paper), enable/disable trading, deactivate |
 | Default admin | `admin` / `TIP_ADMIN_PASSWORD` (default `admin`) |
 | Starting cash | ₹100,000 INR (configurable `tip.users.default-seed-cash`) |
 | Storage | PostgreSQL `app_users` + `cash_ledger` |
@@ -35,39 +35,38 @@ Last updated: 2026-07-24. Revisit when starting paper trading or last-day replay
 | Mutate | **ADMIN only** (add/remove) |
 | Read | Any authenticated user |
 
-## Paper trading / deploy strategies
+## Paper trading (manual OMS) — v1
 
-**Authoritative design:** [`../Paper-Strategy-Design-v1.0.md`](../Paper-Strategy-Design-v1.0.md) (locked 2026-07-17).
+> **v1 source of truth:** [`../Manual-Paper-Trading-Design-v1.0.md`](../Manual-Paper-Trading-Design-v1.0.md)  
+> Pattern-driven strategy bots ([`../Paper-Strategy-Design-v1.0.md`](../Paper-Strategy-Design-v1.0.md)) are **deferred** for a later phase and may reuse paper ledger/lots.
 
 | Decision | Choice |
 |----------|--------|
 | Mode | **Paper only** (no live broker) |
-| Who deploys | **All authenticated users** (if trading enabled) |
-| Strategies | **Many named** strategies per user |
-| Universe | Multi-select symbols × timeframes × patterns |
-| Direction | Long / short / both |
-| Entry trigger | Default **confirmed** |
-| Entry fill | **Closed-bar confirm close** (not live LTP for v1 entry) |
-| Stop/target after fill | **Frozen** on paper position at fill |
-| Risk | **% of strategy allocated capital** per trade |
-| Allocation cap | Sum of **ARMED** allocations ≤ **account cash** |
-| Consolidation | **Excluded** from auto-trade strategies |
-| Square-off | **Force flat** end of session |
-| Ledger | Orders + trades (per user) |
-| Modularity | Trading modules **no direct** `com.tip.patterns` dependency |
-| Reset cash | Admin only |
-| Costs | Simplified brokerage (define at implement time) |
+| Who trades | Authenticated users with `tradingEnabled` |
+| Entry | **Manual** order ticket (MARKET / LIMIT / SL / SL-M) |
+| Fills | **Live Upstox ticks**; market fills on **next matcher tick** after accept |
+| Positions | **Separate lots** (no netting); close via `closeLotId` |
+| Product | **MIS** (force-flat 15:20 IST) / **CNC** (overnight) per order |
+| Side | Long and short |
+| Universe | Watchlist **NSE_EQ** equities only (EQ/BE); **no index** |
+| Capital | 1× cash lock; free = balance − locks; funding cap at fill |
+| Costs | **Zero** v1 |
+| UI | Dedicated `/paper` page; chart ticket later |
+| Reset | Admin reset wipes paper then resets cash |
 
 ## Deferred
 
-- Full strategy **backtesting** (later)
-- **Last trading day replay** (after paper trading)
+- Pattern **strategy auto-trade** (see Paper-Strategy-Design)
+- Full strategy **backtesting**
+- **Last trading day replay**
 - Real broker / live orders
-- Entry fill on live LTP (optional later; v1 is closed-bar)
+- Chart-embedded buy/sell ticket
+- Brokerage / STT models
 
 ## Implementation order
 
-1. **Users** (done / in progress)  
-2. **Paper strategy deployment** (design locked — implement next)  
+1. **Users** (done)  
+2. **Manual paper OMS** (implementing — this document)  
 3. Last-day replay  
-4. Backtesting (later)
+4. Strategy bots / backtesting (later)

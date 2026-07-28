@@ -97,7 +97,20 @@ def reset_user(
     body: CashAmountRequest | None = None,
 ):
     amount = Decimal(str(body.amount)) if body and body.amount is not None else None
-    return request.app.state.container.user_service.reset_user(user_id, amount).to_dto()
+    paper = getattr(request.app.state.container, "paper_service", None)
+    if paper is not None:
+        try:
+            paper.wipe_user(user_id, close_price_policy="LTP_ELSE_ENTRY")
+        except Exception:
+            # wipe best-effort; cash reset still proceeds
+            pass
+    user = request.app.state.container.user_service.reset_user(user_id, amount)
+    if paper is not None:
+        try:
+            paper.sync_user_cash(user_id, user.cash_balance)
+        except Exception:
+            pass
+    return user.to_dto()
 
 
 @router.post("/{user_id}/trading")

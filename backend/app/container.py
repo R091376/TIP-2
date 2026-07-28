@@ -62,6 +62,7 @@ class AppContainer:
     # SQLAlchemy sessionmaker when Postgres init succeeded; None = memory fallback
     session_factory: object | None = None
     postgres_init_error: str | None = None
+    paper_service: object | None = None
     _bg_stop: threading.Event | None = None
     _bg_thread: threading.Thread | None = None
 
@@ -159,9 +160,20 @@ class AppContainer:
         self._bg_thread = threading.Thread(target=_reconcile, name="reconciler", daemon=True)
         self._bg_thread.start()
 
+        if self.paper_service is not None:
+            try:
+                self.paper_service.start()
+            except Exception:
+                logger.exception("Paper trading service start failed")
+
     def shutdown(self) -> None:
         if self._bg_stop:
             self._bg_stop.set()
+        if self.paper_service is not None:
+            try:
+                self.paper_service.stop()
+            except Exception:
+                pass
         try:
             self.feed_client.disconnect()
         except Exception:
@@ -227,8 +239,77 @@ def build_container(settings: Settings | None = None) -> AppContainer:
     user_service = UserService(settings, session_factory=session_factory)
     feed_client = UpstoxFeedClient(settings, market_status)
     market_provider = UpstoxMarketDataProvider(settings, feed_client)
+
+    paper_service = None
+    if settings.paper_enabled:
+
+        def _cash_provider(uid):
+            u = user_service.find_by_id(uid)
+            return u.cash_balance if u else 0
+
+        def _cash_writer(uid, balance, ledger_tail):
+            from decimal import Decimal
+
+            from app.user.service import money
+
+            u = user_service.find_by_id(uid)
+            if u is None:
+                return
+            # Sync paper cash back to app_users when balance diverged
+            target = money(balance)
+            if money(u.cash_balance) == target:
+                return
+            # Use postgres path via seed/adjust: write through user service internals
+            if user_service.is_postgres:
+                from datetime import datetime, timezone
+                from uuid import uuid4
+
+                from app.user.entities import AppUserRow, CashLedgerRow
+
+                with session_factory() as s:  # type: ignore[misc]
+                    row = s.get(AppUserRow, uid)
+                    if row is None:
+                        return
+                    prev = money(row.cash_balance)
+                    row.cash_balance = target
+                    row.updated_at = datetime.now(timezone.utc)
+                    for le in ledger_tail or []:
+                        s.add(
+                            CashLedgerRow(
+                                id=uuid4(),
+                                user_id=uid,
+                                entry_type=getattr(le, "entry_type", "ADJUST")[:32],
+                                amount=money(getattr(le, "amount", 0)),
+                                balance_after=money(getattr(le, "balance_after", target)),
+                                note=(getattr(le, "note", None) or "paper")[:512],
+                                created_at=datetime.now(timezone.utc),
+                            )
+                        )
+                    s.commit()
+            else:
+                u.cash_balance = target
+
+        from app.paper.service import PaperTradingService
+
+        paper_service = PaperTradingService(
+            settings,
+            watchlist_repo,
+            session_factory=session_factory,
+            user_cash_provider=_cash_provider,
+            user_cash_writer=_cash_writer,
+        )
+
+    def _paper_enqueue(tick):
+        if paper_service is not None:
+            paper_service.enqueue_tick(tick)
+
     bootstrap = MarketBootstrapService(
-        market_provider, candle_engine, settings, market_status, watchlist_repo
+        market_provider,
+        candle_engine,
+        settings,
+        market_status,
+        watchlist_repo,
+        on_tick_extra=_paper_enqueue if paper_service is not None else None,
     )
 
     active_store = ActiveInstanceStore()
@@ -277,6 +358,7 @@ def build_container(settings: Settings | None = None) -> AppContainer:
         market_status_broadcaster=market_status_broadcaster,
         session_factory=session_factory,
         postgres_init_error=postgres_init_error,
+        paper_service=paper_service,
     )
     container.wire_events()
     return container

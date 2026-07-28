@@ -5,6 +5,7 @@ import ChartContainer from './components/ChartContainer'
 import ErrorBoundary from './components/ErrorBoundary'
 import AdminUsersPage from './pages/AdminUsersPage'
 import LoginPage from './pages/LoginPage'
+import PaperTradingPage from './pages/PaperTradingPage'
 import PatternStatsPage from './pages/PatternStatsPage'
 import './App.css'
 import './pages/authPages.css'
@@ -33,6 +34,16 @@ function App() {
                 <RequireAuth>
                   <ErrorBoundary>
                     <PatternStatsPage key="pattern-stats" />
+                  </ErrorBoundary>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/paper"
+              element={
+                <RequireAuth>
+                  <ErrorBoundary>
+                    <PaperTradingPage key="paper-trading" />
                   </ErrorBoundary>
                 </RequireAuth>
               }

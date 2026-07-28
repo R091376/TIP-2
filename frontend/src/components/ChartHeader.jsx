@@ -47,6 +47,9 @@ export default function ChartHeader({
         <Link to="/patterns/stats" className="chart-header__nav-link">
           Stats
         </Link>
+        <Link to="/paper" className="chart-header__nav-link">
+          Paper
+        </Link>
         {isAdmin && (
           <Link to="/admin/users" className="chart-header__admin-link">
             Admin

@@ -235,6 +235,18 @@ class Settings(BaseSettings):
     test_display_name: str = Field(default="Tester", alias="TIP_TEST_DISPLAY_NAME")
     tip_test_password: str = Field(default="test", alias="TIP_TEST_PASSWORD")
 
+    # Paper trading (manual OMS)
+    paper_enabled: bool = Field(default=True, alias="TIP_PAPER_ENABLED")
+    paper_allow_memory: bool = Field(default=True, alias="TIP_PAPER_ALLOW_MEMORY")
+    paper_market_lock_haircut: float = Field(default=1.02, alias="TIP_PAPER_MARKET_LOCK_HAIRCUT")
+    paper_mis_square_off: str = Field(default="15:20", alias="TIP_PAPER_MIS_SQUARE_OFF")
+    paper_max_open_orders: int = Field(default=50, alias="TIP_PAPER_MAX_OPEN_ORDERS")
+    paper_max_open_lots: int = Field(default=50, alias="TIP_PAPER_MAX_OPEN_LOTS")
+    paper_max_fill_qty_per_tick: int | None = Field(
+        default=None, alias="TIP_PAPER_MAX_FILL_QTY_PER_TICK"
+    )
+
+
     @property
     def watchlist_store(self) -> str:
         store = (self.tip_watchlist_store or "postgres").strip().lower()

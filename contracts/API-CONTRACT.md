@@ -69,12 +69,33 @@ Narrative: `../Data-Flow-and-Frontend-API-Spec-v1.0.md` (also copied to repo roo
 | PUT | `/api/admin/users/{id}` | Update |
 | POST | `/api/admin/users/{id}/password` | Set password |
 | POST | `/api/admin/users/{id}/seed-cash` | Cash amount body |
-| POST | `/api/admin/users/{id}/reset` | Reset paper state |
+| POST | `/api/admin/users/{id}/reset` | Wipe paper book then reset cash |
 | POST | `/api/admin/users/{id}/trading` | Enable/disable trading flag |
 
 Non-admin → **403**. Unauthenticated → **401**.
 
 User DTO fields must match frontend `UserDto` / `adminUsersApi.ts`.
+
+---
+
+## Paper trading (`/api/paper`) — authenticated, `TIP_PAPER_ENABLED`
+
+Simulated OMS only (AD0). Design: `Manual-Paper-Trading-Design-v1.0.md`.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/paper/account` | `{ cashBalance, lockedCash, freeCash }` |
+| GET | `/api/paper/orders` | Optional `?status=` |
+| GET | `/api/paper/orders/{id}` | One order |
+| POST | `/api/paper/orders` | Place (MARKET/LIMIT/SL/SL_M, MIS/CNC, optional `closeLotId`) |
+| PATCH | `/api/paper/orders/{id}` | Modify qty/price/trigger |
+| DELETE | `/api/paper/orders/{id}` | Cancel residual |
+| GET | `/api/paper/positions` | `?openOnly=true` |
+| GET | `/api/paper/fills` | Recent fills |
+| GET | `/api/paper/ledger` | Paper cash ledger tail |
+| GET | `/api/paper/ltp/{instrumentKey}` | Last tick price (UI) |
+
+Errors often use FastAPI `detail` as `{ "code": "...", "message": "..." }` (e.g. `INSUFFICIENT_CASH`, `MARKET_CLOSED`, `INSTRUMENT_NOT_TRADABLE`).
 
 ---
 

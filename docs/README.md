@@ -14,7 +14,8 @@ Authoritative math and lifecycle docs for indicators, patterns, and the pattern 
 - Pattern docs must list **all lifecycle stages** and terminal outcomes.
 - Design overview: [`../Pattern-Intelligence-Design-v1.0.md`](../Pattern-Intelligence-Design-v1.0.md).
 - Detector rule defaults: [`../Pattern-Definitions-v1.0-Final.md`](../Pattern-Definitions-v1.0-Final.md).
-- Paper strategy deployment: [`../Paper-Strategy-Design-v1.0.md`](../Paper-Strategy-Design-v1.0.md).
+- Manual paper OMS (v1): [`../Manual-Paper-Trading-Design-v1.0.md`](../Manual-Paper-Trading-Design-v1.0.md).
+- Paper strategy bots (deferred): [`../Paper-Strategy-Design-v1.0.md`](../Paper-Strategy-Design-v1.0.md).
 
 ## Data flow (summary)
 
