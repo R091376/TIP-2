@@ -8,6 +8,8 @@ from app.events import CandleClosedEvent, CandleUpdatedEvent, EventBus
 from app.market.candle_boundary import (
     floor_to_candle_start_epoch_second,
     is_session_bar_start,
+    should_emit_session_finalize,
+    should_seed_as_current,
 )
 from app.market.models import Candle, Tick
 from app.market.timeframe import parse_timeframe
@@ -72,7 +74,14 @@ class CandleEngine:
                 self._state[key] = _SymbolState()
             return self._state[key]
 
-    def seed(self, instrument_key: str, timeframe: str, candles: list[Candle]) -> None:
+    def seed(
+        self,
+        instrument_key: str,
+        timeframe: str,
+        candles: list[Candle],
+        *,
+        now_epoch_ms: int | None = None,
+    ) -> None:
         interval = parse_timeframe(timeframe).interval_minutes()
         state = self._state_for(instrument_key, timeframe)
         with state.lock:
@@ -82,11 +91,15 @@ class CandleEngine:
             state.last_vtt_initialized = False
             if not candles:
                 return
-            current_boundary = floor_to_candle_start_epoch_second(
-                int(time.time() * 1000), interval
+            now_ms = (
+                int(now_epoch_ms)
+                if now_epoch_ms is not None
+                else int(time.time() * 1000)
             )
             last = candles[-1]
-            if last.time == current_boundary:
+            # Pre-open: floor(now) is yesterday's last RTH bar — keep it closed
+            # so finalize does not re-fire next-day pattern alerts.
+            if should_seed_as_current(last.time, now_ms, interval):
                 state.closed_candles.extend(candles[:-1])
                 state.current_candle = _MutableCandle.from_candle(last)
             else:
@@ -217,7 +230,7 @@ class CandleEngine:
                     self._event_bus.publish(ev)
         return closed_count
 
-    def finalize_session_candles(self) -> int:
+    def finalize_session_candles(self, now_epoch_ms: int | None = None) -> int:
         """Force-close every open *intraday* candle at session end / after hours.
 
         After 15:30 IST, ``floor_to_candle_start`` returns the last RTH bar
@@ -227,7 +240,14 @@ class CandleEngine:
 
         Daily bars are left open until the calendar day rolls (stale close
         next day). Safe to call repeatedly — no-op when nothing is open.
+
+        Bars from a *prior* IST calendar day are closed silently (no
+        ``CandleClosed``) so a pre-open restart cannot re-evaluate yesterday's
+        last RTH bar and spam next-day pattern alerts.
         """
+        now_ms = (
+            int(now_epoch_ms) if now_epoch_ms is not None else int(time.time() * 1000)
+        )
         closed_count = 0
         with self._map_lock:
             keys = list(self._state.keys())
@@ -253,6 +273,8 @@ class CandleEngine:
                 if closed is None:
                     continue
                 closed_count += 1
+                if not should_emit_session_finalize(closed.time, now_ms, interval):
+                    continue
                 if _emit_closed_bar(closed.time, interval):
                     pending.append(CandleClosedEvent(instrument_key, timeframe, closed))
                     pending.append(

@@ -11,7 +11,8 @@ Last updated: 2026-07-24. Revisit when starting paper trading or last-day replay
 | Pre-open stamps | Dropped on seed remap; not pattern-eligible |
 | Live ticks | Still gated to wall-clock `OPEN` (09:15–15:30); floor uses same session grid |
 | Mid-session quiet | `close_stale_open_candles` when bucket &lt; floor(now) |
-| Session end | **`finalize_session_candles`** force-closes all open *intraday* bars on `CLOSED` (before pattern session expiry); last RTH bar always emits `CandleClosed` |
+| Session end | **`finalize_session_candles`** force-closes all open *intraday* bars on `CLOSED` (before pattern session expiry); last RTH bar emits `CandleClosed` **only for the same IST calendar day** |
+| Pre-open seed | Yesterday's last RTH bar is **closed**, not left as current (avoids next-day re-alerts for the prior last candle) |
 | Daily | Calendar midnight IST; **not** force-closed at cash session end |
 
 ## Users & admin

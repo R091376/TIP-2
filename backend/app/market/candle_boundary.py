@@ -93,3 +93,54 @@ def is_session_bar_start(epoch_seconds: int, interval_minutes: int) -> bool:
         return False
     elapsed = minutes_of_day - NSE_SESSION_OPEN_MINUTES
     return elapsed % interval_minutes == 0
+
+
+def candle_ist_date(epoch_seconds: int) -> date:
+    """IST calendar date of a candle start (epoch seconds)."""
+    return datetime.fromtimestamp(epoch_seconds, tz=NSE_ZONE).date()
+
+
+def should_seed_as_current(
+    last_candle_time: int, now_epoch_ms: int, interval_minutes: int
+) -> bool:
+    """Whether the last historical bar is still the open (forming) candle.
+
+    Pre-09:15, ``floor(now)`` maps to the *previous* calendar day's last RTH bar.
+    That bar is already complete — seeding it as ``current`` and later running
+    ``finalize_session_candles`` re-emits ``CandleClosed`` on the next day and
+    fires pattern alerts for yesterday's last candle. Keep it closed instead.
+
+    Same calendar day after 15:30: last RTH bar may still need session finalize
+    (if the process was down at the close), so leave it as current.
+    """
+    if interval_minutes <= 0:
+        return False
+    boundary = floor_to_candle_start_epoch_second(now_epoch_ms, interval_minutes)
+    if last_candle_time != boundary:
+        return False
+    # Daily: forming until the calendar day rolls.
+    if interval_minutes >= 24 * 60:
+        return True
+    now = datetime.fromtimestamp(now_epoch_ms / 1000.0, tz=NSE_ZONE)
+    minutes_of_day = now.hour * 60 + now.minute
+    # Before cash open there is no open intraday candle.
+    if minutes_of_day < NSE_SESSION_OPEN_MINUTES:
+        return False
+    return True
+
+
+def should_emit_session_finalize(
+    candle_time: int, now_epoch_ms: int, interval_minutes: int
+) -> bool:
+    """Whether force-closing this open bar should publish ``CandleClosed``.
+
+    Prior calendar-day bars (e.g. reopened by a pre-open seed) are closed
+    silently so pattern eval does not re-fire yesterday's last-bar alerts.
+    Same-day after-hours finalize still emits so session-end patterns run.
+    """
+    if interval_minutes <= 0:
+        return False
+    if interval_minutes >= 24 * 60:
+        return False
+    now = datetime.fromtimestamp(now_epoch_ms / 1000.0, tz=NSE_ZONE)
+    return candle_ist_date(candle_time) >= now.date()
