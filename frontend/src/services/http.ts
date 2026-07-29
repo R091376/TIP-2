@@ -13,12 +13,17 @@ export type ApiOptions = RequestInit & {
 export class ApiError extends Error {
   status: number
   path: string
+  /** Optional machine-readable code from FastAPI-style `{ detail: { code, message } }`. */
+  code?: string
 
-  constructor(message: string, status: number, path: string) {
+  constructor(message: string, status: number, path: string, code?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.path = path
+    if (code != null && String(code).trim() !== '') {
+      this.code = String(code).trim()
+    }
   }
 }
 
@@ -85,7 +90,26 @@ const STATUS_FALLBACK: Record<number, string> = {
   503: 'Service temporarily unavailable.',
 }
 
-function messageFromBody(status: number, body: string): string {
+/** Pull optional `code` from top-level or FastAPI `detail: { code, message }`. */
+function extractErrorCode(parsed: Record<string, unknown> | null): string | undefined {
+  if (!parsed) return undefined
+  if (typeof parsed.code === 'string' && parsed.code.trim()) {
+    return parsed.code.trim()
+  }
+  const detail = parsed.detail
+  if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+    const d = detail as Record<string, unknown>
+    if (typeof d.code === 'string' && d.code.trim()) {
+      return d.code.trim()
+    }
+  }
+  return undefined
+}
+
+function errorFromBody(
+  status: number,
+  body: string,
+): { message: string; code?: string } {
   let parsed: Record<string, unknown> | null = null
   try {
     parsed = body ? (JSON.parse(body) as Record<string, unknown>) : null
@@ -99,12 +123,17 @@ function messageFromBody(status: number, body: string): string {
     coerceServerMessage(parsed?.detail) ||
     (parsed == null && body ? body.trim() : null)
 
-  if (serverMsg) return serverMsg
-  if (STATUS_FALLBACK[status]) return STATUS_FALLBACK[status]
+  const code = extractErrorCode(parsed)
+
+  if (serverMsg) return { message: serverMsg, code }
+  if (STATUS_FALLBACK[status]) return { message: STATUS_FALLBACK[status], code }
   if (status >= 500) {
-    return 'Backend error. Make sure the server is running on port 8080.'
+    return {
+      message: 'Backend error. Make sure the server is running on port 8080.',
+      code,
+    }
   }
-  return `Request failed (${status})`
+  return { message: `Request failed (${status})`, code }
 }
 
 const NO_UNAUTHORIZED_NOTIFY = new Set([
@@ -161,7 +190,7 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
 
   if (!response.ok) {
     const text = await response.text()
-    const message = messageFromBody(response.status, text)
+    const { message, code } = errorFromBody(response.status, text)
     if (response.status === 401 && shouldNotifyUnauthorized(path)) {
       clearAccessToken()
       try {
@@ -170,7 +199,7 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
         /* ignore handler errors */
       }
     }
-    throw new ApiError(message, response.status, path)
+    throw new ApiError(message, response.status, path, code)
   }
 
   return (await parseJsonBody<T>(response)) as T
@@ -194,7 +223,8 @@ export async function apiAllow401<T = unknown>(
   }
   if (!response.ok) {
     const text = await response.text()
-    throw new ApiError(messageFromBody(response.status, text), response.status, path)
+    const { message, code } = errorFromBody(response.status, text)
+    throw new ApiError(message, response.status, path, code)
   }
   return parseJsonBody<T>(response)
 }

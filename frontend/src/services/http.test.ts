@@ -68,6 +68,30 @@ describe('api', () => {
     }
   })
 
+  it('sets ApiError.code from FastAPI detail { code, message }', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 400,
+        text: async () =>
+          JSON.stringify({
+            detail: { code: 'NO_LTP', message: 'No last traded price' },
+          }),
+      })),
+    )
+    try {
+      await api('/api/paper/orders')
+      expect.unreachable('should throw')
+    } catch (e) {
+      expect(e).toBeInstanceOf(ApiError)
+      const err = e as ApiError
+      expect(err.message).toBe('No last traded price')
+      expect(err.code).toBe('NO_LTP')
+      expect(err.status).toBe(400)
+    }
+  })
+
   it('notifies unauthorized handler for protected paths', async () => {
     const handler = vi.fn()
     setUnauthorizedHandler(handler)
@@ -126,5 +150,46 @@ describe('apiAllow401', () => {
       })),
     )
     await expect(apiAllow401('/api/auth/me')).rejects.toThrow(/boom/)
+  })
+})
+
+describe('parsePaperApiError', () => {
+  it('returns code from ApiError with FastAPI-style detail body', async () => {
+    const { parsePaperApiError } = await import('./paperApi')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 422,
+        text: async () =>
+          JSON.stringify({
+            detail: { code: 'INSUFFICIENT_CASH', message: 'Not enough free cash' },
+          }),
+      })),
+    )
+    try {
+      await api('/api/paper/orders', { method: 'POST', body: '{}' })
+      expect.unreachable('should throw')
+    } catch (e) {
+      const shape = parsePaperApiError(e)
+      expect(shape.code).toBe('INSUFFICIENT_CASH')
+      expect(shape.message).toBe('Not enough free cash')
+      expect(shape.status).toBe(422)
+    }
+  })
+
+  it('falls back to Error.message when not ApiError', async () => {
+    const { parsePaperApiError } = await import('./paperApi')
+    expect(parsePaperApiError(new Error('plain failure'))).toEqual({
+      message: 'plain failure',
+    })
+  })
+
+  it('parses CODE — message toast format', async () => {
+    const { parsePaperApiError } = await import('./paperApi')
+    expect(parsePaperApiError(new Error('MARKET_CLOSED — Market is closed'))).toEqual({
+      code: 'MARKET_CLOSED',
+      message: 'Market is closed',
+    })
   })
 })

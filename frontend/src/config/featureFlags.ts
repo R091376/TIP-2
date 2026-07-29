@@ -3,6 +3,10 @@
  *
  * VITE_FEATURE_STARTUP_READY — staged readiness UI before session/routes.
  *   default ON when unset; set to "false" / "0" / "off" to disable.
+ *
+ * VITE_FEATURE_CHART_PAPER_TRADE — chart Buy/Sell chrome (buttons, modal, strip).
+ *   default ON when unset; set to "false" / "0" / "off" to disable.
+ *   Does not unmount ChartHeader; only gates trade chrome.
  */
 
 function envTruthy(raw: string | undefined, defaultValue: boolean): boolean {
@@ -19,6 +23,14 @@ function envTruthy(raw: string | undefined, defaultValue: boolean): boolean {
 export function isStartupReadyEnabled(): boolean {
   return envTruthy(
     import.meta.env.VITE_FEATURE_STARTUP_READY as string | undefined,
+    true,
+  )
+}
+
+/** Chart paper Buy/Sell chrome — default ON. */
+export function isChartPaperTradeEnabled(): boolean {
+  return envTruthy(
+    import.meta.env.VITE_FEATURE_CHART_PAPER_TRADE as string | undefined,
     true,
   )
 }

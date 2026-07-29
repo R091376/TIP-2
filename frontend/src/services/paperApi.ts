@@ -2,12 +2,95 @@
  * Paper trading REST client.
  */
 
-import { api } from './http'
+import { api, ApiError } from './http'
 
 export type PaperAccount = {
   cashBalance: number
   lockedCash: number
   freeCash: number
+}
+
+export type PaperLtp = {
+  instrumentKey: string
+  ltp: number | null
+  timestampMs: number | null
+}
+
+export type PaperApiErrorShape = {
+  code?: string
+  message: string
+  status?: number
+}
+
+/**
+ * Normalize paper API errors for toasts / inline UI.
+ * Toast format: code ? `${code} — ${message}` : message
+ */
+export function parsePaperApiError(err: unknown): PaperApiErrorShape {
+  if (err instanceof ApiError) {
+    const shape: PaperApiErrorShape = {
+      message: err.message,
+      status: err.status,
+    }
+    if (err.code) shape.code = err.code
+    return shape
+  }
+
+  if (err instanceof Error) {
+    const msg = err.message?.trim() || 'Request failed'
+
+    // JSON body stringified into Error.message
+    try {
+      const parsed = JSON.parse(msg) as Record<string, unknown>
+      if (parsed && typeof parsed === 'object') {
+        const detail = parsed.detail
+        let code: string | undefined
+        let message: string | undefined
+
+        if (typeof parsed.code === 'string' && parsed.code.trim()) {
+          code = parsed.code.trim()
+        }
+        if (typeof parsed.message === 'string' && parsed.message.trim()) {
+          message = parsed.message.trim()
+        }
+
+        if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+          const d = detail as Record<string, unknown>
+          if (!code && typeof d.code === 'string' && d.code.trim()) {
+            code = d.code.trim()
+          }
+          if (!message && typeof d.message === 'string' && d.message.trim()) {
+            message = d.message.trim()
+          }
+        } else if (typeof detail === 'string' && detail.trim() && !message) {
+          message = detail.trim()
+        }
+
+        if (message || code) {
+          return {
+            message: message || msg,
+            ...(code ? { code } : {}),
+          }
+        }
+      }
+    } catch {
+      /* not JSON */
+    }
+
+    // Already formatted as "CODE — message" (em dash)
+    const em = msg.indexOf(' — ')
+    if (em > 0) {
+      const code = msg.slice(0, em).trim()
+      const message = msg.slice(em + 3).trim()
+      if (code && message && /^[A-Z][A-Z0-9_]*$/.test(code)) {
+        return { code, message }
+      }
+    }
+
+    return { message: msg }
+  }
+
+  return { message: String(err) }
 }
 
 export type PaperOrder = {
@@ -84,4 +167,9 @@ export async function placePaperOrder(body: PlaceOrderRequest): Promise<PaperOrd
 
 export async function cancelPaperOrder(id: string): Promise<PaperOrder> {
   return api<PaperOrder>(`/api/paper/orders/${id}`, { method: 'DELETE' })
+}
+
+/** GET /api/paper/ltp/{instrumentKey} — LTP may be null when no quote yet. */
+export async function fetchPaperLtp(instrumentKey: string): Promise<PaperLtp> {
+  return api<PaperLtp>(`/api/paper/ltp/${encodeURIComponent(instrumentKey)}`)
 }
