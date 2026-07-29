@@ -1,6 +1,6 @@
 # Product decisions (review before each implementation phase)
 
-Last updated: 2026-07-28. Revisit when starting last-day replay or strategy bots.
+Last updated: 2026-07-29. Revisit when starting last-day replay or strategy bots.
 
 ## Market candles (NSE cash)
 
@@ -52,8 +52,20 @@ Last updated: 2026-07-28. Revisit when starting last-day replay or strategy bots
 | Universe | Watchlist **NSE_EQ** equities only (EQ/BE); **no index** |
 | Capital | 1× cash lock; free = balance − locks; funding cap at fill |
 | Costs | **Zero** v1 |
-| UI | Dedicated `/paper` page; chart ticket later |
+| UI | Dedicated `/paper` desk **and** chart-integrated paper Buy/Sell (see below) |
 | Reset | Admin reset wipes paper then resets cash |
+
+## Chart-integrated paper Buy/Sell — shipped
+
+> **Design SoT:** [`../Chart-Paper-Trade-Design-v1.0.md`](../Chart-Paper-Trade-Design-v1.0.md)
+
+| Decision | Choice |
+|----------|--------|
+| Entry points | Chart header **Buy** / **Sell** open a snapshot paper order modal; full desk remains at `/paper` |
+| Scope | Place only (MARKET / LIMIT / SL / SL-M); no close-lot from chart; open-orders strip under chart |
+| Feature flag | **`VITE_FEATURE_CHART_PAPER_TRADE`** (default **ON**); gates trade chrome only — `ChartHeader` always mounts |
+| Mobile | Compact chips ≤768; PAPER badge hide ≤480; **B/S** labels ≤380; touch min-height 40–44px; collapse priority for Admin@375px |
+| Backend | **No** schema changes; reuses existing `/api/paper/*` |
 
 ## Deferred
 
@@ -61,12 +73,12 @@ Last updated: 2026-07-28. Revisit when starting last-day replay or strategy bots
 - Full strategy **backtesting**
 - **Last trading day replay**
 - Real broker / live orders
-- Chart-embedded buy/sell ticket
 - Brokerage / STT models
 
 ## Implementation order
 
 1. **Users** (done)  
-2. **Manual paper OMS** (implementing — this document)  
-3. Last-day replay  
-4. Strategy bots / backtesting (later)
+2. **Manual paper OMS** (done)  
+3. **Chart paper Buy/Sell ticket** (done — header, modal, toast, strip; flag `VITE_FEATURE_CHART_PAPER_TRADE`)  
+4. Last-day replay  
+5. Strategy bots / backtesting (later)

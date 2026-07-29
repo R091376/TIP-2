@@ -52,7 +52,7 @@
   touch-action: manipulation;
 }
 
-/* Full labels by default; short B/S shown only at ≤380px (responsive.css) */
+/* Full labels by default; short B/S at ≤380px; PAPER badge hidden ≤480px (responsive.css) */
 .chart-trade-btn__label--short {
   display: none;
 }
@@ -406,9 +406,12 @@
   }
 }
 
+/* Instant show/hide — no slide when user prefers reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .paper-toast {
     animation: none;
+    transition: none;
+    transform: none;
   }
 }
 

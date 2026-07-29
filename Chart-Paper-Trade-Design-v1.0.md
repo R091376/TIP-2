@@ -5,9 +5,9 @@
 | **Document** | Chart-Integrated Paper Buy/Sell Design v1.0 |
 | **Author** | TIP-2 Architecture |
 | **Date** | 2026-07-28 |
-| **Status** | Accepted — ready to implement (rev 2, saved 2026-07-28) |
+| **Status** | Accepted / Implemented (chart paper Buy/Sell shipped — PR1–PR4; 2026-07-29) |
 | **Repo path** | `Chart-Paper-Trade-Design-v1.0.md` (repo root) |
-| **Related** | `Manual-Paper-Trading-Design-v1.0.md` (manual OMS SoT; chart ticket deferred → this doc delivers it), `docs/PRODUCT-DECISIONS.md`, `frontend/src/components/ChartHeader.jsx`, `frontend/src/components/ChartContainer.jsx`, `frontend/src/pages/PaperTradingPage.jsx`, `frontend/src/services/paperApi.ts`, `frontend/src/services/http.ts`, `frontend/src/config/featureFlags.ts`, `backend/app/api/paper.py`, `backend/app/paper/*` |
+| **Related** | `Manual-Paper-Trading-Design-v1.0.md` (manual OMS SoT; chart ticket delivered by this doc), `docs/PRODUCT-DECISIONS.md`, `frontend/src/components/ChartHeader.jsx`, `frontend/src/components/ChartContainer.jsx`, `frontend/src/pages/PaperTradingPage.jsx`, `frontend/src/services/paperApi.ts`, `frontend/src/services/http.ts`, `frontend/src/config/featureFlags.ts`, `backend/app/api/paper.py`, `backend/app/paper/*` |
 
 ---
 

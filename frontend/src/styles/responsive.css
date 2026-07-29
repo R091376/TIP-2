@@ -314,32 +314,6 @@ button,
   }
 }
 
-@media (max-width: 380px) {
-  .connection-status__label {
-    display: none;
-  }
-
-  /* Ultra-narrow: hide PAPER badge; B/S labels with full aria-label on buttons */
-  .chart-trade-paper-badge {
-    display: none;
-  }
-
-  .chart-trade-btn {
-    min-height: 40px;
-    padding: 5px 8px;
-    font-size: 0.6875rem;
-    min-width: 2rem;
-  }
-
-  .chart-trade-btn__label--full {
-    display: none;
-  }
-
-  .chart-trade-btn__label--short {
-    display: inline;
-  }
-}
-
 /* ── Small phones ───────────────────────────────────────────────────── */
 
 @media (max-width: 480px) {
@@ -350,6 +324,21 @@ button,
   .chart-header h1 {
     max-width: min(38vw, 8rem);
     font-size: 0.875rem;
+  }
+
+  /* Collapse priority step 2: hide PAPER badge before B/S short labels */
+  .chart-trade-paper-badge {
+    display: none;
+  }
+
+  .chart-trade-btn {
+    min-height: 40px;
+    padding: 5px 9px;
+    font-size: 0.75rem;
+  }
+
+  .chart-trade-buttons {
+    gap: 5px;
   }
 
   /* Stack timeframe + type more tightly */
@@ -390,6 +379,73 @@ button,
 
   .auth-page {
     padding: 16px;
+  }
+}
+
+/*
+ * Ultra-narrow (≤380, QA at 375px Admin):
+ * Collapse priority step 4 — B/S chips + tighter chrome so
+ * Admin + Stats + Paper + trade buttons do not overflow badly.
+ * Touch min-height stays 40px (never below).
+ */
+@media (max-width: 380px) {
+  .connection-status__label {
+    display: none;
+  }
+
+  .chart-header {
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  .chart-header h1 {
+    max-width: min(34vw, 7rem);
+    font-size: 0.8125rem;
+  }
+
+  .chart-header__controls {
+    gap: 6px;
+  }
+
+  .chart-header__user {
+    gap: 6px;
+  }
+
+  .chart-header__nav-link,
+  .chart-header__admin-link {
+    font-size: 0.6875rem;
+  }
+
+  .chart-header__trade {
+    gap: 4px;
+  }
+
+  /* PAPER already hidden at 480; keep rule for cascade clarity */
+  .chart-trade-paper-badge {
+    display: none;
+  }
+
+  .chart-trade-buttons {
+    gap: 4px;
+  }
+
+  .chart-trade-btn {
+    min-height: 40px;
+    padding: 5px 8px;
+    font-size: 0.6875rem;
+    min-width: 2rem;
+  }
+
+  .chart-trade-btn__label--full {
+    display: none;
+  }
+
+  .chart-trade-btn__label--short {
+    display: inline;
+  }
+
+  .user-account__trigger {
+    padding: 4px 6px;
   }
 }
 
@@ -450,5 +506,12 @@ button,
 @media (prefers-reduced-motion: reduce) {
   .connection-status--connecting .connection-status__dot {
     animation: none;
+  }
+
+  /* Chart paper toasts: instant (no slide); also enforced in chartTrade.css */
+  .paper-toast {
+    animation: none;
+    transition: none;
+    transform: none;
   }
 }

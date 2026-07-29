@@ -7,7 +7,7 @@
 | **Date** | 2026-07-28 |
 | **Status** | Implemented (v1 manual OMS — 2026-07-28) |
 | **Repo path** | `Manual-Paper-Trading-Design-v1.0.md` (repo root) |
-| **Related** | `docs/PRODUCT-DECISIONS.md`, `Architectural-Decisions.md` (AD0), `Paper-Strategy-Design-v1.0.md` (**deferred/superseded for v1**), `contracts/API-CONTRACT.md`, `backend/app/user/*`, `backend/app/market/*` |
+| **Related** | `docs/PRODUCT-DECISIONS.md`, `Architectural-Decisions.md` (AD0), `Paper-Strategy-Design-v1.0.md` (**deferred/superseded for v1**), `Chart-Paper-Trade-Design-v1.0.md` (chart ticket extension — shipped), `contracts/API-CONTRACT.md`, `backend/app/user/*`, `backend/app/market/*` |
 
 ---
 
@@ -1158,7 +1158,9 @@ Filter symbols with client-side equity check aligned to server `is_paper_tradabl
 
 ### Chart extension
 
-`placeOrder(...)` export only; no chart ticket in v1.
+**Delivered** as a follow-on (chart-integrated paper Buy/Sell): header Buy/Sell, snapshot modal, toast host, open-orders strip, flag `VITE_FEATURE_CHART_PAPER_TRADE`.
+
+See **`Chart-Paper-Trade-Design-v1.0.md`** (Accepted / Implemented) for UX, FE surface, collapse priority, and a11y. Manual OMS REST and place semantics remain the source of truth; the chart ticket reuses `placeOrder` / paper APIs with no backend schema change.
 
 ---
 

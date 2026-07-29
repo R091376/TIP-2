@@ -68,6 +68,7 @@ export default function PaperOrderModal({
   onPlaceError,
 }) {
   const titleId = useId()
+  const dialogRef = useRef(null)
   const firstFieldRef = useRef(null)
   const submittingRef = useRef(false)
   const [product, setProduct] = useState('MIS')
@@ -110,17 +111,41 @@ export default function PaperOrderModal({
     return () => cancelAnimationFrame(t)
   }, [])
 
-  // Esc — block while place in-flight
+  // Esc — block while place in-flight; Tab cycles within dialog (light focus trap)
   useEffect(() => {
+    const FOCUSABLE =
+      'button:not([disabled]), select:not([disabled]), input:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+
     function onKey(e) {
-      if (e.key !== 'Escape') return
-      if (submittingRef.current) {
+      if (e.key === 'Escape') {
+        if (submittingRef.current) {
+          e.preventDefault()
+          e.stopPropagation()
+          return
+        }
         e.preventDefault()
-        e.stopPropagation()
+        onClose?.()
         return
       }
-      e.preventDefault()
-      onClose?.()
+
+      if (e.key !== 'Tab') return
+      const root = dialogRef.current
+      if (!root) return
+      const nodes = Array.from(root.querySelectorAll(FOCUSABLE)).filter(
+        (el) => el.offsetParent !== null || el === document.activeElement,
+      )
+      if (nodes.length === 0) return
+      const first = nodes[0]
+      const last = nodes[nodes.length - 1]
+      if (e.shiftKey) {
+        if (document.activeElement === first || !root.contains(document.activeElement)) {
+          e.preventDefault()
+          last.focus()
+        }
+      } else if (document.activeElement === last || !root.contains(document.activeElement)) {
+        e.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -236,6 +261,7 @@ export default function PaperOrderModal({
       role="presentation"
     >
       <div
+        ref={dialogRef}
         className="paper-order-modal"
         role="dialog"
         aria-modal="true"
