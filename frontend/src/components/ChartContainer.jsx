@@ -23,6 +23,7 @@ import { seriesKey } from '../utils/patternOverlay'
 import AlertsFeed from './AlertsFeed'
 import ChartHeader from './ChartHeader'
 import ChartPanel from './ChartPanel'
+import ChartOpenOrdersStrip from './ChartOpenOrdersStrip'
 import ChartTradeButtons from './ChartTradeButtons'
 import PaperOrderModal from './PaperOrderModal'
 import PaperToastHost from './PaperToast'
@@ -65,6 +66,10 @@ export default function ChartContainer() {
   const [placeInFlight, setPlaceInFlight] = useState(false)
   const [closeAfterPlace, setCloseAfterPlace] = useState(false)
   const [toasts, setToasts] = useState([])
+  /** Bump to force ChartOpenOrdersStrip refetch after place / cancel. */
+  const [stripRefreshNonce, setStripRefreshNonce] = useState(0)
+  /** Last accepted place — strip merges optimistically by id. */
+  const [lastPlacedOrder, setLastPlacedOrder] = useState(null)
   /** Which header button opened the modal — for focus restore. */
   const openerRef = useRef(null)
   const placeInFlightRef = useRef(false)
@@ -445,6 +450,19 @@ export default function ChartContainer() {
             onClearDrawings={overlay.clearChartDrawings}
             clearDrawingsEnabled={overlay.hasChartDrawings}
           />
+          {chartPaperTradeOn ? (
+            <ChartOpenOrdersStrip
+              instrumentKey={activeSymbolId}
+              tradingSymbol={displayName}
+              refreshNonce={stripRefreshNonce}
+              optimisticOrder={lastPlacedOrder}
+              onCancelDone={() => {
+                setLastPlacedOrder(null)
+                setStripRefreshNonce((n) => n + 1)
+              }}
+              onToast={pushToast}
+            />
+          ) : null}
         </div>
 
         <div className="right-rail">
@@ -521,6 +539,8 @@ export default function ChartContainer() {
               kind: 'success',
               message: `Order accepted · ${order.side} ${order.orderType} ${order.tradingSymbol} ×${order.qty}`,
             })
+            setLastPlacedOrder(order)
+            setStripRefreshNonce((n) => n + 1)
             setPlaceInFlightSync(false)
             setCloseAfterPlaceSync(false)
             setOrderModal(null)

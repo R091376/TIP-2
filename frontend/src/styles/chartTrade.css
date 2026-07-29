@@ -411,3 +411,148 @@
     animation: none;
   }
 }
+
+/* ── Open-orders strip (under chart) ────────────────────────────────── */
+
+.chart-open-orders-strip {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 7.5rem;
+  overflow-y: auto;
+  background: #0c0f16;
+  border-top: 1px solid #1e2433;
+  font-size: 0.75rem;
+  color: #cbd5e1;
+}
+
+.chart-open-orders-strip__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 12px 4px;
+  position: sticky;
+  top: 0;
+  background: #0c0f16;
+  z-index: 1;
+}
+
+.chart-open-orders-strip__title {
+  font-weight: 600;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chart-open-orders-strip__desk-link {
+  flex-shrink: 0;
+  color: #7dd3fc;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.chart-open-orders-strip__desk-link:hover {
+  color: #bae6fd;
+  text-decoration: underline;
+}
+
+.chart-open-orders-strip__desk-link:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.chart-open-orders-strip__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chart-open-orders-strip__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 4px;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-open-orders-strip__row:hover {
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.chart-open-orders-strip__fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.chart-open-orders-strip__side {
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  min-width: 2.25rem;
+}
+
+.chart-open-orders-strip__side--buy {
+  color: #4ade80;
+}
+
+.chart-open-orders-strip__side--sell {
+  color: #f87171;
+}
+
+.chart-open-orders-strip__type,
+.chart-open-orders-strip__product {
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.chart-open-orders-strip__detail {
+  color: #e2e8f0;
+}
+
+.chart-open-orders-strip__status {
+  color: #a5b4fc;
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: 0.02em;
+}
+
+.chart-open-orders-strip__cancel {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  min-height: 1.75rem;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  background: transparent;
+  color: #cbd5e1;
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chart-open-orders-strip__cancel:hover:not(:disabled) {
+  background: rgba(185, 28, 28, 0.15);
+  border-color: #b91c1c;
+  color: #fecaca;
+}
+
+.chart-open-orders-strip__cancel:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.chart-open-orders-strip__cancel:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+}
