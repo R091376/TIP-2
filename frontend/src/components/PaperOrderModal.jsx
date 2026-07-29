@@ -56,12 +56,12 @@ export function validatePaperOrderFields({ side, orderType, qty, price, trigger 
 
 /**
  * Snapshot paper order ticket (instrumentKey fixed at open).
+ * Symbol-switch detection is parent-owned; no live activeSymbolId prop.
  */
 export default function PaperOrderModal({
   side,
   instrumentKey,
   tradingSymbol,
-  activeSymbolId: _activeSymbolId,
   onClose,
   onPlaced,
   onSubmittingChange,

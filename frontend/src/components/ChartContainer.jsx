@@ -312,10 +312,16 @@ export default function ChartContainer() {
     setToasts((prev) => prev.filter((t) => t.id !== id))
   }, [])
 
-  // Symbol-switch auto-close (merge-blocking): defer while place in-flight
+  // Symbol-switch auto-close (merge-blocking): defer while place in-flight.
+  // Null/empty activeSymbolId is divergence (e.g. last symbol removed).
   useEffect(() => {
     if (!orderModal) return
-    if (!activeSymbolId || activeSymbolId === orderModal.instrumentKey) return
+    // Still on snapshot symbol — clear sticky close defer if user switched back
+    if (activeSymbolId && activeSymbolId === orderModal.instrumentKey) {
+      setCloseAfterPlace(false)
+      return
+    }
+    // Diverged: null, empty, or different key
     if (placeInFlight) {
       setCloseAfterPlace(true)
       return
@@ -324,7 +330,7 @@ export default function ChartContainer() {
     pushToast({ kind: 'info', message: 'Symbol changed — ticket closed' })
   }, [activeSymbolId, orderModal, placeInFlight, pushToast])
 
-  // Restore focus to Buy/Sell opener when modal closes
+  // Restore focus to Buy/Sell opener when modal closes; fall back if disabled
   useEffect(() => {
     if (orderModal) return
     const which = openerRef.current
@@ -332,7 +338,23 @@ export default function ChartContainer() {
     openerRef.current = null
     const elId = which === 'sell' ? 'chart-trade-sell' : 'chart-trade-buy'
     requestAnimationFrame(() => {
-      document.getElementById(elId)?.focus()
+      try {
+        const opener = document.getElementById(elId)
+        if (opener && !opener.disabled) {
+          opener.focus()
+          return
+        }
+        // Opener missing or disabled (e.g. switched to index/empty) — stable fallback
+        const fallback =
+          document.querySelector('.chart-header__trade [tabindex="-1"]') ||
+          document.querySelector('.chart-header__user a, .chart-header__user button') ||
+          document.querySelector('.chart-header__controls button:not(:disabled)')
+        if (fallback && typeof fallback.focus === 'function') {
+          fallback.focus()
+        }
+      } catch {
+        /* focus not available */
+      }
     })
   }, [orderModal])
 
@@ -476,7 +498,6 @@ export default function ChartContainer() {
           side={orderModal.side}
           instrumentKey={orderModal.instrumentKey}
           tradingSymbol={orderModal.tradingSymbol}
-          activeSymbolId={activeSymbolId}
           onSubmittingChange={setPlaceInFlight}
           onClose={() => {
             if (placeInFlightRef.current) return
@@ -498,6 +519,7 @@ export default function ChartContainer() {
               message: code ? `${code} — ${message}` : message,
             })
             setPlaceInFlight(false)
+            // Close only if still deferred (diverged) — clear sticky when back on snapshot
             if (closeAfterPlaceRef.current) {
               setCloseAfterPlace(false)
               setOrderModal(null)

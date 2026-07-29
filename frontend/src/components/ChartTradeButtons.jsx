@@ -13,7 +13,12 @@ export default function ChartTradeButtons({
   const describedBy = tip ? 'chart-trade-disabled-hint' : undefined
 
   return (
-    <div className="chart-trade-buttons" role="group" aria-label="Paper trade">
+    <div
+      className="chart-trade-buttons"
+      role="group"
+      aria-label="Paper trade"
+      tabIndex={-1}
+    >
       {tip ? (
         <span id="chart-trade-disabled-hint" className="visually-hidden">
           {tip}
@@ -29,7 +34,10 @@ export default function ChartTradeButtons({
         aria-label={`Paper buy ${tradingSymbol || 'symbol'}`}
         onClick={() => onBuy?.()}
       >
-        Buy
+        <span className="chart-trade-btn__label chart-trade-btn__label--full">Buy</span>
+        <span className="chart-trade-btn__label chart-trade-btn__label--short" aria-hidden="true">
+          B
+        </span>
       </button>
       <button
         type="button"
@@ -41,7 +49,10 @@ export default function ChartTradeButtons({
         aria-label={`Paper sell ${tradingSymbol || 'symbol'}`}
         onClick={() => onSell?.()}
       >
-        Sell
+        <span className="chart-trade-btn__label chart-trade-btn__label--full">Sell</span>
+        <span className="chart-trade-btn__label chart-trade-btn__label--short" aria-hidden="true">
+          S
+        </span>
       </button>
       <span className="chart-trade-paper-badge" aria-hidden="true">
         PAPER

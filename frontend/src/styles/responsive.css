@@ -319,8 +319,7 @@ button,
     display: none;
   }
 
-  /* Ultra-narrow: hide PAPER badge; shorten Buy/Sell labels via CSS content is avoided —
-     keep full labels with tighter padding; aria-label still full on buttons */
+  /* Ultra-narrow: hide PAPER badge; B/S labels with full aria-label on buttons */
   .chart-trade-paper-badge {
     display: none;
   }
@@ -329,6 +328,15 @@ button,
     min-height: 40px;
     padding: 5px 8px;
     font-size: 0.6875rem;
+    min-width: 2rem;
+  }
+
+  .chart-trade-btn__label--full {
+    display: none;
+  }
+
+  .chart-trade-btn__label--short {
+    display: inline;
   }
 }
 
