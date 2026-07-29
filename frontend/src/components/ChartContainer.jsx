@@ -456,9 +456,12 @@ export default function ChartContainer() {
               tradingSymbol={displayName}
               refreshNonce={stripRefreshNonce}
               optimisticOrder={lastPlacedOrder}
-              onCancelDone={() => {
-                setLastPlacedOrder(null)
+              onCancelDone={(id) => {
+                setLastPlacedOrder((o) => (o?.id === id ? null : o))
                 setStripRefreshNonce((n) => n + 1)
+              }}
+              onOptimisticClear={(id) => {
+                setLastPlacedOrder((o) => (o?.id === id ? null : o))
               }}
               onToast={pushToast}
             />

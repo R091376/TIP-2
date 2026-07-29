@@ -140,9 +140,15 @@ export async function fetchPaperAccount(): Promise<PaperAccount> {
   return api<PaperAccount>('/api/paper/account')
 }
 
-export async function fetchPaperOrders(status?: string): Promise<PaperOrder[]> {
-  const q = status ? `?status=${encodeURIComponent(status)}` : ''
-  return api<PaperOrder[]>(`/api/paper/orders${q}`)
+export async function fetchPaperOrders(
+  status?: string,
+  opts?: { limit?: number },
+): Promise<PaperOrder[]> {
+  const params = new URLSearchParams()
+  if (status) params.set('status', status)
+  if (opts?.limit != null) params.set('limit', String(opts.limit))
+  const q = params.toString()
+  return api<PaperOrder[]>(`/api/paper/orders${q ? `?${q}` : ''}`)
 }
 
 export async function fetchPaperPositions(openOnly = true): Promise<PaperPosition[]> {
