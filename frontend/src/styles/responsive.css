@@ -138,6 +138,28 @@ button,
 }
 
 @media (max-width: 768px) {
+  /* Chart paper trade: compact chips, 40–44px touch target */
+  .chart-trade-btn {
+    min-height: 40px;
+    padding: 6px 10px;
+    font-size: 0.75rem;
+  }
+
+  .chart-trade-buttons {
+    gap: 6px;
+  }
+
+  .paper-order-modal-backdrop {
+    padding: 8px;
+    align-items: flex-end;
+  }
+
+  .paper-order-modal {
+    max-width: 100%;
+    max-height: 100dvh;
+    border-radius: 12px 12px 0 0;
+  }
+
   .chart-page {
     /* leave room for bottom dock */
     padding-bottom: 0;
@@ -295,6 +317,18 @@ button,
 @media (max-width: 380px) {
   .connection-status__label {
     display: none;
+  }
+
+  /* Ultra-narrow: hide PAPER badge; shorten Buy/Sell labels via CSS content is avoided —
+     keep full labels with tighter padding; aria-label still full on buttons */
+  .chart-trade-paper-badge {
+    display: none;
+  }
+
+  .chart-trade-btn {
+    min-height: 40px;
+    padding: 5px 8px;
+    font-size: 0.6875rem;
   }
 }
 

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../auth/useAuth'
+import { isChartPaperTradeEnabled } from '../config/featureFlags'
 import {
   DEFAULT_TIMEFRAME,
   DEFAULT_TIMEFRAMES,
   fetchCandles,
 } from '../services/marketApi'
+import { parsePaperApiError } from '../services/paperApi'
 import {
   buildSymbolLabels,
   normalizeStatus,
@@ -16,10 +18,14 @@ import { useChartBootstrap } from '../hooks/useChartBootstrap'
 import { useChartNavigation } from '../hooks/useChartNavigation'
 import { useLiveMessageHandler } from '../hooks/useLiveMessageHandler'
 import { usePendingBootstrapPoll } from '../hooks/usePendingBootstrapPoll'
+import { paperTradeDisabledReason } from '../utils/paperTradable'
 import { seriesKey } from '../utils/patternOverlay'
 import AlertsFeed from './AlertsFeed'
 import ChartHeader from './ChartHeader'
 import ChartPanel from './ChartPanel'
+import ChartTradeButtons from './ChartTradeButtons'
+import PaperOrderModal from './PaperOrderModal'
+import PaperToastHost from './PaperToast'
 import SymbolSwitcher from './SymbolSwitcher'
 
 /**
@@ -51,6 +57,20 @@ export default function ChartContainer() {
   const [infoMessage, setInfoMessage] = useState(null)
   /** Mobile dock: chart | alerts | watchlist (CSS shows dock ≤768px) */
   const [mobilePanel, setMobilePanel] = useState('chart')
+
+  /** Chart paper trade chrome (flag-gated; ChartHeader always mounts). */
+  const chartPaperTradeOn = isChartPaperTradeEnabled()
+  /** @type {[null | { side: 'BUY'|'SELL', instrumentKey: string, tradingSymbol: string }, Function]} */
+  const [orderModal, setOrderModal] = useState(null)
+  const [placeInFlight, setPlaceInFlight] = useState(false)
+  const [closeAfterPlace, setCloseAfterPlace] = useState(false)
+  const [toasts, setToasts] = useState([])
+  /** Which header button opened the modal — for focus restore. */
+  const openerRef = useRef(null)
+  const placeInFlightRef = useRef(false)
+  const closeAfterPlaceRef = useRef(false)
+  placeInFlightRef.current = placeInFlight
+  closeAfterPlaceRef.current = closeAfterPlace
 
   chartTypeRef.current = chartType
   timeframeRef.current = timeframe
@@ -277,6 +297,45 @@ export default function ChartContainer() {
   const controlsDisabled =
     loading || adding || !activeSymbolId || activeIsFailed || activeIsPending
 
+  const disabledReason = paperTradeDisabledReason(activeEntry, user)
+  const tradeEnabled = chartPaperTradeOn && disabledReason === ''
+
+  const pushToast = useCallback((toast) => {
+    const id =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `toast-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+    setToasts((prev) => [...prev, { id, ...toast }])
+  }, [])
+
+  const dismissToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id))
+  }, [])
+
+  // Symbol-switch auto-close (merge-blocking): defer while place in-flight
+  useEffect(() => {
+    if (!orderModal) return
+    if (!activeSymbolId || activeSymbolId === orderModal.instrumentKey) return
+    if (placeInFlight) {
+      setCloseAfterPlace(true)
+      return
+    }
+    setOrderModal(null)
+    pushToast({ kind: 'info', message: 'Symbol changed — ticket closed' })
+  }, [activeSymbolId, orderModal, placeInFlight, pushToast])
+
+  // Restore focus to Buy/Sell opener when modal closes
+  useEffect(() => {
+    if (orderModal) return
+    const which = openerRef.current
+    if (!which) return
+    openerRef.current = null
+    const elId = which === 'sell' ? 'chart-trade-sell' : 'chart-trade-buy'
+    requestAnimationFrame(() => {
+      document.getElementById(elId)?.focus()
+    })
+  }, [orderModal])
+
   // After mobile dock shows chart again, force Lightweight Charts to measure the pane
   useEffect(() => {
     if (mobilePanel !== 'chart') return
@@ -295,6 +354,20 @@ export default function ChartContainer() {
     return () => cancelAnimationFrame(id)
   }, [mobilePanel, chartRef, containerRef])
 
+  const openOrderModal = useCallback(
+    (side) => {
+      if (!activeSymbolId || !tradeEnabled) return
+      openerRef.current = side === 'SELL' ? 'sell' : 'buy'
+      setCloseAfterPlace(false)
+      setOrderModal({
+        side,
+        instrumentKey: activeSymbolId,
+        tradingSymbol: displayName,
+      })
+    },
+    [activeSymbolId, tradeEnabled, displayName],
+  )
+
   return (
     <div className={`chart-page chart-page--mobile-${mobilePanel}`}>
       <ChartHeader
@@ -309,6 +382,17 @@ export default function ChartContainer() {
         user={user}
         isAdmin={isAdmin}
         onLogout={() => logout()}
+        tradeSlot={
+          chartPaperTradeOn ? (
+            <ChartTradeButtons
+              disabled={!tradeEnabled}
+              disabledReason={disabledReason}
+              tradingSymbol={displayName}
+              onBuy={() => openOrderModal('BUY')}
+              onSell={() => openOrderModal('SELL')}
+            />
+          ) : null
+        }
       />
 
       {error && <div className="chart-error">{error}</div>}
@@ -386,6 +470,45 @@ export default function ChartContainer() {
           Symbols
         </button>
       </nav>
+
+      {chartPaperTradeOn && orderModal ? (
+        <PaperOrderModal
+          side={orderModal.side}
+          instrumentKey={orderModal.instrumentKey}
+          tradingSymbol={orderModal.tradingSymbol}
+          activeSymbolId={activeSymbolId}
+          onSubmittingChange={setPlaceInFlight}
+          onClose={() => {
+            if (placeInFlightRef.current) return
+            setOrderModal(null)
+          }}
+          onPlaced={(order) => {
+            pushToast({
+              kind: 'success',
+              message: `Order accepted · ${order.side} ${order.orderType} ${order.tradingSymbol} ×${order.qty}`,
+            })
+            setPlaceInFlight(false)
+            setCloseAfterPlace(false)
+            setOrderModal(null)
+          }}
+          onPlaceError={(err) => {
+            const { code, message } = parsePaperApiError(err)
+            pushToast({
+              kind: 'error',
+              message: code ? `${code} — ${message}` : message,
+            })
+            setPlaceInFlight(false)
+            if (closeAfterPlaceRef.current) {
+              setCloseAfterPlace(false)
+              setOrderModal(null)
+            }
+          }}
+        />
+      ) : null}
+
+      {chartPaperTradeOn ? (
+        <PaperToastHost toasts={toasts} onDismiss={dismissToast} />
+      ) : null}
     </div>
   )
 }

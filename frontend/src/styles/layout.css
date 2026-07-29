@@ -53,6 +53,14 @@
   min-width: 0;
 }
 
+/* Paper Buy/Sell group — between controls and user; user keeps margin-left: auto */
+.chart-header__trade {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .chart-header__user {
   display: flex;
   align-items: center;

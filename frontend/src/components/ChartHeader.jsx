@@ -20,6 +20,7 @@ export default function ChartHeader({
   user,
   isAdmin,
   onLogout,
+  tradeSlot = null,
 }) {
   return (
     <header className="chart-header">
@@ -42,6 +43,8 @@ export default function ChartHeader({
           disabled={controlsDisabled}
         />
       </div>
+
+      <div className="chart-header__trade">{tradeSlot}</div>
 
       <div className="chart-header__user">
         <Link to="/patterns/stats" className="chart-header__nav-link">
