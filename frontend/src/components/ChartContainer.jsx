@@ -69,8 +69,21 @@ export default function ChartContainer() {
   const openerRef = useRef(null)
   const placeInFlightRef = useRef(false)
   const closeAfterPlaceRef = useRef(false)
+  // Keep refs in sync with state for render paths; async handlers also write refs
+  // synchronously via setPlaceInFlightSync / setCloseAfterPlaceSync.
   placeInFlightRef.current = placeInFlight
   closeAfterPlaceRef.current = closeAfterPlace
+
+  /** Sync ref + state so async place settle never reads a one-frame-stale flag. */
+  const setPlaceInFlightSync = useCallback((v) => {
+    placeInFlightRef.current = !!v
+    setPlaceInFlight(!!v)
+  }, [])
+
+  const setCloseAfterPlaceSync = useCallback((v) => {
+    closeAfterPlaceRef.current = !!v
+    setCloseAfterPlace(!!v)
+  }, [])
 
   chartTypeRef.current = chartType
   timeframeRef.current = timeframe
@@ -318,17 +331,17 @@ export default function ChartContainer() {
     if (!orderModal) return
     // Still on snapshot symbol — clear sticky close defer if user switched back
     if (activeSymbolId && activeSymbolId === orderModal.instrumentKey) {
-      setCloseAfterPlace(false)
+      setCloseAfterPlaceSync(false)
       return
     }
     // Diverged: null, empty, or different key
     if (placeInFlight) {
-      setCloseAfterPlace(true)
+      setCloseAfterPlaceSync(true)
       return
     }
     setOrderModal(null)
     pushToast({ kind: 'info', message: 'Symbol changed — ticket closed' })
-  }, [activeSymbolId, orderModal, placeInFlight, pushToast])
+  }, [activeSymbolId, orderModal, placeInFlight, pushToast, setCloseAfterPlaceSync])
 
   // Restore focus to Buy/Sell opener when modal closes; fall back if disabled
   useEffect(() => {
@@ -380,14 +393,14 @@ export default function ChartContainer() {
     (side) => {
       if (!activeSymbolId || !tradeEnabled) return
       openerRef.current = side === 'SELL' ? 'sell' : 'buy'
-      setCloseAfterPlace(false)
+      setCloseAfterPlaceSync(false)
       setOrderModal({
         side,
         instrumentKey: activeSymbolId,
         tradingSymbol: displayName,
       })
     },
-    [activeSymbolId, tradeEnabled, displayName],
+    [activeSymbolId, tradeEnabled, displayName, setCloseAfterPlaceSync],
   )
 
   return (
@@ -498,7 +511,7 @@ export default function ChartContainer() {
           side={orderModal.side}
           instrumentKey={orderModal.instrumentKey}
           tradingSymbol={orderModal.tradingSymbol}
-          onSubmittingChange={setPlaceInFlight}
+          onSubmittingChange={setPlaceInFlightSync}
           onClose={() => {
             if (placeInFlightRef.current) return
             setOrderModal(null)
@@ -508,8 +521,8 @@ export default function ChartContainer() {
               kind: 'success',
               message: `Order accepted · ${order.side} ${order.orderType} ${order.tradingSymbol} ×${order.qty}`,
             })
-            setPlaceInFlight(false)
-            setCloseAfterPlace(false)
+            setPlaceInFlightSync(false)
+            setCloseAfterPlaceSync(false)
             setOrderModal(null)
           }}
           onPlaceError={(err) => {
@@ -518,11 +531,16 @@ export default function ChartContainer() {
               kind: 'error',
               message: code ? `${code} — ${message}` : message,
             })
-            setPlaceInFlight(false)
-            // Close only if still deferred (diverged) — clear sticky when back on snapshot
-            if (closeAfterPlaceRef.current) {
-              setCloseAfterPlace(false)
+            setPlaceInFlightSync(false)
+            // Authoritative settle: close iff snapshot no longer matches live chart
+            // (not solely closeAfterPlace — that flag can lag one frame behind switch)
+            const live = activeSymbolIdRef.current
+            const diverged = !live || live !== orderModal.instrumentKey
+            if (diverged) {
+              setCloseAfterPlaceSync(false)
               setOrderModal(null)
+            } else {
+              setCloseAfterPlaceSync(false)
             }
           }}
         />
