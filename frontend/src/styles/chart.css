@@ -206,8 +206,20 @@
   align-items: center;
   gap: 12px;
   max-width: calc(100% - 40px);
-  /* Toolbar itself is not a hit target; children opt in (button). */
+  /* Toolbar itself is not a hit target; children opt in (button / trade group). */
   pointer-events: none;
+}
+
+.chart-top-toolbar__actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.chart-top-toolbar__actions > * {
+  pointer-events: auto;
 }
 
 .chart-clear-drawings {

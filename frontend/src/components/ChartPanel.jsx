@@ -2,7 +2,7 @@ import OhlcLegend from './OhlcLegend'
 import { VOLUME_SMA_COLOR, VOLUME_SMA_LABEL } from '../chart/helpers'
 
 /**
- * Main chart surface: loading overlay, OHLC legend, volume SMA chip, LWC host.
+ * Main chart surface: loading overlay, OHLC legend, trade actions, volume SMA chip, LWC host.
  */
 export default function ChartPanel({
   containerRef,
@@ -13,6 +13,7 @@ export default function ChartPanel({
   ohlcLegend,
   onClearDrawings,
   clearDrawingsEnabled = false,
+  tradeSlot = null,
 }) {
   const showClearDrawings =
     typeof onClearDrawings === 'function' && Boolean(clearDrawingsEnabled)
@@ -30,7 +31,8 @@ export default function ChartPanel({
                 : 'Loading candles…'}
         </div>
       )}
-      <div className="chart-top-toolbar" aria-label="OHLC and drawings">
+      <div className="chart-top-toolbar" aria-label="Trade, OHLC, and drawings">
+        {tradeSlot}
         <OhlcLegend candle={ohlcLegend} />
         {showClearDrawings && (
           <button

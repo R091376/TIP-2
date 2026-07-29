@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import {
   fetchPaperAccount,
   fetchPaperLtp,
+  parsePaperApiError,
   placePaperOrder,
 } from '../services/paperApi'
 import { PAPER_ORDER_TYPES, PAPER_PRODUCTS } from '../utils/paperOrderConstants'
@@ -232,6 +233,11 @@ export default function PaperOrderModal({
       const order = await placePaperOrder(body)
       onPlaced?.(order)
     } catch (placeErr) {
+      // Always surface backend codes (e.g. MARKET_CLOSED) in-modal — toast alone
+      // is easy to miss behind the dialog on some layouts.
+      const { code, message } = parsePaperApiError(placeErr)
+      const text = code ? `${code} — ${message}` : message || 'Order failed'
+      setFieldError(text)
       onPlaceError?.(placeErr)
     } finally {
       setSubmittingState(false)

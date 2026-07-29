@@ -56,6 +56,11 @@ export default function ChartContainer() {
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState(null)
   const [infoMessage, setInfoMessage] = useState(null)
+  /**
+   * Once the user dismisses the blue info banner, keep it hidden until full page reload.
+   * Do not reset on symbol switch / alerts / market-phase re-sets of the same banner.
+   */
+  const [infoBannerDismissedForSession, setInfoBannerDismissedForSession] = useState(false)
   /** Mobile dock: chart | alerts | watchlist (CSS shows dock ≤768px) */
   const [mobilePanel, setMobilePanel] = useState('chart')
 
@@ -70,7 +75,7 @@ export default function ChartContainer() {
   const [stripRefreshNonce, setStripRefreshNonce] = useState(0)
   /** Last accepted place — strip merges optimistically by id. */
   const [lastPlacedOrder, setLastPlacedOrder] = useState(null)
-  /** Which header button opened the modal — for focus restore. */
+  /** Which Buy/Sell control opened the modal — for focus restore. */
   const openerRef = useRef(null)
   const placeInFlightRef = useRef(false)
   const closeAfterPlaceRef = useRef(false)
@@ -364,7 +369,7 @@ export default function ChartContainer() {
         }
         // Opener missing or disabled (e.g. switched to index/empty) — stable fallback
         const fallback =
-          document.querySelector('.chart-header__trade [tabindex="-1"]') ||
+          document.querySelector('.chart-top-toolbar .chart-trade-buttons') ||
           document.querySelector('.chart-header__user a, .chart-header__user button') ||
           document.querySelector('.chart-header__controls button:not(:disabled)')
         if (fallback && typeof fallback.focus === 'function') {
@@ -422,21 +427,23 @@ export default function ChartContainer() {
         user={user}
         isAdmin={isAdmin}
         onLogout={() => logout()}
-        tradeSlot={
-          chartPaperTradeOn ? (
-            <ChartTradeButtons
-              disabled={!tradeEnabled}
-              disabledReason={disabledReason}
-              tradingSymbol={displayName}
-              onBuy={() => openOrderModal('BUY')}
-              onSell={() => openOrderModal('SELL')}
-            />
-          ) : null
-        }
       />
 
       {error && <div className="chart-error">{error}</div>}
-      {!error && infoMessage && <div className="chart-info">{infoMessage}</div>}
+      {!error && infoMessage && !infoBannerDismissedForSession ? (
+        <div className="chart-info" role="status">
+          <span className="chart-info__text">{infoMessage}</span>
+          <button
+            type="button"
+            className="chart-info__dismiss"
+            aria-label="Dismiss message"
+            title="Dismiss"
+            onClick={() => setInfoBannerDismissedForSession(true)}
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
 
       <div className="chart-body">
         <div className="chart-main" data-mobile-panel="chart">
@@ -449,6 +456,18 @@ export default function ChartContainer() {
             ohlcLegend={ohlcLegend}
             onClearDrawings={overlay.clearChartDrawings}
             clearDrawingsEnabled={overlay.hasChartDrawings}
+            tradeSlot={
+              chartPaperTradeOn ? (
+                <ChartTradeButtons
+                  compact
+                  disabled={!tradeEnabled}
+                  disabledReason={disabledReason}
+                  tradingSymbol={displayName}
+                  onBuy={() => openOrderModal('BUY')}
+                  onSell={() => openOrderModal('SELL')}
+                />
+              ) : null
+            }
           />
           {chartPaperTradeOn ? (
             <ChartOpenOrdersStrip
@@ -550,9 +569,10 @@ export default function ChartContainer() {
           }}
           onPlaceError={(err) => {
             const { code, message } = parsePaperApiError(err)
+            const text = code ? `${code} — ${message}` : message || 'Order failed'
             pushToast({
               kind: 'error',
-              message: code ? `${code} — ${message}` : message,
+              message: text,
             })
             setPlaceInFlightSync(false)
             // Authoritative settle: close iff snapshot no longer matches live chart

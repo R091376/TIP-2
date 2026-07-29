@@ -266,8 +266,8 @@ export default function ChartOpenOrdersStrip({
         <span className="chart-open-orders-strip__title">
           Open paper orders ({label}) · {rows.length}
         </span>
-        <Link to="/paper" className="chart-open-orders-strip__desk-link">
-          Paper desk
+        <Link to="/paper/orders" className="chart-open-orders-strip__desk-link">
+          All orders
         </Link>
       </div>
       <ul className="chart-open-orders-strip__list">

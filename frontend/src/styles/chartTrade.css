@@ -17,13 +17,26 @@
   border: 0;
 }
 
-/* ── Header trade buttons ───────────────────────────────────────────── */
+/* ── Chart toolbar trade buttons (next to Clear drawings) ───────────── */
 
 .chart-trade-buttons {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  pointer-events: auto;
+  position: relative;
+  z-index: 11;
+}
+
+.chart-trade-buttons--compact {
+  gap: 6px;
+}
+
+.chart-trade-buttons--compact .chart-trade-btn {
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
 }
 
 .chart-trade-buttons:focus {
@@ -81,18 +94,6 @@
 .chart-trade-btn:focus-visible {
   outline: 2px solid #93c5fd;
   outline-offset: 2px;
-}
-
-.chart-trade-paper-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: #1e3a5f;
-  color: #7dd3fc;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  line-height: 1.4;
 }
 
 /* ── Order modal ────────────────────────────────────────────────────── */
@@ -244,13 +245,16 @@
 }
 
 .paper-order-modal__error {
-  margin: 0;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: rgba(185, 28, 28, 0.15);
-  border: 1px solid rgba(185, 28, 28, 0.4);
+  margin: 0 0 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #b91c1c;
+  background: #450a0a;
   color: #fecaca;
   font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  word-break: break-word;
 }
 
 .paper-order-modal__actions {
@@ -322,7 +326,8 @@
   position: fixed;
   top: 12px;
   right: 12px;
-  z-index: 1100;
+  /* Above modal backdrop (1000) and dialog so place errors remain visible */
+  z-index: 1200;
   display: flex;
   flex-direction: column;
   align-items: flex-end;

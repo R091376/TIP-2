@@ -117,11 +117,15 @@ export type PaperPosition = {
   side: string
   product: string
   qtyOpen: number
+  qtyClosed?: number
   avgEntryPrice: number
   realizedPnl: number
   unrealizedPnl: number | null
   ltp: number | null
   status: string
+  entryOrderId?: string | null
+  openedAt?: string | null
+  closedAt?: string | null
 }
 
 export type PlaceOrderRequest = {
@@ -155,8 +159,25 @@ export async function fetchPaperPositions(openOnly = true): Promise<PaperPositio
   return api<PaperPosition[]>(`/api/paper/positions?openOnly=${openOnly}`)
 }
 
-export async function fetchPaperFills(): Promise<unknown[]> {
-  return api<unknown[]>('/api/paper/fills')
+export type PaperFill = {
+  id: string
+  orderId: string
+  userId?: string
+  instrumentKey: string
+  side: string
+  qty: number
+  price: number
+  amount: number
+  tickTsMs?: number
+  lotId: string | null
+  createdAt: string | null
+}
+
+export async function fetchPaperFills(opts?: { limit?: number }): Promise<PaperFill[]> {
+  const params = new URLSearchParams()
+  if (opts?.limit != null) params.set('limit', String(opts.limit))
+  const q = params.toString()
+  return api<PaperFill[]>(`/api/paper/fills${q ? `?${q}` : ''}`)
 }
 
 export async function fetchPaperLedger(): Promise<unknown[]> {

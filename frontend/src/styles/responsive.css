@@ -326,11 +326,6 @@ button,
     font-size: 0.875rem;
   }
 
-  /* Collapse priority step 2: hide PAPER badge before B/S short labels */
-  .chart-trade-paper-badge {
-    display: none;
-  }
-
   .chart-trade-btn {
     min-height: 40px;
     padding: 5px 9px;
@@ -418,11 +413,6 @@ button,
 
   .chart-header__trade {
     gap: 4px;
-  }
-
-  /* PAPER already hidden at 480; keep rule for cascade clarity */
-  .chart-trade-paper-badge {
-    display: none;
   }
 
   .chart-trade-buttons {

@@ -1,5 +1,5 @@
 /**
- * Chart header Buy / Sell + PAPER badge for paper trading.
+ * Chart Buy / Sell for paper trading (chart toolbar).
  * Tooltips (title / aria-describedby) only when disabled.
  */
 export default function ChartTradeButtons({
@@ -8,16 +8,20 @@ export default function ChartTradeButtons({
   tradingSymbol = '',
   onBuy,
   onSell,
+  compact = false,
 }) {
   const tip = disabled && disabledReason ? disabledReason : undefined
   const describedBy = tip ? 'chart-trade-disabled-hint' : undefined
 
   return (
     <div
-      className="chart-trade-buttons"
+      className={`chart-trade-buttons${compact ? ' chart-trade-buttons--compact' : ''}`}
       role="group"
       aria-label="Paper trade"
       tabIndex={-1}
+      /* Keep chart canvas from stealing pointer events on the toolbar. */
+      onPointerDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
     >
       {tip ? (
         <span id="chart-trade-disabled-hint" className="visually-hidden">
@@ -54,9 +58,6 @@ export default function ChartTradeButtons({
           S
         </span>
       </button>
-      <span className="chart-trade-paper-badge" aria-hidden="true">
-        PAPER
-      </span>
     </div>
   )
 }

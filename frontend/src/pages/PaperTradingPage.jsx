@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
+import PaperPageChrome from '../components/PaperPageChrome'
 import {
-  cancelPaperOrder,
   fetchPaperAccount,
+  fetchPaperFills,
   fetchPaperOrders,
   fetchPaperPositions,
+  parsePaperApiError,
   placePaperOrder,
 } from '../services/paperApi'
-import { fetchWatchlist } from '../services/watchlistApi'
+import { computePaperPnl } from '../utils/paperPnl'
 import './paperTrading.css'
 
 function money(n) {
@@ -19,145 +21,107 @@ function money(n) {
   })
 }
 
+function pnlClass(n) {
+  if (n == null || Number.isNaN(n)) return ''
+  if (n > 0) return 'pnl-pos'
+  if (n < 0) return 'pnl-neg'
+  return ''
+}
+
+function newClientOrderId(prefix, extra = '') {
+  const uuid =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  return `${prefix}${extra ? `${extra}-` : ''}${uuid}`.slice(0, 64)
+}
+
 export default function PaperTradingPage() {
-  const { user, logout } = useAuth()
+  const { user, isAdmin, logout } = useAuth()
   const [account, setAccount] = useState(null)
+  const [allLots, setAllLots] = useState([])
   const [orders, setOrders] = useState([])
-  const [positions, setPositions] = useState([])
-  const [symbols, setSymbols] = useState([])
+  const [fills, setFills] = useState([])
   const [error, setError] = useState(null)
-  const [busy, setBusy] = useState(false)
-  const [form, setForm] = useState({
-    instrumentKey: '',
-    side: 'BUY',
-    orderType: 'MARKET',
-    product: 'MIS',
-    qty: 1,
-    price: '',
-    triggerPrice: '',
-    closeLotId: '',
-  })
+  const [busyId, setBusyId] = useState(null)
 
-  const tradable = useMemo(() => {
-    return (symbols || []).filter((s) => {
-      const seg = (s.segment || '').toUpperCase()
-      const itype = (s.instrumentType || '').toUpperCase()
-      if (!s.active) return false
-      if (seg.includes('INDEX') || (s.symbolId || '').startsWith('NSE_INDEX')) return false
-      if (seg !== 'NSE_EQ') return false
-      return itype === 'EQ' || itype === 'BE'
-    })
-  }, [symbols])
-
-  const refresh = useCallback(async () => {
-    if (document.hidden) return
+  const refresh = useCallback(async (opts = {}) => {
+    const force = Boolean(opts.force)
+    if (!force && document.hidden) return
     try {
-      const [acc, ords, pos, wl] = await Promise.all([
+      const [acc, lots, ords, fl] = await Promise.all([
         fetchPaperAccount(),
-        fetchPaperOrders(),
-        fetchPaperPositions(true),
-        fetchWatchlist().catch(() => []),
+        fetchPaperPositions(false),
+        fetchPaperOrders(undefined, { limit: 500 }),
+        fetchPaperFills({ limit: 500 }),
       ])
       setAccount(acc)
-      setOrders(ords)
-      setPositions(pos)
-      setSymbols(Array.isArray(wl) ? wl : [])
+      setAllLots(Array.isArray(lots) ? lots : [])
+      setOrders(Array.isArray(ords) ? ords : [])
+      setFills(Array.isArray(fl) ? fl : [])
       setError(null)
     } catch (e) {
-      setError(e?.message || String(e))
+      const { code, message } = parsePaperApiError(e)
+      setError(code ? `${code} — ${message}` : message)
     }
   }, [])
 
   useEffect(() => {
-    refresh()
-    const t = setInterval(refresh, 3000)
+    refresh({ force: true })
+    const t = setInterval(() => refresh(), 3000)
     return () => clearInterval(t)
   }, [refresh])
 
-  useEffect(() => {
-    if (!form.instrumentKey && tradable.length) {
-      setForm((f) => ({ ...f, instrumentKey: tradable[0].symbolId }))
-    }
-  }, [tradable, form.instrumentKey])
+  const openPositions = useMemo(
+    () => allLots.filter((p) => (p.status || '').toUpperCase() === 'OPEN'),
+    [allLots],
+  )
 
-  async function onSubmit(e) {
-    e.preventDefault()
-    setBusy(true)
+  const pnl = useMemo(
+    () => computePaperPnl(allLots, { fills, orders }),
+    [allLots, fills, orders],
+  )
+
+  async function onCloseLot(pos) {
+    if (!pos?.id) return
+    setBusyId(pos.id)
     setError(null)
     try {
-      const body = {
-        instrumentKey: form.instrumentKey,
-        side: form.side,
-        orderType: form.orderType,
-        product: form.product,
-        qty: Number(form.qty),
-      }
-      if (form.price !== '' && form.price != null) body.price = Number(form.price)
-      if (form.triggerPrice !== '' && form.triggerPrice != null) {
-        body.triggerPrice = Number(form.triggerPrice)
-      }
-      if (form.closeLotId) body.closeLotId = form.closeLotId
-      await placePaperOrder(body)
-      await refresh()
+      await placePaperOrder({
+        instrumentKey: pos.instrumentKey,
+        side: pos.side === 'LONG' ? 'SELL' : 'BUY',
+        orderType: 'MARKET',
+        product: pos.product,
+        qty: pos.qtyOpen,
+        closeLotId: pos.id,
+        clientOrderId: newClientOrderId('desk-close-', pos.id.slice(0, 8)),
+      })
+      await refresh({ force: true })
     } catch (err) {
-      setError(err?.message || String(err))
+      const { code, message } = parsePaperApiError(err)
+      setError(code ? `${code} — ${message}` : message)
     } finally {
-      setBusy(false)
+      setBusyId(null)
     }
   }
-
-  async function onCancel(id) {
-    setBusy(true)
-    try {
-      await cancelPaperOrder(id)
-      await refresh()
-    } catch (err) {
-      setError(err?.message || String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  function closeLot(pos) {
-    setForm((f) => ({
-      ...f,
-      instrumentKey: pos.instrumentKey,
-      side: pos.side === 'LONG' ? 'SELL' : 'BUY',
-      orderType: 'MARKET',
-      product: pos.product,
-      qty: pos.qtyOpen,
-      closeLotId: pos.id,
-      price: '',
-      triggerPrice: '',
-    }))
-  }
-
-  const openOrders = orders.filter((o) =>
-    ['OPEN', 'TRIGGER_PENDING', 'PARTIALLY_FILLED'].includes(o.status),
-  )
 
   return (
     <div className="paper-page">
-      <header className="paper-page__header">
-        <div>
-          <p className="paper-badge">PAPER</p>
-          <h1>Paper trading</h1>
-          <p className="paper-page__sub">
-            Simulated OMS — live tick fills · no real broker · {user?.username || 'user'}
-          </p>
+      <PaperPageChrome
+        user={user}
+        isAdmin={isAdmin}
+        onLogout={() => logout?.()}
+        title="Paper desk"
+        subtitle="Positions & P&L · place trades from the chart · no real broker"
+      />
+
+      {error && (
+        <div className="paper-error" role="alert">
+          {error}
         </div>
-        <nav className="paper-page__nav">
-          <Link to="/">Chart</Link>
-          <Link to="/patterns/stats">Stats</Link>
-          <button type="button" className="paper-link-btn" onClick={() => logout?.()}>
-            Log out
-          </button>
-        </nav>
-      </header>
+      )}
 
-      {error && <div className="paper-error">{error}</div>}
-
-      <section className="paper-account">
+      <section className="paper-account" aria-label="Account balances">
         <div>
           <span>Cash</span>
           <strong>₹{money(account?.cashBalance)}</strong>
@@ -172,219 +136,123 @@ export default function PaperTradingPage() {
         </div>
       </section>
 
-      <div className="paper-grid">
-        <form className="paper-ticket" onSubmit={onSubmit}>
-          <h2>Order ticket</h2>
-          <label>
-            Symbol
-            <select
-              value={form.instrumentKey}
-              onChange={(e) => setForm({ ...form, instrumentKey: e.target.value, closeLotId: '' })}
-              required
-            >
-              {tradable.map((s) => (
-                <option key={s.symbolId} value={s.symbolId}>
-                  {s.tradingSymbol || s.symbolId}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="paper-row">
-            <label>
-              Side
-              <select value={form.side} onChange={(e) => setForm({ ...form, side: e.target.value })}>
-                <option value="BUY">BUY</option>
-                <option value="SELL">SELL</option>
-              </select>
-            </label>
-            <label>
-              Product
-              <select
-                value={form.product}
-                onChange={(e) => setForm({ ...form, product: e.target.value })}
-              >
-                <option value="MIS">MIS (intraday)</option>
-                <option value="CNC">CNC (overnight)</option>
-              </select>
-            </label>
+      <section className="paper-pnl" aria-label="Profit and loss">
+        <div className="paper-pnl__card paper-pnl__card--day">
+          <h2 className="paper-pnl__title">Today (IST)</h2>
+          <div className={`paper-pnl__total ${pnlClass(pnl.dayTotal)}`}>
+            <span className="paper-pnl__total-label">Day P&amp;L</span>
+            <strong>₹{money(pnl.dayTotal)}</strong>
           </div>
-          <div className="paper-row">
-            <label>
-              Type
-              <select
-                value={form.orderType}
-                onChange={(e) => setForm({ ...form, orderType: e.target.value })}
-              >
-                <option value="MARKET">MARKET</option>
-                <option value="LIMIT">LIMIT</option>
-                <option value="SL">SL</option>
-                <option value="SL_M">SL-M</option>
-              </select>
-            </label>
-            <label>
-              Qty
-              <input
-                type="number"
-                min={1}
-                step={1}
-                value={form.qty}
-                onChange={(e) => setForm({ ...form, qty: e.target.value })}
-                required
-              />
-            </label>
+          <dl className="paper-pnl__breakdown">
+            <div>
+              <dt title="Realized on close/cover fills with fill time today (IST)">
+                Realized
+              </dt>
+              <dd className={pnlClass(pnl.dayRealized)}>₹{money(pnl.dayRealized)}</dd>
+            </div>
+            <div>
+              <dt title="Mark-to-market of all open lots (not change since prior close)">
+                Open MTM
+              </dt>
+              <dd className={pnlClass(pnl.dayUnrealized)}>₹{money(pnl.dayUnrealized)}</dd>
+            </div>
+          </dl>
+        </div>
+        <div className="paper-pnl__card paper-pnl__card--overall">
+          <h2 className="paper-pnl__title">Overall</h2>
+          <div className={`paper-pnl__total ${pnlClass(pnl.overallTotal)}`}>
+            <span className="paper-pnl__total-label">Total P&amp;L</span>
+            <strong>₹{money(pnl.overallTotal)}</strong>
           </div>
-          {(form.orderType === 'LIMIT' || form.orderType === 'SL') && (
-            <label>
-              Price
-              <input
-                type="number"
-                step="0.05"
-                value={form.price}
-                onChange={(e) => setForm({ ...form, price: e.target.value })}
-                required
-              />
-            </label>
-          )}
-          {(form.orderType === 'SL' || form.orderType === 'SL_M') && (
-            <label>
-              Trigger
-              <input
-                type="number"
-                step="0.05"
-                value={form.triggerPrice}
-                onChange={(e) => setForm({ ...form, triggerPrice: e.target.value })}
-                required
-              />
-            </label>
-          )}
-          {form.closeLotId && (
-            <p className="paper-hint">Closing lot {form.closeLotId.slice(0, 8)}…</p>
-          )}
-          <button type="submit" disabled={busy || !tradable.length}>
-            {busy ? 'Working…' : 'Place paper order'}
-          </button>
-        </form>
+          <dl className="paper-pnl__breakdown">
+            <div>
+              <dt>Realized</dt>
+              <dd className={pnlClass(pnl.overallRealized)}>₹{money(pnl.overallRealized)}</dd>
+            </div>
+            <div>
+              <dt>Unrealized</dt>
+              <dd className={pnlClass(pnl.overallUnrealized)}>
+                ₹{money(pnl.overallUnrealized)}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </section>
 
-        <section className="paper-panel">
-          <h2>Open positions</h2>
-          <div className="paper-table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Symbol</th>
-                  <th>Side</th>
-                  <th>Prod</th>
-                  <th>Qty</th>
-                  <th>Avg</th>
-                  <th>LTP</th>
-                  <th>uPnL</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {positions.length === 0 && (
-                  <tr>
-                    <td colSpan={8}>No open lots</td>
-                  </tr>
-                )}
-                {positions.map((p) => (
-                  <tr key={p.id}>
-                    <td>{p.tradingSymbol}</td>
-                    <td>{p.side}</td>
-                    <td>{p.product}</td>
-                    <td>{p.qtyOpen}</td>
-                    <td>{money(p.avgEntryPrice)}</td>
-                    <td>{money(p.ltp)}</td>
-                    <td className={p.unrealizedPnl >= 0 ? 'pnl-pos' : 'pnl-neg'}>
-                      {money(p.unrealizedPnl)}
-                    </td>
-                    <td>
-                      <button type="button" className="paper-mini" onClick={() => closeLot(p)}>
-                        Close
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+      <p className="paper-desk-hint">
+        Place new orders from the chart ·{' '}
+        <Link to="/paper/orders">Open &amp; closed orders</Link> · Day realized =
+        close/cover fills today (IST); Open MTM = all open mark-to-market.
+      </p>
 
-        <section className="paper-panel paper-panel--wide">
-          <h2>Open orders</h2>
-          <div className="paper-table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Symbol</th>
-                  <th>Side</th>
-                  <th>Type</th>
-                  <th>Prod</th>
-                  <th>Qty</th>
-                  <th>Filled</th>
-                  <th>Status</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {openOrders.length === 0 && (
-                  <tr>
-                    <td colSpan={8}>No open orders</td>
-                  </tr>
-                )}
-                {openOrders.map((o) => (
-                  <tr key={o.id}>
-                    <td>{o.tradingSymbol}</td>
-                    <td>{o.side}</td>
-                    <td>{o.orderType}</td>
-                    <td>{o.product}</td>
-                    <td>{o.qty}</td>
-                    <td>{o.filledQty}</td>
-                    <td>{o.status}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="paper-mini"
-                        disabled={busy}
-                        onClick={() => onCancel(o.id)}
-                      >
-                        Cancel
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="paper-desk">
+        <section
+          className="paper-section paper-section--positions"
+          aria-labelledby="paper-pos-heading"
+        >
+          <div className="paper-section__head">
+            <h2 id="paper-pos-heading">Open positions</h2>
+            <span className="paper-section__count">{openPositions.length}</span>
           </div>
-          <h2 className="paper-h2-sp">Recent orders</h2>
-          <div className="paper-table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Symbol</th>
-                  <th>Side</th>
-                  <th>Type</th>
-                  <th>Status</th>
-                  <th>Filled</th>
-                  <th>Reason</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orders.slice(0, 30).map((o) => (
-                  <tr key={o.id}>
-                    <td>{o.tradingSymbol}</td>
-                    <td>{o.side}</td>
-                    <td>{o.orderType}</td>
-                    <td>{o.status}</td>
-                    <td>
-                      {o.filledQty}/{o.qty}
-                    </td>
-                    <td>{o.rejectReason || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {openPositions.length === 0 ? (
+            <p className="paper-empty">No open lots</p>
+          ) : (
+            <div className="paper-pos-grid">
+              {openPositions.map((p) => {
+                const u = p.unrealizedPnl
+                return (
+                  <article key={p.id} className="paper-pos-card">
+                    <div className="paper-pos-card__top">
+                      <div>
+                        <h3 className="paper-pos-card__symbol">{p.tradingSymbol}</h3>
+                        <p className="paper-pos-card__meta">
+                          <span
+                            className={
+                              p.side === 'LONG'
+                                ? 'paper-side paper-side--long'
+                                : 'paper-side paper-side--short'
+                            }
+                          >
+                            {p.side}
+                          </span>
+                          <span className="paper-chip">{p.product}</span>
+                          <span className="paper-chip">{p.qtyOpen} qty</span>
+                        </p>
+                      </div>
+                      <div className={`paper-pos-card__pnl ${pnlClass(u)}`}>
+                        <span className="paper-pos-card__pnl-label">uPnL</span>
+                        <strong>₹{money(u)}</strong>
+                      </div>
+                    </div>
+                    <dl className="paper-pos-card__stats">
+                      <div>
+                        <dt>Avg</dt>
+                        <dd>₹{money(p.avgEntryPrice)}</dd>
+                      </div>
+                      <div>
+                        <dt>LTP</dt>
+                        <dd>₹{money(p.ltp)}</dd>
+                      </div>
+                      <div>
+                        <dt>Realized</dt>
+                        <dd className={pnlClass(p.realizedPnl)}>
+                          ₹{money(p.realizedPnl)}
+                        </dd>
+                      </div>
+                    </dl>
+                    <button
+                      type="button"
+                      className="paper-pos-card__close"
+                      disabled={busyId === p.id}
+                      onClick={() => onCloseLot(p)}
+                    >
+                      {busyId === p.id ? 'Closing…' : 'Close lot (MARKET)'}
+                    </button>
+                  </article>
+                )
+              })}
+            </div>
+          )}
         </section>
       </div>
     </div>

@@ -189,7 +189,44 @@
 }
 
 .chart-info {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   background: rgba(59, 130, 246, 0.1);
   color: #93c5fd;
+}
+
+.chart-info__text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chart-info__dismiss {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin: -2px -4px 0 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #93c5fd;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chart-info__dismiss:hover {
+  background: rgba(147, 197, 253, 0.15);
+  color: #e2e8f0;
+}
+
+.chart-info__dismiss:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
 }
 
