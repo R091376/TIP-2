@@ -47,7 +47,8 @@ describe('paperTradeDisabledReason', () => {
     ).toBe('Symbol not ready')
   })
 
-  it('index / non-EQ → Paper equities only', () => {
+  it('index / non-EQ → index not tradeable message', () => {
+    const msg = 'Index not tradeable — pick an equity (e.g. RELIANCE)'
     expect(
       paperTradeDisabledReason(
         {
@@ -59,7 +60,7 @@ describe('paperTradeDisabledReason', () => {
         },
         { tradingEnabled: true },
       ),
-    ).toBe('Paper equities only')
+    ).toBe(msg)
 
     expect(
       paperTradeDisabledReason(
@@ -72,7 +73,7 @@ describe('paperTradeDisabledReason', () => {
         },
         { tradingEnabled: true },
       ),
-    ).toBe('Paper equities only')
+    ).toBe(msg)
 
     expect(
       paperTradeDisabledReason(
@@ -85,7 +86,7 @@ describe('paperTradeDisabledReason', () => {
         },
         { tradingEnabled: true },
       ),
-    ).toBe('Paper equities only')
+    ).toBe(msg)
   })
 
   it('valid EQ active READY → empty (enabled)', () => {

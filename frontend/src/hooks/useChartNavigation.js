@@ -5,6 +5,7 @@ import { useCallback } from 'react'
 import { addSymbol, fetchWatchlist, removeSymbol } from '../services/watchlistApi'
 import { normalizeStatus } from '../chart/helpers'
 import { handleNonReadyBootstrap, loadReadySeries } from '../chart/seriesLoad'
+import { writeLastChartSymbolId } from '../utils/chartSymbolPrefs'
 
 /**
  * @param {object} ctx shared refs/state setters + engine + overlay
@@ -55,6 +56,7 @@ export function useChartNavigation(ctx) {
         entryHint || watchlistRef.current.find((e) => e.symbolId === nextSymbolId) || null
       setActiveSymbolId(nextSymbolId)
       activeSymbolIdRef.current = nextSymbolId
+      writeLastChartSymbolId(nextSymbolId)
       clearSeriesDataFor(nextSymbolId, timeframeRef.current)
 
       if (
@@ -226,6 +228,7 @@ export function useChartNavigation(ctx) {
         })
         setActiveSymbolId(alert.symbolId)
         activeSymbolIdRef.current = alert.symbolId
+        writeLastChartSymbolId(alert.symbolId)
         setTimeframe(alert.timeframe)
         timeframeRef.current = alert.timeframe
         candlesRef.current.clear()
@@ -245,6 +248,7 @@ export function useChartNavigation(ctx) {
       setOhlcLegend(null)
       setActiveSymbolId(alert.symbolId)
       activeSymbolIdRef.current = alert.symbolId
+      writeLastChartSymbolId(alert.symbolId)
       setTimeframe(alert.timeframe)
       timeframeRef.current = alert.timeframe
       clearSeriesDataFor(alert.symbolId, alert.timeframe)

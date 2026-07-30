@@ -4,11 +4,14 @@
  * Client-side filters: symbol, timeframe, pattern type.
  */
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { ALERTS_MAX, filterVisibleAlerts } from '../utils/alertList'
 
 const MAX_VISIBLE = ALERTS_MAX
 const ALL = ''
+/** Approximate row height for windowed list (px). */
+const ALERT_ROW_H = 76
+const ALERT_OVERSCAN = 6
 
 const STAGE_TONE = {
   detected: 'info',
@@ -131,6 +134,34 @@ export default function AlertsFeed({
 
   const items = filtered.slice(0, MAX_VISIBLE)
   const total = visibleAlerts.length
+  const listRef = useRef(null)
+  const [scrollTop, setScrollTop] = useState(0)
+  const [viewportH, setViewportH] = useState(480)
+
+  const onListScroll = useCallback((e) => {
+    setScrollTop(e.currentTarget.scrollTop)
+  }, [])
+
+  const onListRef = useCallback((el) => {
+    listRef.current = el
+    if (el) setViewportH(el.clientHeight || 480)
+  }, [])
+
+  const windowed = useMemo(() => {
+    if (items.length <= 40) {
+      return { start: 0, end: items.length, padTop: 0, padBottom: 0, slice: items }
+    }
+    const start = Math.max(0, Math.floor(scrollTop / ALERT_ROW_H) - ALERT_OVERSCAN)
+    const visibleCount = Math.ceil(viewportH / ALERT_ROW_H) + ALERT_OVERSCAN * 2
+    const end = Math.min(items.length, start + visibleCount)
+    return {
+      start,
+      end,
+      padTop: start * ALERT_ROW_H,
+      padBottom: Math.max(0, (items.length - end) * ALERT_ROW_H),
+      slice: items.slice(start, end),
+    }
+  }, [items, scrollTop, viewportH])
 
   function resetFilters() {
     setFilterSymbol(ALL)
@@ -247,8 +278,19 @@ export default function AlertsFeed({
           </button>
         </p>
       ) : (
-        <ul className="alerts-feed__list">
-          {items.map((a) => {
+        <ul
+          ref={onListRef}
+          className="alerts-feed__list alerts-feed__list--windowed"
+          onScroll={onListScroll}
+        >
+          {windowed.padTop > 0 ? (
+            <li
+              className="alerts-feed__spacer"
+              style={{ height: windowed.padTop }}
+              aria-hidden
+            />
+          ) : null}
+          {windowed.slice.map((a) => {
             const tone = stageTone(a.stage)
             const active =
               a.id === selectedId ||
@@ -259,11 +301,12 @@ export default function AlertsFeed({
               symbolLabels[a.symbolId] || a.displayName,
             )
             return (
-              <li key={a.id}>
+              <li key={a.id} style={{ minHeight: ALERT_ROW_H }}>
                 <button
                   type="button"
                   className={`alerts-feed__row${active ? ' alerts-feed__row--active' : ''}${focus ? ' alerts-feed__row--focus' : ''}`}
                   onClick={() => onSelect?.(a)}
+                  title={`Open ${label} on chart`}
                 >
                   <div className="alerts-feed__row-top">
                     <span className={`alerts-feed__stage alerts-feed__stage--${tone}`}>
@@ -286,6 +329,13 @@ export default function AlertsFeed({
               </li>
             )
           })}
+          {windowed.padBottom > 0 ? (
+            <li
+              className="alerts-feed__spacer"
+              style={{ height: windowed.padBottom }}
+              aria-hidden
+            />
+          ) : null}
         </ul>
       )}
     </section>

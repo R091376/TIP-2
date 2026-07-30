@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../auth/useAuth'
+import { ToastProvider } from '../../hooks/useToasts'
+import { getNavItems, isNavItemActive } from './navConfig'
+import NavIcon from './NavIcon'
 import AppMain from './AppMain'
 import AppSidebar from './AppSidebar'
 import './shell.css'
@@ -26,8 +30,10 @@ function readExpandedDefault() {
  */
 export default function AppShell() {
   const { user, isAdmin, logout } = useAuth()
+  const location = useLocation()
   const [expanded, setExpanded] = useState(readExpandedDefault)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const mobileNav = getNavItems({ isAdmin }).filter((n) => !n.adminOnly || isAdmin)
 
   const toggleExpanded = useCallback(() => {
     setExpanded((prev) => {
@@ -65,24 +71,44 @@ export default function AppShell() {
   }, [])
 
   return (
-    <div className={`app-shell${drawerOpen ? ' app-shell--drawer-open' : ''}`}>
-      <button
-        type="button"
-        className="app-shell__backdrop"
-        aria-label="Close navigation"
-        tabIndex={drawerOpen ? 0 : -1}
-        onClick={closeDrawer}
-      />
-      <AppSidebar
-        user={user}
-        isAdmin={isAdmin}
-        onLogout={() => logout?.()}
-        expanded={expanded}
-        onToggleExpanded={toggleExpanded}
-        drawerOpen={drawerOpen}
-        onNavigate={closeDrawer}
-      />
-      <AppMain drawerOpen={drawerOpen} onOpenDrawer={openDrawer} />
-    </div>
+    <ToastProvider>
+      <div
+        className={`app-shell${drawerOpen ? ' app-shell--drawer-open' : ''} app-shell--with-mobile-nav`}
+      >
+        <button
+          type="button"
+          className="app-shell__backdrop"
+          aria-label="Close navigation"
+          tabIndex={drawerOpen ? 0 : -1}
+          onClick={closeDrawer}
+        />
+        <AppSidebar
+          user={user}
+          isAdmin={isAdmin}
+          onLogout={() => logout?.()}
+          expanded={expanded}
+          onToggleExpanded={toggleExpanded}
+          drawerOpen={drawerOpen}
+          onNavigate={closeDrawer}
+        />
+        <AppMain drawerOpen={drawerOpen} onOpenDrawer={openDrawer} />
+        <nav className="app-mobile-bottom-nav" aria-label="Primary">
+          {mobileNav.slice(0, 5).map((item) => {
+            const active = isNavItemActive(item.id, location)
+            return (
+              <NavLink
+                key={item.id}
+                to={item.to}
+                className={`app-mobile-bottom-nav__item${active ? ' is-active' : ''}`}
+                end={item.to === '/'}
+              >
+                <NavIcon name={item.icon} className="app-mobile-bottom-nav__icon" />
+                <span className="app-mobile-bottom-nav__label">{item.label}</span>
+              </NavLink>
+            )
+          })}
+        </nav>
+      </div>
+    </ToastProvider>
   )
 }

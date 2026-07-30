@@ -196,6 +196,23 @@ export async function cancelPaperOrder(id: string): Promise<PaperOrder> {
   return api<PaperOrder>(`/api/paper/orders/${id}`, { method: 'DELETE' })
 }
 
+export type ModifyOrderRequest = {
+  qty?: number | null
+  price?: number | null
+  triggerPrice?: number | null
+}
+
+export async function modifyPaperOrder(
+  id: string,
+  body: ModifyOrderRequest,
+): Promise<PaperOrder> {
+  return api<PaperOrder>(`/api/paper/orders/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 /** GET /api/paper/ltp/{instrumentKey} — LTP may be null when no quote yet. */
 export async function fetchPaperLtp(instrumentKey: string): Promise<PaperLtp> {
   return api<PaperLtp>(`/api/paper/ltp/${encodeURIComponent(instrumentKey)}`)

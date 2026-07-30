@@ -21,6 +21,10 @@ import {
 } from '../chart/helpers'
 import { failedBannerForEntry, infoAfterCandleLoad } from '../chart/sessionMessages'
 import { isUnauthorizedError } from '../services/http'
+import {
+  pickPrimarySymbolEntry,
+  writeLastChartSymbolId,
+} from '../utils/chartSymbolPrefs'
 
 /**
  * @param {object} opts
@@ -138,14 +142,8 @@ export function useChartBootstrap({
         }
         if (isStale()) return
 
-        const deepEntry = deepSymbol
-          ? entries.find((e) => e.symbolId === deepSymbol) || null
-          : null
-        const primary =
-          deepEntry ||
-          entries.find((e) => normalizeStatus(e.bootstrapStatus) === 'READY') ||
-          entries[0] ||
-          null
+        // Prefer deep-link → last equity → first READY equity → READY → first
+        const primary = pickPrimarySymbolEntry(entries, deepSymbol)
         if (!primary) {
           setError('Watchlist is empty. Add a symbol to begin.')
           setLoading(false)
@@ -155,6 +153,7 @@ export function useChartBootstrap({
 
         setActiveSymbolId(primary.symbolId)
         activeSymbolIdRef.current = primary.symbolId
+        writeLastChartSymbolId(primary.symbolId)
         const failMsg = failedBannerForEntry(primary)
         if (failMsg) setError(failMsg)
         else setError(null)

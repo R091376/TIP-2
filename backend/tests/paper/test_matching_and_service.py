@@ -143,6 +143,106 @@ def test_next_tick_market_fill(monkeypatch, wl):
     svc.stop()
 
 
+def test_close_lot_expires_linked_and_orphan_stops(monkeypatch, wl):
+    """Full lot close expires closeLotId-linked orders and orphan protective SL_M."""
+    monkeypatch.setattr(
+        "app.paper.service.phase_from_clock",
+        lambda: MarketPhase.OPEN,
+    )
+    settings = Settings(paper_enabled=True, paper_allow_memory=True)
+    uid = uuid4()
+    balances = {uid: Decimal("100000")}
+
+    def provider(u):
+        return balances.get(u, Decimal("0"))
+
+    def writer(u, bal, _led):
+        balances[u] = bal
+
+    svc = PaperTradingService(
+        settings,
+        wl,
+        session_factory=None,
+        user_cash_provider=provider,
+        user_cash_writer=writer,
+    )
+    svc.start()
+    key = "NSE_EQ|RELIANCE"
+    import time
+
+    svc.enqueue_tick(Tick(instrument_key=key, price=100.0, volume_traded_today=1, timestamp_ms=1))
+    time.sleep(0.12)
+
+    buy = svc.place_order(
+        uid,
+        instrument_key=key,
+        side="BUY",
+        order_type="MARKET",
+        product="MIS",
+        qty=1,
+        trading_enabled=True,
+    )
+    svc.enqueue_tick(Tick(instrument_key=key, price=100.0, volume_traded_today=2, timestamp_ms=2))
+    time.sleep(0.2)
+    buy = svc.get_order(uid, UUID(buy["id"]))
+    assert buy["status"] == "FILLED"
+    lots = svc.list_positions(uid, open_only=True)
+    assert len(lots) == 1
+    lot_id = lots[0]["id"]
+
+    # Protective SL_M with closeLotId
+    sl_linked = svc.place_order(
+        uid,
+        instrument_key=key,
+        side="SELL",
+        order_type="SL_M",
+        product="MIS",
+        qty=1,
+        trigger_price=90.0,
+        close_lot_id=lot_id,
+        trading_enabled=True,
+    )
+    assert sl_linked["status"] == "TRIGGER_PENDING"
+
+    # Orphan SL_M (no closeLotId) same side protective
+    sl_orphan = svc.place_order(
+        uid,
+        instrument_key=key,
+        side="SELL",
+        order_type="SL_M",
+        product="MIS",
+        qty=1,
+        trigger_price=88.0,
+        trading_enabled=True,
+    )
+    assert sl_orphan["status"] == "TRIGGER_PENDING"
+
+    close = svc.place_order(
+        uid,
+        instrument_key=key,
+        side="SELL",
+        order_type="MARKET",
+        product="MIS",
+        qty=1,
+        close_lot_id=lot_id,
+        trading_enabled=True,
+    )
+    svc.enqueue_tick(Tick(instrument_key=key, price=101.0, volume_traded_today=3, timestamp_ms=3))
+    time.sleep(0.25)
+
+    close = svc.get_order(uid, UUID(close["id"]))
+    assert close["status"] == "FILLED"
+    linked = svc.get_order(uid, UUID(sl_linked["id"]))
+    orphan = svc.get_order(uid, UUID(sl_orphan["id"]))
+    assert linked["status"] == "EXPIRED"
+    assert linked["rejectReason"] == "LOT_CLOSED"
+    assert orphan["status"] == "EXPIRED"
+    assert orphan["rejectReason"] == "LOT_CLOSED"
+    open_lots = svc.list_positions(uid, open_only=True)
+    assert open_lots == []
+    svc.stop()
+
+
 def test_reject_index(monkeypatch, wl):
     monkeypatch.setattr("app.paper.service.phase_from_clock", lambda: MarketPhase.OPEN)
     idx = WatchlistEntry(

@@ -28,8 +28,8 @@ import ChartPanel from './ChartPanel'
 import ChartOpenOrdersStrip from './ChartOpenOrdersStrip'
 import ChartTradeButtons from './ChartTradeButtons'
 import PaperOrderModal from './PaperOrderModal'
-import PaperToastHost from './PaperToast'
 import SymbolSwitcher from './SymbolSwitcher'
+import { useToasts } from '../hooks/useToasts'
 
 /**
  * Chart page composer — wires auth, engine, overlay, bootstrap, navigation, chrome.
@@ -74,7 +74,7 @@ export default function ChartContainer() {
   const [orderModal, setOrderModal] = useState(null)
   const [placeInFlight, setPlaceInFlight] = useState(false)
   const [closeAfterPlace, setCloseAfterPlace] = useState(false)
-  const [toasts, setToasts] = useState([])
+  const { pushToast } = useToasts()
   /** Bump to force ChartOpenOrdersStrip refetch after place / cancel. */
   const [stripRefreshNonce, setStripRefreshNonce] = useState(0)
   /** Last accepted place — strip merges optimistically by id. */
@@ -327,18 +327,6 @@ export default function ChartContainer() {
   const disabledReason = paperTradeDisabledReason(activeEntry, user)
   const tradeEnabled = chartPaperTradeOn && disabledReason === ''
 
-  const pushToast = useCallback((toast) => {
-    const id =
-      typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `toast-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-    setToasts((prev) => [...prev, { id, ...toast }])
-  }, [])
-
-  const dismissToast = useCallback((id) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id))
-  }, [])
-
   // Symbol-switch auto-close (merge-blocking): defer while place in-flight.
   // Null/empty activeSymbolId is divergence (e.g. last symbol removed).
   useEffect(() => {
@@ -416,6 +404,45 @@ export default function ChartContainer() {
     },
     [activeSymbolId, tradeEnabled, displayName, setCloseAfterPlaceSync],
   )
+
+  // Keyboard: B = buy, S = sell (ignore when typing / modal open)
+  useEffect(() => {
+    if (!chartPaperTradeOn) return undefined
+    function onKey(e) {
+      if (orderModal || placeInFlight) return
+      const t = e.target
+      if (
+        t instanceof HTMLElement &&
+        (t.tagName === 'INPUT' ||
+          t.tagName === 'TEXTAREA' ||
+          t.tagName === 'SELECT' ||
+          t.isContentEditable)
+      ) {
+        return
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const k = e.key?.toLowerCase()
+      if (k === 'b') {
+        e.preventDefault()
+        if (tradeEnabled) openOrderModal('BUY')
+        else if (disabledReason) pushToast({ kind: 'info', message: disabledReason })
+      } else if (k === 's') {
+        e.preventDefault()
+        if (tradeEnabled) openOrderModal('SELL')
+        else if (disabledReason) pushToast({ kind: 'info', message: disabledReason })
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [
+    chartPaperTradeOn,
+    orderModal,
+    placeInFlight,
+    tradeEnabled,
+    disabledReason,
+    openOrderModal,
+    pushToast,
+  ])
 
   // Panel deep-link: presence-only apply, then replace-strip panel (no-op when absent).
   useEffect(() => {
@@ -596,10 +623,15 @@ export default function ChartContainer() {
             setOrderModal(null)
           }}
           onPlaced={(order) => {
-            pushToast({
-              kind: 'success',
-              message: `Order accepted · ${order.side} ${order.orderType} ${order.tradingSymbol} ×${order.qty}`,
-            })
+            const st = (order.status || '').toUpperCase()
+            const filled = Number(order.filledQty) || 0
+            const msg =
+              st === 'FILLED' || filled > 0
+                ? `Filled · ${order.side} ${order.tradingSymbol} ×${filled || order.qty}${
+                    order.price != null ? ` @ ₹${order.price}` : ''
+                  }`
+                : `Order accepted · ${order.side} ${order.orderType} ${order.tradingSymbol} ×${order.qty} (${st || 'OPEN'})`
+            pushToast({ kind: 'success', message: msg })
             setLastPlacedOrder(order)
             setStripRefreshNonce((n) => n + 1)
             setPlaceInFlightSync(false)
@@ -626,10 +658,6 @@ export default function ChartContainer() {
             }
           }}
         />
-      ) : null}
-
-      {chartPaperTradeOn ? (
-        <PaperToastHost toasts={toasts} onDismiss={dismissToast} />
       ) : null}
     </div>
   )

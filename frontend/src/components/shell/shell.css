@@ -316,3 +316,61 @@
     padding: 12px 8px;
   }
 }
+
+/* -- Mobile bottom nav (=899px) --------------------------------------- */
+
+.app-mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 899px) {
+  .app-mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 55;
+    height: 56px;
+    padding: 0 4px env(safe-area-inset-bottom, 0);
+    background: var(--tip-bg-sidebar, #0c1020);
+    border-top: 1px solid var(--tip-border-subtle, #1e293b);
+    justify-content: space-around;
+    align-items: stretch;
+  }
+
+  .app-shell--with-mobile-nav .app-main {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-mobile-bottom-nav__item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    text-decoration: none;
+    color: var(--tip-text-muted, #94a3b8);
+    font-size: 0.625rem;
+    font-weight: 600;
+    min-width: 0;
+    padding: 4px 2px;
+  }
+
+  .app-mobile-bottom-nav__item.is-active {
+    color: #93c5fd;
+  }
+
+  .app-mobile-bottom-nav__icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .app-mobile-bottom-nav__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+}

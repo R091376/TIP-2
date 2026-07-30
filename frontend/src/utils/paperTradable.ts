@@ -63,7 +63,7 @@ export function paperTradeDisabledReason(
     seg !== 'NSE_EQ' ||
     (itype !== 'EQ' && itype !== 'BE')
   ) {
-    return 'Paper equities only'
+    return 'Index not tradeable — pick an equity (e.g. RELIANCE)'
   }
   return ''
 }

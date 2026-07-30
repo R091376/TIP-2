@@ -82,9 +82,18 @@ export default function PaperOrderModal({
   const [metaLoading, setMetaLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [fieldError, setFieldError] = useState('')
+  /** Large notional / qty confirm step */
+  const [confirmLarge, setConfirmLarge] = useState(null)
 
   const needsPrice = orderType === 'LIMIT' || orderType === 'SL'
   const needsTrigger = orderType === 'SL' || orderType === 'SL_M'
+
+  /** Qty ≥ 100 or estimated notional ≥ ₹1,00,000 */
+  function isLargeOrder(q, px) {
+    if (q >= 100) return true
+    if (px != null && px > 0 && q * px >= 100000) return true
+    return false
+  }
 
   const setSubmittingState = useCallback(
     (v) => {
@@ -199,6 +208,25 @@ export default function PaperOrderModal({
     if (next === 'MARKET' || next === 'LIMIT') setTrigger('')
   }
 
+  async function placeNow(body) {
+    setSubmittingState(true)
+    try {
+      const order = await placePaperOrder(body)
+      setConfirmLarge(null)
+      onPlaced?.(order)
+    } catch (placeErr) {
+      // Always surface backend codes (e.g. MARKET_CLOSED) in-modal — toast alone
+      // is easy to miss behind the dialog on some layouts.
+      const { code, message } = parsePaperApiError(placeErr)
+      const text = code ? `${code} — ${message}` : message || 'Order failed'
+      setFieldError(text)
+      setConfirmLarge(null)
+      onPlaceError?.(placeErr)
+    } finally {
+      setSubmittingState(false)
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     if (submittingRef.current) return
@@ -228,20 +256,27 @@ export default function PaperOrderModal({
     if (needsTrigger) body.triggerPrice = Number(trigger)
     // No closeLotId from chart ticket
 
-    setSubmittingState(true)
-    try {
-      const order = await placePaperOrder(body)
-      onPlaced?.(order)
-    } catch (placeErr) {
-      // Always surface backend codes (e.g. MARKET_CLOSED) in-modal — toast alone
-      // is easy to miss behind the dialog on some layouts.
-      const { code, message } = parsePaperApiError(placeErr)
-      const text = code ? `${code} — ${message}` : message || 'Order failed'
-      setFieldError(text)
-      onPlaceError?.(placeErr)
-    } finally {
-      setSubmittingState(false)
+    const q = Number(qty)
+    const refPx =
+      needsPrice && price !== ''
+        ? Number(price)
+        : needsTrigger && trigger !== ''
+          ? Number(trigger)
+          : ltp != null
+            ? Number(ltp)
+            : null
+    if (isLargeOrder(q, refPx) && !confirmLarge) {
+      const notional = refPx != null && refPx > 0 ? q * refPx : null
+      setConfirmLarge({
+        body,
+        summary: `${side} ${orderType} ${tradingSymbol || instrumentKey} ×${q}${
+          notional != null ? ` (~₹${money(notional)})` : ''
+        }`,
+      })
+      return
     }
+
+    await placeNow(body)
   }
 
   function handleBackdropClick(e) {
@@ -414,6 +449,32 @@ export default function PaperOrderModal({
             </button>
           </div>
         </form>
+
+        {confirmLarge ? (
+          <div className="paper-order-modal__confirm" role="alertdialog" aria-labelledby={`${titleId}-confirm`}>
+            <p id={`${titleId}-confirm`} className="paper-order-modal__confirm-text">
+              Confirm large order: <strong>{confirmLarge.summary}</strong>
+            </p>
+            <div className="paper-order-modal__actions">
+              <button
+                type="button"
+                className="paper-order-modal__cancel"
+                disabled={submitting}
+                onClick={() => setConfirmLarge(null)}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                className={`paper-order-modal__submit paper-order-modal__submit--${side === 'SELL' ? 'sell' : 'buy'}`}
+                disabled={submitting}
+                onClick={() => placeNow(confirmLarge.body)}
+              >
+                {submitting ? 'Working…' : 'Confirm place'}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>,
     document.body,

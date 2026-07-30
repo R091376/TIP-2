@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useId, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
+import PaperSkeleton from '../components/PaperSkeleton'
+import { useToasts } from '../hooks/useToasts'
 import {
   cancelPaperOrder,
   fetchPaperFills,
   fetchPaperOrders,
   fetchPaperPositions,
+  modifyPaperOrder,
   parsePaperApiError,
 } from '../services/paperApi'
 import { buildOrderPnlMap } from '../utils/paperOrderPnl'
@@ -104,17 +108,29 @@ function filterOrders(list, { symbol, side, status }) {
   })
 }
 
+function canModifyOrder(o) {
+  const st = (o?.status || '').toUpperCase()
+  if (!OPEN_ORDER.has(st)) return false
+  const ot = (o?.orderType || '').toUpperCase()
+  // MARKET residual rarely modifiable in practice; allow LIMIT / SL / SL_M
+  return ot === 'LIMIT' || ot === 'SL' || ot === 'SL_M' || ot === 'MARKET'
+}
+
 export default function PaperOrdersPage() {
   const { user } = useAuth()
+  const { pushToast } = useToasts()
   const [orders, setOrders] = useState([])
   const [fills, setFills] = useState([])
   const [lots, setLots] = useState([])
   const [error, setError] = useState(null)
   const [busyId, setBusyId] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('open') // open | closed
   const [symbolFilter, setSymbolFilter] = useState('')
   const [sideFilter, setSideFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
+  /** @type {null | { id: string, orderType: string, qty: string, price: string, triggerPrice: string, filledQty: number }} */
+  const [modifyDraft, setModifyDraft] = useState(null)
   const tablistId = useId()
   const openPanelId = `${tablistId}-open`
   const closedPanelId = `${tablistId}-closed`
@@ -135,6 +151,8 @@ export default function PaperOrdersPage() {
     } catch (e) {
       const { code, message } = parsePaperApiError(e)
       setError(code ? `${code} — ${message}` : message)
+    } finally {
+      setLoading(false)
     }
   }, [])
 
@@ -190,10 +208,58 @@ export default function PaperOrdersPage() {
     setError(null)
     try {
       await cancelPaperOrder(id)
+      pushToast({ kind: 'info', message: 'Order cancelled' })
       await refresh({ force: true })
     } catch (err) {
       const { code, message } = parsePaperApiError(err)
-      setError(code ? `${code} — ${message}` : message)
+      const text = code ? `${code} — ${message}` : message
+      setError(text)
+      pushToast({ kind: 'error', message: text })
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  function openModify(o) {
+    setModifyDraft({
+      id: o.id,
+      orderType: (o.orderType || '').toUpperCase(),
+      qty: String(o.qty ?? ''),
+      price: o.price != null ? String(o.price) : '',
+      triggerPrice: o.triggerPrice != null ? String(o.triggerPrice) : '',
+      filledQty: Number(o.filledQty) || 0,
+      symbol: o.tradingSymbol || '',
+    })
+  }
+
+  async function submitModify(e) {
+    e.preventDefault()
+    if (!modifyDraft?.id) return
+    const body = {}
+    const qty = Number(modifyDraft.qty)
+    if (Number.isInteger(qty) && qty >= 1) body.qty = qty
+    const ot = modifyDraft.orderType
+    if ((ot === 'LIMIT' || ot === 'SL') && modifyDraft.price !== '') {
+      body.price = Number(modifyDraft.price)
+    }
+    if ((ot === 'SL' || ot === 'SL_M') && modifyDraft.triggerPrice !== '') {
+      body.triggerPrice = Number(modifyDraft.triggerPrice)
+    }
+    setBusyId(modifyDraft.id)
+    setError(null)
+    try {
+      await modifyPaperOrder(modifyDraft.id, body)
+      pushToast({
+        kind: 'success',
+        message: `Order modified · ${modifyDraft.symbol || 'order'}`,
+      })
+      setModifyDraft(null)
+      await refresh({ force: true })
+    } catch (err) {
+      const { code, message } = parsePaperApiError(err)
+      const text = code ? `${code} — ${message}` : message
+      setError(text)
+      pushToast({ kind: 'error', message: text })
     } finally {
       setBusyId(null)
     }
@@ -307,14 +373,24 @@ export default function PaperOrdersPage() {
           </label>
         </div>
 
-        {tab === 'open' ? (
+        {loading ? (
+          <PaperSkeleton rows={5} cols={8} label="Loading orders" />
+        ) : tab === 'open' ? (
           <div
             role="tabpanel"
             id={openPanelId}
             aria-labelledby={`${tablistId}-tab-open`}
           >
             {filteredOpen.length === 0 ? (
-              <p className="paper-empty">No working orders</p>
+              <div className="paper-empty-cta">
+                <p className="paper-empty">No working orders</p>
+                <p className="paper-empty-cta__hint">
+                  Place a LIMIT or SL from the chart after selecting an equity.
+                </p>
+                <Link to="/" className="paper-empty-cta__link">
+                  Open chart →
+                </Link>
+              </div>
             ) : (
               <div className="paper-table-wrap paper-table-wrap--open">
                 <table className="paper-table paper-table--desk">
@@ -326,9 +402,9 @@ export default function PaperOrdersPage() {
                       <th className="paper-th-product">Product</th>
                       <th>Quantity</th>
                       <th>Price</th>
-                      <th>Working</th>
+                      <th title="Unfilled quantity">Pending qty</th>
                       <th>P&amp;L</th>
-                      <th>Status</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -375,14 +451,26 @@ export default function PaperOrdersPage() {
                             <OrderPnlCell result={pnlByOrderId.get(o.id)} />
                           </td>
                           <td>
-                            <button
-                              type="button"
-                              className="paper-mini paper-mini--danger"
-                              disabled={busyId === o.id}
-                              onClick={() => onCancel(o.id)}
-                            >
-                              {busyId === o.id ? '…' : 'Cancel'}
-                            </button>
+                            <div className="paper-row-actions">
+                              {canModifyOrder(o) ? (
+                                <button
+                                  type="button"
+                                  className="paper-mini"
+                                  disabled={busyId === o.id}
+                                  onClick={() => openModify(o)}
+                                >
+                                  Modify
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                className="paper-mini paper-mini--danger"
+                                disabled={busyId === o.id}
+                                onClick={() => onCancel(o.id)}
+                              >
+                                {busyId === o.id ? '…' : 'Cancel'}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       )
@@ -453,6 +541,109 @@ export default function PaperOrdersPage() {
           </div>
         )}
       </div>
+
+      {modifyDraft ? (
+        <div
+          className="paper-modify-backdrop"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && busyId !== modifyDraft.id) {
+              setModifyDraft(null)
+            }
+          }}
+        >
+          <form
+            className="paper-modify-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Modify order"
+            onSubmit={submitModify}
+          >
+            <header className="paper-modify-dialog__head">
+              <h2>Modify {modifyDraft.symbol || 'order'}</h2>
+              <button
+                type="button"
+                className="paper-modify-dialog__close"
+                aria-label="Close"
+                disabled={busyId === modifyDraft.id}
+                onClick={() => setModifyDraft(null)}
+              >
+                ×
+              </button>
+            </header>
+            <p className="paper-modify-dialog__meta">
+              {modifyDraft.orderType}
+              {modifyDraft.filledQty > 0
+                ? ` · filled ${modifyDraft.filledQty}`
+                : ''}
+            </p>
+            <label className="paper-modify-dialog__field">
+              Quantity
+              <input
+                type="number"
+                min={Math.max(1, modifyDraft.filledQty)}
+                step={1}
+                value={modifyDraft.qty}
+                onChange={(e) =>
+                  setModifyDraft((d) => (d ? { ...d, qty: e.target.value } : d))
+                }
+                disabled={busyId === modifyDraft.id}
+              />
+            </label>
+            {(modifyDraft.orderType === 'LIMIT' || modifyDraft.orderType === 'SL') && (
+              <label className="paper-modify-dialog__field">
+                Price
+                <input
+                  type="number"
+                  min={0}
+                  step="0.05"
+                  value={modifyDraft.price}
+                  onChange={(e) =>
+                    setModifyDraft((d) =>
+                      d ? { ...d, price: e.target.value } : d,
+                    )
+                  }
+                  disabled={busyId === modifyDraft.id}
+                />
+              </label>
+            )}
+            {(modifyDraft.orderType === 'SL' || modifyDraft.orderType === 'SL_M') && (
+              <label className="paper-modify-dialog__field">
+                Trigger
+                <input
+                  type="number"
+                  min={0}
+                  step="0.05"
+                  value={modifyDraft.triggerPrice}
+                  onChange={(e) =>
+                    setModifyDraft((d) =>
+                      d ? { ...d, triggerPrice: e.target.value } : d,
+                    )
+                  }
+                  disabled={busyId === modifyDraft.id}
+                />
+              </label>
+            )}
+            <div className="paper-modify-dialog__actions">
+              <button
+                type="button"
+                className="paper-mini"
+                disabled={busyId === modifyDraft.id}
+                onClick={() => setModifyDraft(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="paper-mini paper-mini--primary"
+                disabled={busyId === modifyDraft.id}
+              >
+                {busyId === modifyDraft.id ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </div>
   )
 }

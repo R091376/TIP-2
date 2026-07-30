@@ -745,7 +745,65 @@ class PaperTradingService:
         self._persist_account(acc)
         if lot:
             self._persist_lot(lot)
+            if lot.status == LotStatus.CLOSED:
+                self._cancel_orders_for_closed_lot(
+                    order.user_id, lot, reason="LOT_CLOSED", now=now
+                )
         self._write_user_cash(order.user_id, acc)
+
+    def _cancel_orders_for_closed_lot(
+        self,
+        user_id: UUID,
+        lot: PositionLot,
+        *,
+        reason: str = "LOT_CLOSED",
+        now: datetime | None = None,
+    ) -> None:
+        """Expire open orders linked to a fully closed lot (and orphan protective stops).
+
+        Primary: any open order with close_lot_id == lot.id.
+        Secondary: open SL/SL_M on same instrument+product, opposite side, no
+        close_lot_id, when no remaining open lot remains for that side.
+        """
+        if lot is None or lot.status != LotStatus.CLOSED:
+            return
+        ts = now or datetime.now(timezone.utc)
+        acc = self._account(user_id)
+
+        has_same_side_open = any(
+            L.user_id == user_id
+            and L.status == LotStatus.OPEN
+            and L.instrument_key == lot.instrument_key
+            and L.product == lot.product
+            and L.side == lot.side
+            and L.id != lot.id
+            for L in self._lots.values()
+        )
+        protective_side = Side.SELL if lot.side == LotSide.LONG else Side.BUY
+
+        for o in list(self._orders.values()):
+            if o.user_id != user_id or o.status not in OPEN_STATUSES:
+                continue
+            linked = o.close_lot_id is not None and o.close_lot_id == lot.id
+            orphan_stop = (
+                not linked
+                and not has_same_side_open
+                and o.close_lot_id is None
+                and o.order_type in (OrderType.SL, OrderType.SL_M)
+                and o.instrument_key == lot.instrument_key
+                and o.product == lot.product
+                and o.side == protective_side
+            )
+            if not linked and not orphan_stop:
+                continue
+            o.status = OrderStatus.EXPIRED
+            o.reject_reason = reason
+            o.completed_at = ts
+            o.updated_at = ts
+            release_order_lock(acc, o.id, ts)
+            self._open_by_symbol.get(o.instrument_key, set()).discard(o.id)
+            self._persist_order(o)
+        self._persist_account(acc)
 
     def _apply_lot_fill(
         self,
@@ -850,6 +908,7 @@ class PaperTradingService:
         lot.status = LotStatus.CLOSED
         lot.closed_at = now
         lot.updated_at = now
+        self._cancel_orders_for_closed_lot(lot.user_id, lot, reason=reason or "LOT_CLOSED", now=now)
         self._write_user_cash(lot.user_id, acc)
 
     # --- MIS square-off ---

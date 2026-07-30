@@ -1,6 +1,6 @@
 /**
  * Chart Buy / Sell for paper trading (chart toolbar).
- * Tooltips (title / aria-describedby) only when disabled.
+ * When disabled, shows a visible reason chip (not only a tooltip).
  */
 export default function ChartTradeButtons({
   disabled = false,
@@ -15,7 +15,9 @@ export default function ChartTradeButtons({
 
   return (
     <div
-      className={`chart-trade-buttons${compact ? ' chart-trade-buttons--compact' : ''}`}
+      className={`chart-trade-buttons${compact ? ' chart-trade-buttons--compact' : ''}${
+        disabled ? ' chart-trade-buttons--disabled' : ''
+      }`}
       role="group"
       aria-label="Paper trade"
       tabIndex={-1}
@@ -24,7 +26,11 @@ export default function ChartTradeButtons({
       onMouseDown={(e) => e.stopPropagation()}
     >
       {tip ? (
-        <span id="chart-trade-disabled-hint" className="visually-hidden">
+        <span
+          id="chart-trade-disabled-hint"
+          className="chart-trade-disabled-banner"
+          title={tip}
+        >
           {tip}
         </span>
       ) : null}

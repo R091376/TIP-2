@@ -87,8 +87,41 @@
 }
 
 .chart-trade-btn:disabled {
-  opacity: 0.45;
+  opacity: 0.38;
   cursor: not-allowed;
+  filter: grayscale(0.55);
+  box-shadow: none;
+}
+
+.chart-trade-buttons--disabled .chart-trade-btn--buy,
+.chart-trade-buttons--disabled .chart-trade-btn--sell {
+  background: #374151;
+  color: #9ca3af;
+}
+
+.chart-trade-disabled-banner {
+  display: inline-flex;
+  align-items: center;
+  max-width: min(280px, 42vw);
+  padding: 4px 8px;
+  margin-right: 2px;
+  border-radius: 6px;
+  border: 1px solid #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+  color: #fde68a;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 640px) {
+  .chart-trade-disabled-banner {
+    max-width: 120px;
+    font-size: 0.625rem;
+  }
 }
 
 .chart-trade-btn:focus-visible {
@@ -563,4 +596,17 @@
 .chart-open-orders-strip__cancel:focus-visible {
   outline: 2px solid #93c5fd;
   outline-offset: 1px;
+}
+
+.paper-order-modal__confirm {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #334155;
+}
+
+.paper-order-modal__confirm-text {
+  margin: 0 0 12px;
+  font-size: 0.875rem;
+  color: #fde68a;
+  line-height: 1.4;
 }

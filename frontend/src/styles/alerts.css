@@ -226,6 +226,19 @@
   gap: 4px;
 }
 
+.alerts-feed__list--windowed {
+  /* spacers own height; keep gap only between real rows via padding on rows */
+  gap: 0;
+}
+
+.alerts-feed__spacer {
+  flex-shrink: 0;
+  list-style: none;
+  pointer-events: none;
+  margin: 0;
+  padding: 0;
+}
+
 .alerts-feed__row {
   width: 100%;
   display: flex;
