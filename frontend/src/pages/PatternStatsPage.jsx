@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth/useAuth'
-import UserAccountMenu from '../components/UserAccountMenu'
+import { useNavigate } from 'react-router-dom'
 import { fetchPatternStatistics } from '../services/patternStatisticsApi'
-import '../styles/userAccount.css'
 import './authPages.css'
 import './patternStats.css'
 
@@ -121,7 +118,6 @@ function sortRows(rows, sortKey, minSampleSize) {
 }
 
 export default function PatternStatsPage() {
-  const { user, logout } = useAuth()
   const navigate = useNavigate()
 
   const [items, setItems] = useState([])
@@ -219,20 +215,14 @@ export default function PatternStatsPage() {
   }
 
   return (
-    <div className="admin-page stats-page">
+    <div className="admin-page admin-page--in-shell stats-page">
       <header className="admin-header">
         <div>
-          <h1 className="admin-header__title">Pattern statistics</h1>
+          <h1 className="admin-header__title">Dashboard · Pattern statistics</h1>
           <p className="admin-header__sub">
             Research ranking across the watchlist · rates unlock at n ≥ {minSampleSize} ·
             not trade advice
           </p>
-        </div>
-        <div className="admin-header__actions">
-          <Link to="/" className="admin-link">
-            Chart
-          </Link>
-          <UserAccountMenu user={user} onLogout={() => logout()} />
         </div>
       </header>
 

@@ -127,6 +127,46 @@ export function computeDayRealizedFromCloseFills(
   return day
 }
 
+export type WinRateSummary = {
+  wins: number
+  losses: number
+  flats: number
+  /** wins / (wins + losses); null if no decided closed lots */
+  winRate: number | null
+}
+
+/**
+ * Closed-lot win rate (all-time). Flats (realized === 0) excluded from denominator.
+ */
+export function computeWinRate(lots: PaperLotLike[] | null | undefined): WinRateSummary {
+  let wins = 0
+  let losses = 0
+  let flats = 0
+  for (const lot of lots || []) {
+    if ((lot.status || '').toUpperCase() !== 'CLOSED') continue
+    const r = Number(lot.realizedPnl)
+    if (!Number.isFinite(r) || r === 0) {
+      flats++
+      continue
+    }
+    if (r > 0) wins++
+    else losses++
+  }
+  const decided = wins + losses
+  return {
+    wins,
+    losses,
+    flats,
+    winRate: decided === 0 ? null : wins / decided,
+  }
+}
+
+/** Display: one decimal percent, e.g. 62.5%; null → "—" */
+export function formatWinRatePct(winRate: number | null | undefined): string {
+  if (winRate == null || !Number.isFinite(winRate)) return '—'
+  return `${(winRate * 100).toFixed(1)}%`
+}
+
 export function computePaperPnl(
   lots: PaperLotLike[] | null | undefined,
   options: ComputePaperPnlOptions = {},

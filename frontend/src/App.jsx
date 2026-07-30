@@ -3,6 +3,7 @@ import { AuthProvider } from './auth/AuthContext'
 import RequireAuth from './auth/RequireAuth'
 import ChartContainer from './components/ChartContainer'
 import ErrorBoundary from './components/ErrorBoundary'
+import AppShell from './components/shell/AppShell'
 import AdminUsersPage from './pages/AdminUsersPage'
 import LoginPage from './pages/LoginPage'
 import PaperOrdersPage from './pages/PaperOrdersPage'
@@ -10,6 +11,7 @@ import PaperTradingPage from './pages/PaperTradingPage'
 import PatternStatsPage from './pages/PatternStatsPage'
 import './App.css'
 import './pages/authPages.css'
+import './styles/tokens.css'
 
 function App() {
   return (
@@ -18,57 +20,58 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+
             <Route
-              path="/"
               element={
                 <RequireAuth>
+                  <AppShell />
+                </RequireAuth>
+              }
+            >
+              <Route
+                index
+                element={
                   <ErrorBoundary>
-                    {/* key forces a clean chart mount when returning from admin */}
                     <ChartContainer key="chart-home" />
                   </ErrorBoundary>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/patterns/stats"
-              element={
-                <RequireAuth>
-                  <ErrorBoundary>
-                    <PatternStatsPage key="pattern-stats" />
-                  </ErrorBoundary>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/paper"
-              element={
-                <RequireAuth>
+                }
+              />
+              <Route
+                path="paper"
+                element={
                   <ErrorBoundary>
                     <PaperTradingPage key="paper-trading" />
                   </ErrorBoundary>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/paper/orders"
-              element={
-                <RequireAuth>
+                }
+              />
+              <Route
+                path="paper/orders"
+                element={
                   <ErrorBoundary>
                     <PaperOrdersPage key="paper-orders" />
                   </ErrorBoundary>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/admin/users"
-              element={
-                <RequireAuth adminOnly>
+                }
+              />
+              <Route
+                path="patterns/stats"
+                element={
                   <ErrorBoundary>
-                    <AdminUsersPage key="admin-users" />
+                    <PatternStatsPage key="pattern-stats" />
                   </ErrorBoundary>
-                </RequireAuth>
-              }
-            />
+                }
+              />
+              <Route
+                path="admin/users"
+                element={
+                  <RequireAuth adminOnly>
+                    <ErrorBoundary>
+                      <AdminUsersPage key="admin-users" />
+                    </ErrorBoundary>
+                  </RequireAuth>
+                }
+              />
+            </Route>
+
             <Route path="/admin" element={<Navigate to="/admin/users" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
-import UserAccountMenu from '../components/UserAccountMenu'
 import {
   createUser,
   listUsers,
@@ -11,7 +9,6 @@ import {
   setTradingEnabled,
   updateUser,
 } from '../services/adminUsersApi'
-import '../styles/userAccount.css'
 import './authPages.css'
 
 function money(n) {
@@ -30,7 +27,7 @@ function money(n) {
 }
 
 export default function AdminUsersPage() {
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   const [users, setUsers] = useState([])
   const [error, setError] = useState(null)
   const [info, setInfo] = useState(null)
@@ -95,7 +92,7 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="admin-page">
+    <div className="admin-page admin-page--in-shell">
       <header className="admin-header">
         <div>
           <h1 className="admin-header__title">Admin · Users</h1>
@@ -103,15 +100,6 @@ export default function AdminUsersPage() {
             Signed in as <strong>{user?.username || '—'}</strong>
             {user?.role ? ` · ${user.role}` : ''}
           </p>
-        </div>
-        <div className="admin-header__actions">
-          <Link to="/" className="admin-link">
-            ← Chart
-          </Link>
-          <Link to="/patterns/stats" className="admin-link">
-            Stats
-          </Link>
-          <UserAccountMenu user={user} onLogout={() => logout()} />
         </div>
       </header>
 

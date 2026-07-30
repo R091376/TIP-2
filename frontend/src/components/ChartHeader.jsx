@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import ChartTypeToggle from './ChartTypeToggle'
 import ConnectionStatus from './ConnectionStatus'
 import TimeframeSelector from './TimeframeSelector'
@@ -7,6 +6,7 @@ import '../styles/userAccount.css'
 
 /**
  * Chart top bar: symbol title, connection, timeframe, chart type, user menu.
+ * Cross-page nav lives in the app sidebar.
  */
 export default function ChartHeader({
   displayName,
@@ -18,7 +18,6 @@ export default function ChartHeader({
   onChartTypeChange,
   controlsDisabled,
   user,
-  isAdmin,
   onLogout,
 }) {
   return (
@@ -44,20 +43,6 @@ export default function ChartHeader({
       </div>
 
       <div className="chart-header__user">
-        <Link to="/patterns/stats" className="chart-header__nav-link">
-          Stats
-        </Link>
-        <Link to="/paper" className="chart-header__nav-link">
-          Positions
-        </Link>
-        <Link to="/paper/orders" className="chart-header__nav-link">
-          Orders
-        </Link>
-        {isAdmin && (
-          <Link to="/admin/users" className="chart-header__admin-link">
-            Admin
-          </Link>
-        )}
         <UserAccountMenu user={user} onLogout={onLogout} />
       </div>
     </header>

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   computeDayRealizedFromCloseFills,
   computePaperPnl,
+  computeWinRate,
+  formatWinRatePct,
   istDateKey,
 } from './paperPnl'
 
@@ -161,5 +163,32 @@ describe('istDateKey', () => {
   it('returns null for empty', () => {
     expect(istDateKey(null)).toBeNull()
     expect(istDateKey('')).toBeNull()
+  })
+})
+
+describe('computeWinRate', () => {
+  it('returns null winRate when empty or only open', () => {
+    expect(computeWinRate([]).winRate).toBeNull()
+    expect(
+      computeWinRate([{ status: 'OPEN', realizedPnl: 10 }]).winRate,
+    ).toBeNull()
+  })
+
+  it('excludes flats and non-CLOSED', () => {
+    const s = computeWinRate([
+      { status: 'CLOSED', realizedPnl: 100 },
+      { status: 'CLOSED', realizedPnl: -50 },
+      { status: 'CLOSED', realizedPnl: 0 },
+      { status: 'OPEN', realizedPnl: 200 },
+    ])
+    expect(s.wins).toBe(1)
+    expect(s.losses).toBe(1)
+    expect(s.flats).toBe(1)
+    expect(s.winRate).toBe(0.5)
+  })
+
+  it('formatWinRatePct', () => {
+    expect(formatWinRatePct(null)).toBe('—')
+    expect(formatWinRatePct(0.625)).toBe('62.5%')
   })
 })

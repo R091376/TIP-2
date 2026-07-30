@@ -4,10 +4,9 @@ Sibling project of **`../TIP`** (Java Spring Boot).
 
 | Layer | Status |
 |---|---|
-| **Frontend** | Copied from TIP — **unchanged** (React + Vite + Lightweight Charts) |
-| **API / WebSocket contracts** | **Frozen** — see `contracts/API-CONTRACT.md` |
-| **Python backend** | **Not implemented yet** — plan only |
-| **Migration plan + tests** | `MIGRATION.md` |
+| **Frontend** | React + Vite + Lightweight Charts |
+| **Python backend** | FastAPI (port of TIP Java backend) |
+| **Architecture** | See [`Architecture-Design-v1.0.md`](Architecture-Design-v1.0.md) |
 
 ## Why TIP-2 exists
 
@@ -17,45 +16,20 @@ Migrate the backend from **Java 17 / Spring Boot** to **Python 3** without chang
 
 ```
 TIP-2/
-  MIGRATION.md              # Plan, phases, full test matrix
-  contracts/API-CONTRACT.md # Frozen REST + WS contract
-  frontend/                 # Same UI as TIP (install deps here)
+  README.md
+  Architecture-Design-v1.0.md
+  frontend/                 # React + Vite UI
   docs/                     # Product / pattern docs
   backend/
-    app/                    # Python package (scaffold only)
-    tests/                  # pytest targets (empty until implementation)
-    db/migration/           # Postgres SQL V1–V5 (same as Java Flyway)
+    app/                    # Python package
+    tests/                  # pytest
+    db/migration/           # Postgres SQL V1–V5
     proto/                  # Upstox Market Data Feed V3 .proto
     reference/
       java-config/          # application.yml oracle
       java-tests/           # 51 Java tests to port
       java-test-resources/  # fixtures
-  *.md                      # Architecture & design copies
 ```
-
-## Do not implement until approved
-
-Implementation starts only when the owner explicitly says so. Until then:
-
-- Use this repo for planning, contracts, and frontend work against Java if needed.
-- To run the **current** product, use `../TIP` backend + this or TIP’s frontend.
-
-## When implementation starts (preview)
-
-```text
-# Backend (planned)
-cd backend
-python -m venv .venv
-# activate, pip install -r requirements.txt
-# uvicorn app.main:app --host 0.0.0.0 --port 8080
-
-# Frontend (ready to install)
-cd frontend
-npm ci
-npm run dev
-```
-
-Port **8080** and Vite proxy paths must stay aligned with `frontend/vite.config.js`.
 
 ## Local start (Windows)
 
@@ -69,6 +43,23 @@ Double-click **`start-tip2.bat`** in the repo root (or run it from a terminal).
 | `scripts/stop-tip2.bat` | Kills processes on ports 8080 and 5173 |
 
 Then open **http://127.0.0.1:5173** (login `admin` / `admin` by default).
+
+### Manual start
+
+```text
+# Backend
+cd backend
+python -m venv .venv
+# activate, pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8080
+
+# Frontend
+cd frontend
+npm ci
+npm run dev
+```
+
+Port **8080** and Vite proxy paths must stay aligned with `frontend/vite.config.js`.
 
 Local backend uses **Postgres on localhost** (`postgresql+psycopg://postgres:admin@localhost:5432/tip`).  
 `scripts/start-backend.bat` forces that URL so a Neon `DATABASE_URL` in `.env` is not used for local runs.  
@@ -87,11 +78,8 @@ Quick path:
 3. Redeploy static FE so `VITE_API_BASE_URL` is baked in.
 4. Login from `https://tip2-web.onrender.com` (works on mobile).
 
-## Validation
-
-Full automated + manual matrix: **`MIGRATION.md` §6–§7**.
-
 ## Related
 
+- Architecture: [`Architecture-Design-v1.0.md`](Architecture-Design-v1.0.md)
 - Source Java app: `../TIP`
-- Decisions to preserve: `Architectural-Decisions.md`
+- Product / pattern docs: `docs/`

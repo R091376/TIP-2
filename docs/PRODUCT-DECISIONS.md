@@ -55,6 +55,18 @@ Last updated: 2026-07-29. Revisit when starting last-day replay or strategy bots
 | UI | Dedicated `/paper` desk **and** chart-integrated paper Buy/Sell (see below) |
 | Reset | Admin reset wipes paper then resets cash |
 
+## App shell (broker-style chrome) — shipped
+
+> **Design SoT:** [`../UI-Layout-Design-v1.0.md`](../UI-Layout-Design-v1.0.md)
+
+| Decision | Choice |
+|----------|--------|
+| Chrome | Left **sidebar** app shell for all authenticated routes; login stays outside shell |
+| Nav | Dashboard → Pattern Stats; Charts → `/`; Watchlist/Alerts → `/?panel=…` (chart rail); Orders → `/paper/orders`; Positions → `/paper` |
+| Positions UI | Three metric cards (Today P&L, Total P&L, closed-lot Win Rate) + dense table + Close |
+| Orders UI | Open Orders / Order History panel, client filters, Buy/Sell pills, Working residual qty, Cancel |
+| Flag | **`VITE_FEATURE_APP_SHELL`** (default **ON**); shell is the only authenticated layout |
+
 ## Chart-integrated paper Buy/Sell — shipped
 
 > **Design SoT:** [`../Chart-Paper-Trade-Design-v1.0.md`](../Chart-Paper-Trade-Design-v1.0.md)

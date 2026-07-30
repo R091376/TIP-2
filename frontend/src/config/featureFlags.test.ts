@@ -52,3 +52,22 @@ describe('isChartPaperTradeEnabled', () => {
     }
   })
 })
+
+describe('isAppShellEnabled', () => {
+  afterEach(() => {
+    vi.resetModules()
+    vi.unstubAllEnvs()
+  })
+
+  it('defaults to ON when unset', async () => {
+    vi.stubEnv('VITE_FEATURE_APP_SHELL', '')
+    const { isAppShellEnabled } = await import('./featureFlags')
+    expect(isAppShellEnabled()).toBe(true)
+  })
+
+  it('can be turned off via env', async () => {
+    vi.stubEnv('VITE_FEATURE_APP_SHELL', 'false')
+    const { isAppShellEnabled } = await import('./featureFlags')
+    expect(isAppShellEnabled()).toBe(false)
+  })
+})

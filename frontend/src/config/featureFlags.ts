@@ -7,6 +7,9 @@
  * VITE_FEATURE_CHART_PAPER_TRADE — chart Buy/Sell chrome (buttons, modal, strip).
  *   default ON when unset; set to "false" / "0" / "off" to disable.
  *   Does not unmount ChartHeader; only gates trade chrome.
+ *
+ * VITE_FEATURE_APP_SHELL — broker-style left sidebar shell (always mounted in App.jsx).
+ *   default ON; retained for docs / emergency env documentation.
  */
 
 function envTruthy(raw: string | undefined, defaultValue: boolean): boolean {
@@ -31,6 +34,14 @@ export function isStartupReadyEnabled(): boolean {
 export function isChartPaperTradeEnabled(): boolean {
   return envTruthy(
     import.meta.env.VITE_FEATURE_CHART_PAPER_TRADE as string | undefined,
+    true,
+  )
+}
+
+/** Broker-style app shell — default ON (shell is the only authenticated layout). */
+export function isAppShellEnabled(): boolean {
+  return envTruthy(
+    import.meta.env.VITE_FEATURE_APP_SHELL as string | undefined,
     true,
   )
 }

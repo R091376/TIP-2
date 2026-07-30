@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { isChartPaperTradeEnabled } from '../config/featureFlags'
 import {
@@ -19,6 +20,7 @@ import { useChartNavigation } from '../hooks/useChartNavigation'
 import { useLiveMessageHandler } from '../hooks/useLiveMessageHandler'
 import { usePendingBootstrapPoll } from '../hooks/usePendingBootstrapPoll'
 import { paperTradeDisabledReason } from '../utils/paperTradable'
+import { parsePanel, stripPanelFromSearch } from '../utils/panelDeepLink'
 import { seriesKey } from '../utils/patternOverlay'
 import AlertsFeed from './AlertsFeed'
 import ChartHeader from './ChartHeader'
@@ -34,6 +36,8 @@ import SymbolSwitcher from './SymbolSwitcher'
  */
 export default function ChartContainer() {
   const { user, isAdmin, logout } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
 
   const chartTypeRef = useRef('candlestick')
   const marketPhaseRef = useRef('unknown')
@@ -413,8 +417,36 @@ export default function ChartContainer() {
     [activeSymbolId, tradeEnabled, displayName, setCloseAfterPlaceSync],
   )
 
+  // Panel deep-link: presence-only apply, then replace-strip panel (no-op when absent).
+  useEffect(() => {
+    const panel = parsePanel(location.search)
+    if (!panel) return
+
+    const isMobile =
+      typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches
+
+    if (isMobile) {
+      setMobilePanel(panel)
+    } else {
+      const el = document.querySelector(`[data-mobile-panel="${panel}"]`)
+      if (el instanceof HTMLElement) {
+        el.classList.add('is-panel-flash')
+        el.scrollIntoView({ block: 'nearest' })
+        try {
+          el.focus({ preventScroll: true })
+        } catch {
+          /* ignore */
+        }
+        window.setTimeout(() => el.classList.remove('is-panel-flash'), 1200)
+      }
+    }
+
+    const nextSearch = stripPanelFromSearch(location.search)
+    navigate({ pathname: location.pathname, search: nextSearch }, { replace: true })
+  }, [location.search, location.pathname, navigate])
+
   return (
-    <div className={`chart-page chart-page--mobile-${mobilePanel}`}>
+    <div className={`chart-page chart-page--in-shell chart-page--mobile-${mobilePanel}`}>
       <ChartHeader
         displayName={activeSymbolId ? displayName : 'Loading…'}
         connectionStatus={connectionStatus}
@@ -425,7 +457,6 @@ export default function ChartContainer() {
         onChartTypeChange={setChartType}
         controlsDisabled={controlsDisabled}
         user={user}
-        isAdmin={isAdmin}
         onLogout={() => logout()}
       />
 
@@ -488,7 +519,11 @@ export default function ChartContainer() {
         </div>
 
         <div className="right-rail">
-          <div className="right-rail__alerts" data-mobile-panel="alerts">
+          <div
+            className="right-rail__alerts"
+            data-mobile-panel="alerts"
+            tabIndex={-1}
+          >
             <AlertsFeed
               alerts={overlay.alerts}
               selectedId={overlay.selectedAlertId}
@@ -501,7 +536,11 @@ export default function ChartContainer() {
               symbolLabels={symbolLabels}
             />
           </div>
-          <div className="right-rail__watchlist" data-mobile-panel="watchlist">
+          <div
+            className="right-rail__watchlist"
+            data-mobile-panel="watchlist"
+            tabIndex={-1}
+          >
             <SymbolSwitcher
               watchlist={watchlist}
               activeSymbolId={activeSymbolId}

@@ -1,0 +1,45 @@
+:root {
+  /* Surfaces */
+  --tip-bg-app: #0a0e1a;
+  --tip-bg-sidebar: #0c1020;
+  --tip-bg-panel: #12182a;
+  --tip-bg-panel-elevated: #161d32;
+  --tip-border-subtle: #1e293b;
+  --tip-border-panel: rgba(51, 65, 85, 0.65);
+  --tip-grid-line: rgba(148, 163, 184, 0.04);
+
+  /* Text */
+  --tip-text-primary: #e2e8f0;
+  --tip-text-muted: #94a3b8;
+  --tip-text-faint: #64748b;
+
+  /* Sidebar */
+  --tip-nav-active-bg: rgba(148, 163, 184, 0.14);
+  --tip-nav-active-text: #f1f5f9;
+  --tip-nav-idle: #94a3b8;
+  --tip-sidebar-width-expanded: 200px;
+  --tip-sidebar-width-collapsed: 68px;
+
+  /* Buy / Sell pills */
+  --tip-buy-bg: rgba(34, 197, 94, 0.15);
+  --tip-buy-text: #4ade80;
+  --tip-buy-border: rgba(34, 197, 94, 0.35);
+  --tip-sell-bg: rgba(239, 68, 68, 0.15);
+  --tip-sell-text: #f87171;
+  --tip-sell-border: rgba(239, 68, 68, 0.35);
+
+  /* P&L */
+  --tip-pnl-pos: #4ade80;
+  --tip-pnl-neg: #f87171;
+
+  /* Actions */
+  --tip-danger: #ef4444;
+  --tip-danger-outline: rgba(239, 68, 68, 0.55);
+  --tip-focus-ring: #38bdf8;
+
+  /* Density */
+  --tip-table-row-h: 40px;
+  --tip-radius-panel: 14px;
+  --tip-radius-pill: 999px;
+  --tip-radius-nav: 10px;
+}

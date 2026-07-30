@@ -228,6 +228,13 @@
   overflow-x: hidden;
 }
 
+.admin-page--in-shell {
+  min-height: 0;
+  height: auto;
+  background: transparent;
+  padding: 0;
+}
+
 .admin-header {
   display: flex;
   align-items: flex-start;
