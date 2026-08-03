@@ -12,7 +12,8 @@ html {
 button,
 .timeframe-selector button,
 .chart-type-toggle button,
-.mobile-dock__btn {
+.chart-mobile-icons__btn,
+.timeframe-selector--select select {
   touch-action: manipulation;
 }
 
@@ -131,11 +132,7 @@ button,
   }
 }
 
-/* ── Phone (dock + single panel) ────────────────────────────────────── */
-
-.mobile-dock {
-  display: none;
-}
+/* ── Phone: compact single-row header + single panel ───────────────── */
 
 @media (max-width: 768px) {
   /* Chart paper trade: compact chips, 40–44px touch target */
@@ -158,58 +155,6 @@ button,
     max-width: 100%;
     max-height: 100dvh;
     border-radius: 12px 12px 0 0;
-  }
-
-  .chart-page {
-    /* leave room for bottom dock */
-    padding-bottom: 0;
-  }
-
-  .mobile-dock {
-    display: flex;
-    flex-shrink: 0;
-    align-items: stretch;
-    justify-content: space-around;
-    gap: 4px;
-    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
-    border-top: 1px solid #1e2433;
-    background: #0f1117;
-    z-index: 40;
-  }
-
-  .mobile-dock__btn {
-    flex: 1 1 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    min-height: 44px;
-    margin: 0;
-    padding: 8px 6px;
-    border: 1px solid transparent;
-    border-radius: 10px;
-    background: transparent;
-    color: #94a3b8;
-    font: inherit;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .mobile-dock__btn.is-active {
-    color: #f8fafc;
-    background: rgba(37, 99, 235, 0.25);
-    border-color: rgba(96, 165, 250, 0.35);
-  }
-
-  .mobile-dock__badge {
-    min-width: 1.25rem;
-    padding: 1px 6px;
-    border-radius: 999px;
-    background: rgba(167, 139, 250, 0.25);
-    color: #e9d5ff;
-    font-size: 0.6875rem;
-    font-variant-numeric: tabular-nums;
   }
 
   .chart-body {
@@ -268,18 +213,47 @@ button,
     min-height: 0;
   }
 
+  /*
+   * Single compact header row (phone):
+   *   CUPID ● | 5m▾ | Candle/Line | [chart][alerts][symbols]
+   * Full TF chips + text segment removed — more chart height.
+   */
   .chart-header {
-    padding: 8px 10px;
-    gap: 8px;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  .chart-header__title {
+    order: unset;
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 5px;
   }
 
   .chart-header h1 {
-    max-width: min(42vw, 9.5rem);
-    font-size: 0.95rem;
+    max-width: min(34vw, 8.5rem);
+    font-size: 0.875rem;
   }
 
-  .chart-header__controls {
-    gap: 8px;
+  /* Hide desktop chip row; show compact tools */
+  .chart-header__controls--desktop {
+    display: none !important;
+  }
+
+  .chart-header__mobile-tools {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  .connection-status__label {
+    display: none;
   }
 
   .chart-header__nav-link,
@@ -289,10 +263,6 @@ button,
 
   .user-account__name {
     max-width: 5.5rem;
-  }
-
-  .connection-status__label {
-    /* shorter chrome on narrow phones — still available via title on parent if needed */
   }
 
   .chart-error,
@@ -317,13 +287,38 @@ button,
 /* ── Small phones ───────────────────────────────────────────────────── */
 
 @media (max-width: 480px) {
+  .chart-header {
+    gap: 4px;
+    padding: 5px 6px;
+  }
+
   .chart-header__title {
-    gap: 8px;
+    gap: 4px;
   }
 
   .chart-header h1 {
-    max-width: min(38vw, 8rem);
-    font-size: 0.875rem;
+    max-width: min(28vw, 6.5rem);
+    font-size: 0.8125rem;
+  }
+
+  .chart-header__mobile-tools {
+    gap: 3px;
+  }
+
+  .chart-type-toggle--compact button {
+    padding: 4px 6px;
+    font-size: 0.625rem;
+  }
+
+  .chart-mobile-icons__btn {
+    width: 30px;
+    height: 30px;
+  }
+
+  .timeframe-selector--select select {
+    min-height: 30px;
+    padding: 3px 20px 3px 6px;
+    font-size: 0.6875rem;
   }
 
   .chart-trade-btn {

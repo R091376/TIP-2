@@ -1,6 +1,16 @@
-export default function ChartTypeToggle({ chartType, onChange, disabled = false }) {
+export default function ChartTypeToggle({
+  chartType,
+  onChange,
+  disabled = false,
+  /** Short labels for tight mobile chrome. */
+  compact = false,
+}) {
   return (
-    <div className="chart-type-toggle" role="group" aria-label="Chart type">
+    <div
+      className={`chart-type-toggle${compact ? ' chart-type-toggle--compact' : ''}`}
+      role="group"
+      aria-label="Chart type"
+    >
       <button
         type="button"
         className={chartType === 'candlestick' ? 'active' : ''}
@@ -8,7 +18,7 @@ export default function ChartTypeToggle({ chartType, onChange, disabled = false 
         title="Candlestick"
         disabled={disabled}
       >
-        Candlestick
+        {compact ? 'Candle' : 'Candlestick'}
       </button>
       <button
         type="button"

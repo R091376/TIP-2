@@ -4,9 +4,31 @@ export default function TimeframeSelector({
   onChange,
   disabled,
   orientation = 'horizontal',
+  /** Native select — compact mobile chrome (one control instead of 6 chips). */
+  variant = 'buttons',
 }) {
   if (!timeframes?.length) {
     return null
+  }
+
+  if (variant === 'select') {
+    return (
+      <label className="timeframe-selector timeframe-selector--select">
+        <span className="visually-hidden">Timeframe</span>
+        <select
+          value={value}
+          disabled={disabled}
+          aria-label="Timeframe"
+          onChange={(e) => onChange(e.target.value)}
+        >
+          {timeframes.map((tf) => (
+            <option key={tf} value={tf}>
+              {tf}
+            </option>
+          ))}
+        </select>
+      </label>
+    )
   }
 
   const vertical = orientation === 'vertical'

@@ -482,6 +482,9 @@ export default function ChartContainer() {
         chartType={chartType}
         onChartTypeChange={setChartType}
         controlsDisabled={controlsDisabled}
+        mobilePanel={mobilePanel}
+        onMobilePanelChange={setMobilePanel}
+        alertsCount={overlay.alerts?.length || 0}
       />
 
       {error && <div className="chart-error">{error}</div>}
@@ -581,33 +584,6 @@ export default function ChartContainer() {
           </div>
         </div>
       </div>
-
-      <nav className="mobile-dock" aria-label="Main panels">
-        <button
-          type="button"
-          className={`mobile-dock__btn${mobilePanel === 'chart' ? ' is-active' : ''}`}
-          onClick={() => setMobilePanel('chart')}
-        >
-          Chart
-        </button>
-        <button
-          type="button"
-          className={`mobile-dock__btn${mobilePanel === 'alerts' ? ' is-active' : ''}`}
-          onClick={() => setMobilePanel('alerts')}
-        >
-          Alerts
-          {overlay.alerts?.length > 0 ? (
-            <span className="mobile-dock__badge">{overlay.alerts.length}</span>
-          ) : null}
-        </button>
-        <button
-          type="button"
-          className={`mobile-dock__btn${mobilePanel === 'watchlist' ? ' is-active' : ''}`}
-          onClick={() => setMobilePanel('watchlist')}
-        >
-          Symbols
-        </button>
-      </nav>
 
       {chartPaperTradeOn && orderModal ? (
         <PaperOrderModal
