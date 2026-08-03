@@ -1,10 +1,14 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
 import RequireAuth from './auth/RequireAuth'
 import ChartContainer from './components/ChartContainer'
 import ErrorBoundary from './components/ErrorBoundary'
 import AppShell from './components/shell/AppShell'
+import { isAdminLearnEnabled } from './config/featureFlags'
+import { legacyAdminLearnToStandalone } from './learn/routing'
 import AdminUsersPage from './pages/AdminUsersPage'
+import LearnDetailPage from './pages/LearnDetailPage'
+import LearnIndexPage from './pages/LearnIndexPage'
 import LoginPage from './pages/LoginPage'
 import PaperOrdersPage from './pages/PaperOrdersPage'
 import PaperTradingPage from './pages/PaperTradingPage'
@@ -12,6 +16,24 @@ import PatternStatsPage from './pages/PatternStatsPage'
 import './App.css'
 import './pages/authPages.css'
 import './styles/tokens.css'
+
+function LearnGate({ children }) {
+  if (!isAdminLearnEnabled()) {
+    return <Navigate to="/" replace />
+  }
+  return (
+    <RequireAuth adminOnly>
+      <ErrorBoundary>{children}</ErrorBoundary>
+    </RequireAuth>
+  )
+}
+
+/** Preserve topic when redirecting old /admin/learn/* bookmarks. */
+function LegacyAdminLearnRedirect() {
+  const location = useLocation()
+  const to = legacyAdminLearnToStandalone(location.pathname)
+  return <Navigate to={to} replace />
+}
 
 function App() {
   return (
@@ -70,9 +92,29 @@ function App() {
                   </RequireAuth>
                 }
               />
+              {/* Standalone Learn — always registered (not conditional Route children). */}
+              <Route
+                path="learn"
+                element={
+                  <LearnGate>
+                    <LearnIndexPage key="learn-index" />
+                  </LearnGate>
+                }
+              />
+              <Route
+                path="learn/:kind/:slug"
+                element={
+                  <LearnGate>
+                    <LearnDetailPage key="learn-detail" />
+                  </LearnGate>
+                }
+              />
             </Route>
 
             <Route path="/admin" element={<Navigate to="/admin/users" replace />} />
+            {/* Old nested URLs after Learn was moved out of Admin */}
+            <Route path="/admin/learn/*" element={<LegacyAdminLearnRedirect />} />
+            <Route path="/admin/learn" element={<LegacyAdminLearnRedirect />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>

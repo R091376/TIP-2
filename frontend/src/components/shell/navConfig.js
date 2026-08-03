@@ -2,7 +2,9 @@
  * App sidebar navigation config (mock → product mapping).
  */
 
-/** @typedef {'dashboard'|'charts'|'watchlist'|'orders'|'positions'|'alerts'|'admin'} NavId */
+import { isAdminLearnEnabled } from '../../config/featureFlags'
+
+/** @typedef {'dashboard'|'charts'|'watchlist'|'orders'|'positions'|'alerts'|'admin'|'learn'} NavId */
 
 /**
  * @param {{ isAdmin?: boolean }} opts
@@ -19,6 +21,9 @@ export function getNavItems({ isAdmin = false } = {}) {
   ]
   if (isAdmin) {
     items.push({ id: 'admin', label: 'Admin', to: '/admin/users', icon: 'admin', adminOnly: true })
+    if (isAdminLearnEnabled()) {
+      items.push({ id: 'learn', label: 'Learn', to: '/learn', icon: 'learn', adminOnly: true })
+    }
   }
   return items
 }
@@ -39,6 +44,7 @@ export function isNavItemActive(id, loc) {
   if (id === 'positions') return path === '/paper' || path === '/paper/'
   if (id === 'orders') return path.startsWith('/paper/orders')
   if (id === 'dashboard') return path.startsWith('/patterns/stats')
+  if (id === 'learn') return path === '/learn' || path.startsWith('/learn/')
   if (id === 'admin') return path.startsWith('/admin')
   return false
 }

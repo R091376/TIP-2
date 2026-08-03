@@ -71,3 +71,22 @@ describe('isAppShellEnabled', () => {
     expect(isAppShellEnabled()).toBe(false)
   })
 })
+
+describe('isAdminLearnEnabled', () => {
+  afterEach(() => {
+    vi.resetModules()
+    vi.unstubAllEnvs()
+  })
+
+  it('defaults to ON when unset (content shipped)', async () => {
+    vi.stubEnv('VITE_FEATURE_ADMIN_LEARN', '')
+    const { isAdminLearnEnabled } = await import('./featureFlags')
+    expect(isAdminLearnEnabled()).toBe(true)
+  })
+
+  it('can be turned off', async () => {
+    vi.stubEnv('VITE_FEATURE_ADMIN_LEARN', 'false')
+    const { isAdminLearnEnabled } = await import('./featureFlags')
+    expect(isAdminLearnEnabled()).toBe(false)
+  })
+})

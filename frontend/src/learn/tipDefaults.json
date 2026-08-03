@@ -1,0 +1,76 @@
+{
+  "atr_period": 14,
+  "VOLUME_SMA_PERIOD": 20,
+  "indicators": {
+    "atr": { "period": 14 },
+    "donchian": { "period": 20 },
+    "volume_sma": { "period": 20 }
+  },
+  "breakout": {
+    "lookback_candles": 20,
+    "volume_avg_period": 20,
+    "confirmation_mode": "both",
+    "volume_multiplier": 1.5,
+    "retest_atr_mult": 0.25,
+    "strengthen_atr_mult": 1.0,
+    "success_rr": 2.0,
+    "success_atr_mult_without_retest": 2.0,
+    "detector_version": "breakout-v1"
+  },
+  "breakdown": {
+    "lookback_candles": 20,
+    "volume_avg_period": 20,
+    "confirmation_mode": "both",
+    "volume_multiplier": 1.5,
+    "retest_atr_mult": 0.25,
+    "strengthen_atr_mult": 1.0,
+    "success_rr": 2.0,
+    "success_atr_mult_without_retest": 2.0,
+    "detector_version": "breakdown-v1"
+  },
+  "pinbar": {
+    "shadow_body_mult": 2.0,
+    "max_body_range_ratio": 0.35,
+    "max_opposite_wick_range_ratio": 0.25,
+    "min_range_atr_mult": 0.5,
+    "success_atr_mult": 1.5,
+    "require_trend_context": true,
+    "trend_lookback": 10,
+    "max_candles_after_detect": 20,
+    "detector_version": "pinbar-v1"
+  },
+  "engulfing": {
+    "min_range_atr_mult": 0.5,
+    "success_atr_mult": 1.5,
+    "max_candles_after_detect": 20,
+    "detector_version": "engulfing-v1"
+  },
+  "inside_bar": {
+    "min_mother_range_atr_mult": 0.5,
+    "success_atr_mult": 1.5,
+    "max_candles_after_detect": 20,
+    "max_bars_after_inside": 5,
+    "detector_version": "inside-bar-v1"
+  },
+  "structure": {
+    "fractal_width": 2,
+    "success_atr_mult": 1.5,
+    "max_candles_after_detect": 30,
+    "detector_version": "structure-v1"
+  },
+  "consolidation": {
+    "window_candles": 10,
+    "range_atr_mult": 1.5,
+    "max_duration_candles": 30,
+    "tighten_ratio": 0.85,
+    "detector_version": "consolidation-v1"
+  },
+  "volume_breakout": {
+    "volume_avg_period": 20,
+    "volume_multiplier": 2.0,
+    "min_range_atr_mult": 0.5,
+    "success_atr_mult": 1.5,
+    "max_candles_after_detect": 20,
+    "detector_version": "volume-breakout-v1"
+  }
+}

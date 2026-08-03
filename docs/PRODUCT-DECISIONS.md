@@ -26,6 +26,7 @@ Last updated: 2026-07-29. Revisit when starting last-day replay or strategy bots
 | Default admin | `admin` / `TIP_ADMIN_PASSWORD` (default `admin`) |
 | Starting cash | ₹100,000 INR (configurable `tip.users.default-seed-cash`) |
 | Storage | PostgreSQL `app_users` + `cash_ledger` |
+| **Learn education** | Standalone desk at `/learn` (sidebar **Learn**, not nested under Admin). Still **ADMIN-only** access. Beginner explanations of indicators/patterns. **Operator UX**, not ACL of proprietary math. Flag: `VITE_FEATURE_ADMIN_LEARN` (default ON). Design: `docs/design-admin-learn-education.md` |
 
 ## Watchlist
 

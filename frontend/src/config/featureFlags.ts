@@ -46,6 +46,17 @@ export function isAppShellEnabled(): boolean {
   )
 }
 
+/**
+ * VITE_FEATURE_ADMIN_LEARN — admin Learn education UI (nav + routes).
+ *   default ON when unset (content shipped); set to "false" / "0" / "off" to disable.
+ */
+export function isAdminLearnEnabled(): boolean {
+  return envTruthy(
+    import.meta.env.VITE_FEATURE_ADMIN_LEARN as string | undefined,
+    true,
+  )
+}
+
 /** Max time to wait for API + Postgres before showing Retry (ms). */
 export const STARTUP_READY_TIMEOUT_MS = 180_000
 
