@@ -1,13 +1,16 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import '../styles/userAccount.css'
 
 /**
- * Shared account chip: user icon + name; Logout drops down on hover/click.
+ * Shared account chip: user icon + name; Logout menu on hover/click.
+ * @param {'bottom'|'top'} placement — open below (default) or above the trigger
  */
-export default function UserAccountMenu({ user, onLogout }) {
+export default function UserAccountMenu({ user, onLogout, placement = 'bottom' }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const accountRef = useRef(null)
   const closeTimerRef = useRef(null)
   const menuId = useId()
+  const dropUp = placement === 'top'
 
   function clearCloseTimer() {
     if (closeTimerRef.current != null) {
@@ -64,7 +67,7 @@ export default function UserAccountMenu({ user, onLogout }) {
   return (
     <div
       ref={accountRef}
-      className={`user-account${menuOpen ? ' is-open' : ''}`}
+      className={`user-account${menuOpen ? ' is-open' : ''}${dropUp ? ' user-account--drop-up' : ''}`}
       title={user?.username || undefined}
       onMouseEnter={openMenu}
       onMouseLeave={scheduleClose}

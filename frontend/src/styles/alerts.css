@@ -227,7 +227,7 @@
 }
 
 .alerts-feed__list--windowed {
-  /* spacers own height; keep gap only between real rows via padding on rows */
+  /* spacers + fixed row slots own height; no flex gap (included in row slot) */
   gap: 0;
 }
 
@@ -239,21 +239,40 @@
   padding: 0;
 }
 
+/*
+ * Fixed row slot (96px) must stay in lockstep with ALERT_ROW_H in AlertsFeed.jsx.
+ * Height includes a 4px bottom gap so windowed rows never paint over neighbors.
+ */
+.alerts-feed__row-item {
+  box-sizing: border-box;
+  flex-shrink: 0;
+  height: 96px;
+  margin: 0;
+  padding: 0 0 4px;
+  list-style: none;
+  overflow: hidden;
+}
+
 .alerts-feed__row {
   width: 100%;
+  height: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 4px;
   text-align: left;
   border: 1px solid rgba(42, 49, 68, 0.9);
   background: rgba(18, 22, 34, 0.85);
   color: #e2e8f0;
   font: inherit;
-  padding: 9px 11px;
+  padding: 8px 11px;
   border-radius: 10px;
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+  min-width: 0;
 }
 
 .alerts-feed__row:hover {
@@ -351,15 +370,21 @@
   gap: 8px;
   font-size: 0.6875rem;
   color: #64748b;
+  min-width: 0;
 }
 
 .alerts-feed__price {
+  flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
   color: #cbd5e1;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .alerts-feed__time {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
   font-variant-numeric: tabular-nums;
   overflow: hidden;
   text-overflow: ellipsis;

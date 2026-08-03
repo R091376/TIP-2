@@ -67,6 +67,15 @@
   z-index: 40;
 }
 
+/* Open above the trigger (sidebar footer) so Logout stays on-screen */
+.user-account--drop-up .user-account__menu {
+  top: auto;
+  bottom: 100%;
+  left: 0;
+  right: auto;
+  padding: 0 0 4px;
+}
+
 .user-account__menu[hidden] {
   display: none;
 }

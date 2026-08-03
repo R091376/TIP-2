@@ -35,7 +35,7 @@ import { useToasts } from '../hooks/useToasts'
  * Chart page composer — wires auth, engine, overlay, bootstrap, navigation, chrome.
  */
 export default function ChartContainer() {
-  const { user, isAdmin, logout } = useAuth()
+  const { user, isAdmin } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -362,7 +362,6 @@ export default function ChartContainer() {
         // Opener missing or disabled (e.g. switched to index/empty) — stable fallback
         const fallback =
           document.querySelector('.chart-top-toolbar .chart-trade-buttons') ||
-          document.querySelector('.chart-header__user a, .chart-header__user button') ||
           document.querySelector('.chart-header__controls button:not(:disabled)')
         if (fallback && typeof fallback.focus === 'function') {
           fallback.focus()
@@ -483,8 +482,6 @@ export default function ChartContainer() {
         chartType={chartType}
         onChartTypeChange={setChartType}
         controlsDisabled={controlsDisabled}
-        user={user}
-        onLogout={() => logout()}
       />
 
       {error && <div className="chart-error">{error}</div>}

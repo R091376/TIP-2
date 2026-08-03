@@ -132,12 +132,24 @@
 }
 
 .app-sidebar__footer {
+  position: relative;
   padding: 10px 12px 14px;
   border-top: 1px solid var(--tip-border-subtle, #1e293b);
   display: flex;
   flex-direction: column;
   gap: 8px;
   align-items: stretch;
+  overflow: visible;
+  z-index: 20;
+}
+
+.app-sidebar__footer .user-account {
+  width: 100%;
+}
+
+.app-sidebar__footer .user-account__trigger {
+  width: 100%;
+  justify-content: flex-start;
 }
 
 .app-sidebar--collapsed .app-sidebar__footer {
@@ -270,11 +282,20 @@
     transform: translateX(-105%);
     transition: transform 0.18s ease;
     box-shadow: none;
+    /* Above main content; when open, raised further above bottom nav (see below) */
+    z-index: 50;
+  }
+
+  .app-shell--drawer-open .app-shell__backdrop {
+    /* Dim bottom nav + page; must sit above .app-mobile-bottom-nav (55) */
+    z-index: 60;
   }
 
   .app-shell--drawer-open .app-sidebar {
     transform: translateX(0);
     box-shadow: 8px 0 32px rgba(0, 0, 0, 0.45);
+    /* Above backdrop + bottom nav so Administrator/Logout are not covered */
+    z-index: 70;
   }
 
   .app-sidebar--collapsed {
@@ -289,6 +310,13 @@
   .app-sidebar--collapsed .app-sidebar__link {
     justify-content: flex-start;
     padding: 10px 12px;
+  }
+
+  /* Keep account footer clear of home-indicator / bottom chrome */
+  .app-sidebar__footer {
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    flex-shrink: 0;
+    background: var(--tip-bg-sidebar, #0c1020);
   }
 
   .app-main__mobile-bar {

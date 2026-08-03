@@ -4,14 +4,19 @@
  * Client-side filters: symbol, timeframe, pattern type.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ALERTS_MAX, filterVisibleAlerts } from '../utils/alertList'
 
 const MAX_VISIBLE = ALERTS_MAX
 const ALL = ''
-/** Approximate row height for windowed list (px). */
-const ALERT_ROW_H = 76
-const ALERT_OVERSCAN = 6
+
+/**
+ * Fixed slot height for the windowed list (card + inter-row gap).
+ * Must match .alerts-feed__row-item height in alerts.css — too short causes
+ * adjacent cards to overlap (prices/text appear to mix between alerts).
+ */
+const ALERT_ROW_H = 96
+const ALERT_OVERSCAN = 8
 
 const STAGE_TONE = {
   detected: 'info',
@@ -132,31 +137,31 @@ export default function AlertsFeed({
     })
   }, [visibleAlerts, filterSymbol, filterTimeframe, filterPattern])
 
-  const items = filtered.slice(0, MAX_VISIBLE)
+  const items = useMemo(
+    () => filtered.slice(0, MAX_VISIBLE),
+    [filtered],
+  )
   const total = visibleAlerts.length
-  const listRef = useRef(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportH, setViewportH] = useState(480)
 
-  const onListScroll = useCallback((e) => {
+  function onListScroll(e) {
     setScrollTop(e.currentTarget.scrollTop)
-  }, [])
+  }
 
-  const onListRef = useCallback((el) => {
-    listRef.current = el
+  function onListRef(el) {
     if (el) setViewportH(el.clientHeight || 480)
-  }, [])
+  }
 
+  // Window only for longer lists; always use fixed row slots so cards never overlap.
   const windowed = useMemo(() => {
-    if (items.length <= 40) {
-      return { start: 0, end: items.length, padTop: 0, padBottom: 0, slice: items }
+    if (items.length <= 60) {
+      return { padTop: 0, padBottom: 0, slice: items }
     }
     const start = Math.max(0, Math.floor(scrollTop / ALERT_ROW_H) - ALERT_OVERSCAN)
     const visibleCount = Math.ceil(viewportH / ALERT_ROW_H) + ALERT_OVERSCAN * 2
     const end = Math.min(items.length, start + visibleCount)
     return {
-      start,
-      end,
       padTop: start * ALERT_ROW_H,
       padBottom: Math.max(0, (items.length - end) * ALERT_ROW_H),
       slice: items.slice(start, end),
@@ -300,13 +305,25 @@ export default function AlertsFeed({
               a.symbolId,
               symbolLabels[a.symbolId] || a.displayName,
             )
+            // Prefer stable unique key; fall back so duplicate/missing ids cannot
+            // reuse the wrong DOM node (which looked like mixed prices).
+            const rowKey =
+              a.id ||
+              [
+                a.instanceId || 'x',
+                a.stage || 'event',
+                a.time ?? '',
+                a.price ?? '',
+                a.symbolId || '',
+                a.timeframe || '',
+              ].join(':')
             return (
-              <li key={a.id} style={{ minHeight: ALERT_ROW_H }}>
+              <li key={rowKey} className="alerts-feed__row-item">
                 <button
                   type="button"
                   className={`alerts-feed__row${active ? ' alerts-feed__row--active' : ''}${focus ? ' alerts-feed__row--focus' : ''}`}
                   onClick={() => onSelect?.(a)}
-                  title={`Open ${label} on chart`}
+                  title={`Open ${label} on chart · @ ${formatPrice(a.price)}`}
                 >
                   <div className="alerts-feed__row-top">
                     <span className={`alerts-feed__stage alerts-feed__stage--${tone}`}>

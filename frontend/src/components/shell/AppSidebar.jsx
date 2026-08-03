@@ -72,7 +72,7 @@ export default function AppSidebar({
         >
           {expanded ? '«' : '»'}
         </button>
-        <UserAccountMenu user={user} onLogout={onLogout} />
+        <UserAccountMenu user={user} onLogout={onLogout} placement="top" />
       </div>
     </aside>
   )
