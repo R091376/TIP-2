@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../auth/useAuth'
 import PaperSkeleton from '../components/PaperSkeleton'
 import { useToasts } from '../hooks/useToasts'
 import {
@@ -117,7 +116,6 @@ function canModifyOrder(o) {
 }
 
 export default function PaperOrdersPage() {
-  const { user } = useAuth()
   const { pushToast } = useToasts()
   const [orders, setOrders] = useState([])
   const [fills, setFills] = useState([])
@@ -274,9 +272,6 @@ export default function PaperOrdersPage() {
             <h1 className="paper-desk-title">Orders</h1>
           </div>
           <div className="paper-desk-header__meta">
-            <span className="paper-desk-user-chip" title={user?.username || ''}>
-              {user?.displayName || user?.username || '—'}
-            </span>
             <button
               type="button"
               className="paper-desk-refresh"

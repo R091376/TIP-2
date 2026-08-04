@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { useAuth } from '../auth/useAuth'
 import { listTopics } from '../learn/catalog'
 import LearnDisclaimer from '../learn/components/LearnDisclaimer'
 import LearnGlossary from '../learn/components/LearnGlossary'
@@ -16,7 +15,6 @@ const GROUP_CHIPS = [
 ]
 
 export default function LearnIndexPage() {
-  const { user } = useAuth()
   const [q, setQ] = useState('')
   const [group, setGroup] = useState('all')
 
@@ -43,16 +41,7 @@ export default function LearnIndexPage() {
       <header className="admin-header">
         <div>
           <h1 className="admin-header__title">Learn</h1>
-          <p className="admin-header__sub">
-            How TIP calculates indicators and patterns
-            {user?.username ? (
-              <>
-                {' '}
-                · signed in as <strong>{user.username}</strong>
-                {user?.role ? ` · ${user.role}` : ''}
-              </>
-            ) : null}
-          </p>
+          <p className="admin-header__sub">How TIP calculates indicators and patterns</p>
         </div>
       </header>
 

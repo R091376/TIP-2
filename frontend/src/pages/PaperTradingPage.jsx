@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../auth/useAuth'
 import PaperSkeleton from '../components/PaperSkeleton'
 import { useToasts } from '../hooks/useToasts'
 import {
@@ -58,7 +57,6 @@ function newClientOrderId(prefix, extra = '') {
 }
 
 export default function PaperTradingPage() {
-  const { user } = useAuth()
   const { pushToast } = useToasts()
   const [account, setAccount] = useState(null)
   const [allLots, setAllLots] = useState([])
@@ -189,9 +187,6 @@ export default function PaperTradingPage() {
               Cash <strong>₹{money(account?.cashBalance)}</strong>
               <span className="paper-desk-cash__sep">·</span>
               Locked <strong>₹{money(account?.lockedCash)}</strong>
-            </span>
-            <span className="paper-desk-user-chip" title={user?.username || ''}>
-              {user?.displayName || user?.username || '—'}
             </span>
             <button
               type="button"

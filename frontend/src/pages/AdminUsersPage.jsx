@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useAuth } from '../auth/useAuth'
 import {
   createUser,
   listUsers,
@@ -27,7 +26,6 @@ function money(n) {
 }
 
 export default function AdminUsersPage() {
-  const { user } = useAuth()
   const [users, setUsers] = useState([])
   const [error, setError] = useState(null)
   const [info, setInfo] = useState(null)
@@ -96,10 +94,7 @@ export default function AdminUsersPage() {
       <header className="admin-header">
         <div>
           <h1 className="admin-header__title">Admin · Users</h1>
-          <p className="admin-header__sub">
-            Signed in as <strong>{user?.username || '—'}</strong>
-            {user?.role ? ` · ${user.role}` : ''}
-          </p>
+          <p className="admin-header__sub">Create accounts, roles, cash, and trading access</p>
         </div>
       </header>
 

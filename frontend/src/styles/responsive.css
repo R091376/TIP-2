@@ -52,10 +52,6 @@ button,
     flex: 1 1 100%;
   }
 
-  .chart-header__user {
-    margin-left: auto;
-  }
-
   .timeframe-selector button {
     padding: 6px 9px;
     font-size: 0.75rem;
@@ -280,11 +276,6 @@ button,
     display: none;
   }
 
-  .chart-header__nav-link,
-  .chart-header__admin-link {
-    font-size: 0.75rem;
-  }
-
   .user-account__name {
     max-width: 5.5rem;
   }
@@ -421,15 +412,6 @@ button,
 
   .chart-header__controls {
     gap: 6px;
-  }
-
-  .chart-header__user {
-    gap: 6px;
-  }
-
-  .chart-header__nav-link,
-  .chart-header__admin-link {
-    font-size: 0.6875rem;
   }
 
   .chart-header__trade {

@@ -67,46 +67,12 @@
   min-width: 0;
 }
 
-/* Paper Buy/Sell group — between controls and user; user keeps margin-left: auto */
+/* Legacy trade slot class (Buy/Sell live in chart toolbar today) */
 .chart-header__trade {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
-}
-
-.chart-header__user {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-left: auto;
-  flex-shrink: 0;
-  /* Sit flush with header right edge (header already has 16px padding) */
-  margin-right: 0;
-  padding-right: 0;
-}
-
-.chart-header__nav-link {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #93c5fd;
-  text-decoration: none;
-}
-
-.chart-header__nav-link:hover {
-  color: #bfdbfe;
-}
-
-.chart-header__admin-link {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #c4b5fd;
-  text-decoration: none;
-}
-
-.chart-header__admin-link:hover {
-  color: #ddd6fe;
 }
 
 .watchlist-sidebar__readonly-hint {

@@ -1,5 +1,4 @@
 import { Link, useParams } from 'react-router-dom'
-import { useAuth } from '../auth/useAuth'
 import { getTopic } from '../learn/catalog'
 import LearnDisclaimer from '../learn/components/LearnDisclaimer'
 import LearnParamsTable from '../learn/components/LearnParamsTable'
@@ -9,7 +8,6 @@ import './authPages.css'
 import './adminLearn.css'
 
 export default function LearnDetailPage() {
-  const { user } = useAuth()
   const { kind: kindParam, slug } = useParams()
   const kind = parseLearnKind(kindParam || '')
   const topic = kind && slug ? getTopic(kind, slug) : undefined
@@ -40,16 +38,7 @@ export default function LearnDetailPage() {
       <header className="admin-header">
         <div>
           <h1 className="admin-header__title">{topic.title}</h1>
-          <p className="admin-header__sub">
-            Learn
-            {user?.username ? (
-              <>
-                {' '}
-                · <strong>{user.username}</strong>
-                {user?.role ? ` · ${user.role}` : ''}
-              </>
-            ) : null}
-          </p>
+          <p className="admin-header__sub">Learn</p>
           <div className="learn-detail__meta">
             <span className="learn-badge">{topic.kind}</span>
             <span className="learn-badge">{topic.group}</span>
