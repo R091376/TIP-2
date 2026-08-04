@@ -1,8 +1,8 @@
 .chart-page {
   display: flex;
   flex-direction: column;
-  height: 100svh;
-  min-height: 100svh;
+  height: var(--app-vh, 100dvh);
+  min-height: var(--app-vh, 100dvh);
   text-align: left;
   background: #0a0c10;
   color: #e2e8f0;

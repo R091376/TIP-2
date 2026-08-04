@@ -1,5 +1,5 @@
 .paper-page {
-  min-height: 100vh;
+  min-height: var(--app-vh, 100dvh);
   background: #0b1220;
   color: #e2e8f0;
   padding: 20px 24px 48px;

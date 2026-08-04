@@ -71,12 +71,17 @@ export default function AppShell() {
   }, [])
 
   // Pin the document while the shell is mounted so mobile browsers cannot
-  // rubber-band / micro-scroll under the fixed chrome (URL bar + 100dvh drift).
+  // rubber-band / micro-scroll under the fixed chrome (URL bar height drift).
+  // CSS (html.app-shell-active) locks body; shell is sized to --app-vh.
   useEffect(() => {
     const root = document.documentElement
+    const scrollY = window.scrollY
     root.classList.add('app-shell-active')
+    // Ensure we start at the top of the visual frame (no residual document scroll).
+    window.scrollTo(0, 0)
     return () => {
       root.classList.remove('app-shell-active')
+      window.scrollTo(0, scrollY)
     }
   }, [])
 
@@ -101,23 +106,29 @@ export default function AppShell() {
           drawerOpen={drawerOpen}
           onNavigate={closeDrawer}
         />
-        <AppMain drawerOpen={drawerOpen} onOpenDrawer={openDrawer} />
-        <nav className="app-mobile-bottom-nav" aria-label="Primary">
-          {mobileNav.slice(0, 5).map((item) => {
-            const active = isNavItemActive(item.id, location)
-            return (
-              <NavLink
-                key={item.id}
-                to={item.to}
-                className={`app-mobile-bottom-nav__item${active ? ' is-active' : ''}`}
-                end={item.to === '/'}
-              >
-                <NavIcon name={item.icon} className="app-mobile-bottom-nav__icon" />
-                <span className="app-mobile-bottom-nav__label">{item.label}</span>
-              </NavLink>
-            )
-          })}
-        </nav>
+        {/*
+          Column owns main + bottom nav so the nav is in-flow (not position:fixed).
+          Fixed bottom bars often misalign with visualViewport on mobile browsers.
+        */}
+        <div className="app-shell__column">
+          <AppMain drawerOpen={drawerOpen} onOpenDrawer={openDrawer} />
+          <nav className="app-mobile-bottom-nav" aria-label="Primary">
+            {mobileNav.slice(0, 5).map((item) => {
+              const active = isNavItemActive(item.id, location)
+              return (
+                <NavLink
+                  key={item.id}
+                  to={item.to}
+                  className={`app-mobile-bottom-nav__item${active ? ' is-active' : ''}`}
+                  end={item.to === '/'}
+                >
+                  <NavIcon name={item.icon} className="app-mobile-bottom-nav__icon" />
+                  <span className="app-mobile-bottom-nav__label">{item.label}</span>
+                </NavLink>
+              )
+            })}
+          </nav>
+        </div>
       </div>
     </ToastProvider>
   )

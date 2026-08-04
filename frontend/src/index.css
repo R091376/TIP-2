@@ -6,13 +6,22 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Shared mobile chrome metrics (used by shell + chart) */
+
+  /* Safe areas (notch / home indicator / rounded corners) */
   --tip-safe-top: env(safe-area-inset-top, 0px);
   --tip-safe-right: env(safe-area-inset-right, 0px);
   --tip-safe-bottom: env(safe-area-inset-bottom, 0px);
   --tip-safe-left: env(safe-area-inset-left, 0px);
   --tip-mobile-nav-h: 56px;
   --tip-mobile-nav-total: calc(var(--tip-mobile-nav-h) + var(--tip-safe-bottom));
+
+  /*
+   * Visible viewport size — set by installVisualViewportSync() in main.jsx.
+   * Fallbacks keep desktop / no-JS usable before the first measurement.
+   */
+  --app-vh: 100dvh;
+  --app-vw: 100vw;
+  --app-vv-offset-top: 0px;
 }
 
 * {
@@ -20,36 +29,48 @@
 }
 
 /*
- * Viewport base for mobile browsers:
- * - Prefer a stable % height chain over stacking min-height: 100dvh (that often
- *   makes the document slightly taller than the visible tab and forces a tiny
- *   scroll to see the top/bottom chrome).
- * - -webkit-fill-available covers older iOS Safari address-bar quirks.
+ * Viewport base:
+ * Prefer --app-vh (visualViewport) over stacking min-height: 100dvh, which
+ * often makes the document a few pixels taller than the tab and forces a
+ * tiny scroll to see top/bottom chrome.
  */
 html {
   height: 100%;
+  height: var(--app-vh, 100%);
   height: -webkit-fill-available;
 }
 
 body {
   margin: 0;
   min-height: 100%;
+  min-height: var(--app-vh, 100%);
   min-height: -webkit-fill-available;
   background: #0a0c10;
   overflow-x: hidden;
   overscroll-behavior: none;
 }
 
-/* App shell pins the document while mounted (see AppShell). Auth pages stay scrollable. */
-html.app-shell-active,
-html.app-shell-active body {
-  height: 100%;
-  max-height: 100%;
+/*
+ * While AppShell is mounted: lock the document completely so iOS rubber-band
+ * and address-bar resize cannot micro-scroll under fixed chrome.
+ * Auth/login stays scrollable (no app-shell-active class).
+ */
+html.app-shell-active {
+  height: var(--app-vh, 100%);
+  max-height: var(--app-vh, 100%);
   overflow: hidden;
   overscroll-behavior: none;
-  /* iOS: stop rubber-band scroll of the document under a fixed shell */
-  position: relative;
-  touch-action: manipulation;
+}
+
+html.app-shell-active body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: var(--app-vh, 100%);
+  max-height: var(--app-vh, 100%);
+  overflow: hidden;
+  overscroll-behavior: none;
+  /* Don't use touch-action: manipulation on body — chart needs pan gestures */
 }
 
 #root {
@@ -57,6 +78,7 @@ html.app-shell-active body {
   max-width: none;
   margin: 0;
   min-height: 100%;
+  min-height: var(--app-vh, 100%);
   border: none;
   text-align: initial;
 }

@@ -1,17 +1,20 @@
 /* ── App shell ─────────────────────────────────────────────────────── */
 
 /*
- * Fixed to the visual frame so mobile browser chrome / 100dvh drift cannot
- * make the app slightly taller than the tab (tiny top/bottom scroll).
- * Safe-area padding keeps content clear of notches and rounded corners.
+ * Sized to the *visual* viewport (--app-vh from visualViewport sync), not
+ * 100dvh/100% of the layout viewport. That stops mobile browsers from making
+ * the app a few pixels taller than the tab (tiny top/bottom scroll + black
+ * corner gaps). Safe-area padding keeps content clear of notch / home bar.
  */
 .app-shell {
   display: flex;
   position: fixed;
-  inset: 0;
+  top: var(--app-vv-offset-top, 0px);
+  left: 0;
   width: 100%;
-  height: 100%;
-  max-height: 100%;
+  width: var(--app-vw, 100%);
+  height: var(--app-vh, 100dvh);
+  max-height: var(--app-vh, 100dvh);
   overflow: hidden;
   padding-top: var(--tip-safe-top, env(safe-area-inset-top, 0px));
   padding-left: var(--tip-safe-left, env(safe-area-inset-left, 0px));
@@ -38,6 +41,16 @@
 
 .app-shell--drawer-open .app-shell__backdrop {
   display: block;
+}
+
+/* Main column: fills remaining width; stacks main + mobile bottom nav in-flow */
+.app-shell__column {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* ── Sidebar ───────────────────────────────────────────────────────── */
@@ -202,12 +215,13 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* Never scroll the whole main — chrome (mobile bar) stays put; outlet scrolls. */
   overflow: hidden;
 }
 
 .app-main--desk {
-  overflow: auto;
-  padding: 20px 24px 40px;
+  overflow: hidden;
+  padding: 0;
 }
 
 .app-main--chart {
@@ -258,9 +272,22 @@
   flex-direction: column;
 }
 
+/*
+ * Desk pages: outlet is the only scroll container (mobile bar stays fixed).
+ * Padding lives here so content clears edges without scrolling chrome away.
+ */
 .app-main--desk .app-main__outlet {
   display: block;
-  height: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 20px 24px 40px;
+}
+
+.app-main--chart .app-main__outlet {
+  overflow: hidden;
+  padding: 0;
 }
 
 /* Chart height contract under shell */
@@ -364,27 +391,33 @@
 }
 
 @media (max-width: 899px) {
+  /*
+   * In-flow at the bottom of .app-shell__column (not position:fixed).
+   * Shell height is --app-vh, so the bar always sits in the visible tab
+   * without double-counting padding on main / home-indicator gaps.
+   */
   .app-mobile-bottom-nav {
     display: flex;
-    position: fixed;
-    /* Full-bleed bar (covers home-indicator black corners); content uses side safe padding */
-    left: 0;
-    right: 0;
-    bottom: 0;
+    position: relative;
+    flex-shrink: 0;
     z-index: 55;
-    /* Total height = bar + home-indicator; border-box so padding is inside */
+    /* Shell already applies L/R safe padding; only bottom inset needed here */
     height: var(--tip-mobile-nav-total, calc(56px + env(safe-area-inset-bottom, 0px)));
-    padding: 0 max(4px, var(--tip-safe-right, env(safe-area-inset-right, 0px)))
-      var(--tip-safe-bottom, env(safe-area-inset-bottom, 0px))
-      max(4px, var(--tip-safe-left, env(safe-area-inset-left, 0px)));
+    padding: 0 4px var(--tip-safe-bottom, env(safe-area-inset-bottom, 0px));
     background: var(--tip-bg-sidebar, #0c1020);
     border-top: 1px solid var(--tip-border-subtle, #1e293b);
     justify-content: space-around;
     align-items: stretch;
   }
 
+  /* No padding-bottom reserve — nav is in-flow and takes its own space */
   .app-shell--with-mobile-nav .app-main {
-    padding-bottom: var(--tip-mobile-nav-total, calc(56px + env(safe-area-inset-bottom, 0px)));
+    padding-bottom: 0;
+  }
+
+  /* Tighter desk padding on phones */
+  .app-main--desk .app-main__outlet {
+    padding: 12px 14px 16px;
   }
 
   .app-mobile-bottom-nav__item {

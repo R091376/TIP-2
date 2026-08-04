@@ -145,7 +145,7 @@
 .paper-order-modal {
   width: 100%;
   max-width: 28rem;
-  max-height: min(100dvh, 100%);
+  max-height: min(var(--app-vh, 100dvh), 100%);
   overflow: auto;
   background: #12161f;
   border: 1px solid #2a3348;

@@ -153,7 +153,7 @@ button,
 
   .paper-order-modal {
     max-width: 100%;
-    max-height: 100dvh;
+    max-height: var(--app-vh, 100dvh);
     border-radius: 12px 12px 0 0;
   }
 
@@ -379,7 +379,7 @@ button,
     padding: 3px 6px;
   }
 
-  .admin-page {
+  .admin-page:not(.admin-page--in-shell) {
     padding: 12px 12px 28px;
   }
 
@@ -392,7 +392,9 @@ button,
   }
 
   .auth-page {
-    padding: 16px;
+    /* Horizontal only — vertical safe padding comes from the base .auth-page rule */
+    padding-left: max(16px, var(--tip-safe-left, env(safe-area-inset-left, 0px)));
+    padding-right: max(16px, var(--tip-safe-right, env(safe-area-inset-right, 0px)));
   }
 }
 
@@ -461,7 +463,8 @@ button,
 /* ── Admin / stats tables ───────────────────────────────────────────── */
 
 @media (max-width: 900px) {
-  .admin-page {
+  /* Standalone only — in-shell pages get padding from .app-main__outlet */
+  .admin-page:not(.admin-page--in-shell) {
     padding: 16px 14px 32px;
   }
 
