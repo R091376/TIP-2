@@ -116,6 +116,9 @@ def health(
         body["marketPhase"] = container.market_status.get_market_phase().value
         body["liveFeedConnected"] = container.market_status.is_live_feed_connected()
         body["bootstrapStatus"] = container.market_status.get_bootstrap_status().value
+        feed = getattr(container, "feed_client", None)
+        if feed is not None and hasattr(feed, "diagnostics"):
+            body["liveFeed"] = feed.diagnostics()
     except Exception:
         pass
 

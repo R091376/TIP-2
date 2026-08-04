@@ -62,7 +62,7 @@ def get_status(request: Request, _user: AuthUser):
             error = None
 
     last = c.market_status.get_last_seeded_at()
-    return {
+    body = {
         "marketPhase": c.market_status.get_market_phase().value,
         "bootstrapStatus": status.value if isinstance(status, BootstrapStatus) else status,
         "bootstrapError": error,
@@ -70,6 +70,13 @@ def get_status(request: Request, _user: AuthUser):
         "liveFeedConnected": c.market_status.is_live_feed_connected(),
         "candleCount": c.market_status.get_seeded_candle_count(),
     }
+    feed = getattr(c, "feed_client", None)
+    if feed is not None and hasattr(feed, "diagnostics"):
+        try:
+            body["liveFeed"] = feed.diagnostics()
+        except Exception:
+            pass
+    return body
 
 
 @router.get("/candles")

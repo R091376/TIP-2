@@ -5,7 +5,9 @@ import json
 import logging
 import ssl
 import threading
-from typing import Callable
+import time
+from datetime import datetime, timezone
+from typing import Any, Callable
 
 import httpx
 import websockets
@@ -47,6 +49,14 @@ class UpstoxFeedClient:
         self._connected = False
         self._ws_send: Callable | None = None
         self._pb2 = _try_load_pb2()
+        # Diagnostics (thread-safe via _lock)
+        self._ws_message_count = 0
+        self._tick_count = 0
+        self._last_ws_message_at: float | None = None
+        self._last_tick_at: float | None = None
+        self._last_tick_key: str | None = None
+        self._last_error: str | None = None
+        self._connected_at: float | None = None
 
     def set_event_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
@@ -57,6 +67,29 @@ class UpstoxFeedClient:
 
     def is_connected(self) -> bool:
         return self._connected
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Snapshot for /api/health and ops debugging."""
+        with self._lock:
+            now = time.time()
+            last_msg = self._last_ws_message_at
+            last_tick = self._last_tick_at
+            return {
+                "connected": self._connected,
+                "threadAlive": bool(self._thread and self._thread.is_alive()),
+                "subscribedCount": len(self._subscribed),
+                "wsMessageCount": self._ws_message_count,
+                "tickCount": self._tick_count,
+                "lastWsMessageAgeSec": None
+                if last_msg is None
+                else round(now - last_msg, 1),
+                "lastTickAgeSec": None if last_tick is None else round(now - last_tick, 1),
+                "lastTickInstrument": self._last_tick_key,
+                "lastTickAt": _iso_epoch(last_tick),
+                "connectedAt": _iso_epoch(self._connected_at),
+                "lastError": self._last_error,
+                "hasAccessToken": bool((self._settings.upstox_access_token or "").strip()),
+            }
 
     def connect(self, instrument_keys: set[str], handler: Callable[[Tick], None]) -> None:
         if handler is None:
@@ -152,16 +185,21 @@ class UpstoxFeedClient:
         while not self._stop.is_set():
             try:
                 await self._session()
-            except Exception:
+            except Exception as e:
                 logger.exception("Upstox feed session error; reconnecting in 3s")
+                with self._lock:
+                    self._last_error = f"{type(e).__name__}: {e}"
                 self._market_status.set_live_feed_connected(False)
                 self._connected = False
+                self._connected_at = None
                 await asyncio.sleep(3)
 
     async def _session(self) -> None:
         token = self._settings.upstox_access_token
         if not token:
             logger.warning("No UPSTOX_ACCESS_TOKEN; feed idle")
+            with self._lock:
+                self._last_error = "No UPSTOX_ACCESS_TOKEN"
             await asyncio.sleep(5)
             return
 
@@ -172,15 +210,25 @@ class UpstoxFeedClient:
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
 
-        async with websockets.connect(
-            ws_url,
-            ssl=ssl_ctx,
-            max_size=8 * 1024 * 1024,
-            ping_interval=20,
-            ping_timeout=20,
-        ) as ws:
+        try:
+            ws_cm = websockets.connect(
+                ws_url,
+                ssl=ssl_ctx,
+                max_size=8 * 1024 * 1024,
+                ping_interval=20,
+                ping_timeout=20,
+            )
+        except Exception as e:
+            with self._lock:
+                self._last_error = f"connect_init: {type(e).__name__}: {e}"
+            raise
+
+        async with ws_cm as ws:
             self._connected = True
+            self._connected_at = time.time()
             self._market_status.set_live_feed_connected(True)
+            with self._lock:
+                self._last_error = None
             logger.info("Upstox V3 feed connected")
 
             loop = asyncio.get_running_loop()
@@ -208,22 +256,46 @@ class UpstoxFeedClient:
                 logger.info("Subscribed live feed keys=%s (reconnect-safe reapply)", len(keys))
 
             msg_count = 0
+            last_stats_log = time.time()
             try:
                 async for message in ws:
                     if self._stop.is_set():
                         break
+                    now = time.time()
+                    with self._lock:
+                        self._ws_message_count += 1
+                        self._last_ws_message_at = now
                     self._handle_message(message)
                     msg_count += 1
                     if msg_count <= 3 or msg_count % 200 == 0:
                         logger.debug(
-                            "Upstox feed message #%s (%s bytes)",
+                            "Upstox feed message #%s (%s bytes) ticks_total=%s",
                             msg_count,
                             len(message) if message else 0,
+                            self._tick_count,
+                        )
+                    # Periodic health line while connected (every ~60s)
+                    if now - last_stats_log >= 60:
+                        last_stats_log = now
+                        d = self.diagnostics()
+                        logger.info(
+                            "Upstox feed stats: msgs=%s ticks=%s last_msg_age=%ss last_tick_age=%ss keys=%s",
+                            d.get("wsMessageCount"),
+                            d.get("tickCount"),
+                            d.get("lastWsMessageAgeSec"),
+                            d.get("lastTickAgeSec"),
+                            d.get("subscribedCount"),
                         )
             finally:
                 self._connected = False
+                self._connected_at = None
                 self._ws_send = None
                 self._market_status.set_live_feed_connected(False)
+                logger.warning(
+                    "Upstox feed session closed after %s messages (%s ticks)",
+                    msg_count,
+                    self._tick_count,
+                )
 
     async def _resolve_ws_url(self, token: str) -> str:
         try:
@@ -431,6 +503,19 @@ class UpstoxFeedClient:
         return None
 
     def _dispatch(self, tick: Tick) -> None:
+        with self._lock:
+            self._tick_count += 1
+            self._last_tick_at = time.time()
+            self._last_tick_key = tick.instrument_key
+            n = self._tick_count
+        if n <= 3 or n % 500 == 0:
+            logger.debug(
+                "Upstox tick #%s %s ltp=%s vtt=%s",
+                n,
+                tick.instrument_key,
+                tick.price,
+                tick.volume_traded_today,
+            )
         handler = self._tick_handler
         if not handler:
             return
@@ -452,6 +537,12 @@ class UpstoxFeedClient:
                 cb(tick)
             except Exception:
                 logger.exception("Tick handler failed")
+
+
+def _iso_epoch(ts: float | None) -> str | None:
+    if ts is None:
+        return None
+    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _try_load_pb2():
