@@ -27,7 +27,7 @@ export const atr14: LearnTopic = {
     'ATR_t = (ATR_{t−1} × 13 + TR_t) / 14',
   workedExample: {
     narrative:
-      'Toy series with period 3 so you can see the steps. TIP production uses period 14 with the same method.',
+      'Toy series with period 3 so you can see the steps. TIP production uses period 14 with the same method. Patterns freeze ATR at detect as the R-unit.',
     periodNote: 'Example uses N=3; TIP uses 14.',
     inputs: [
       { label: 'Bar 1 close', value: '100' },
@@ -36,14 +36,109 @@ export const atr14: LearnTopic = {
       { label: 'Bar 4 H/L/C', value: '108 / 102 / 107' },
     ],
     steps: [
-      'TR2 = max(105−99, |105−100|, |99−100|) = max(6, 5, 1) = 6',
-      'TR3 = max(104−100, |104−103|, |100−103|) = max(4, 1, 3) = 4',
-      'TR4 = max(108−102, |108−101|, |102−101|) = max(6, 7, 1) = 7',
-      'First ATR (N=3) = (6 + 4 + 7) / 3 = 5.67',
-      'If a next TR were 3: ATR = (5.67×2 + 3) / 3 ≈ 4.78',
+      'TR2 = max(105−99, |105−100|, |99−100|) = 6',
+      'TR3 = max(104−100, |104−103|, |100−103|) = 4',
+      'TR4 = max(108−102, |108−101|, |102−101|) = 7',
+      'First ATR (N=3) = (6+4+7)/3 = 5.67',
     ],
     result:
-      'TIP would report ATR ≈ 5.67 after the first full window (with N=3). With N=14 it waits for more bars, then uses Wilder smoothing the same way.',
+      'TIP would report ATR ≈ 5.67 after the first full toy window. With N=14 it waits for more bars, then uses Wilder smoothing the same way.',
+    scenarios: [
+      {
+        id: 'compute',
+        title: 'Compute ATR (toy N=3)',
+        narrative:
+          'ATR is not a buy/sell signal. It is a size ruler. We use a tiny period so the arithmetic is obvious.',
+        periodNote: 'Example uses N=3; TIP production uses 14 with the same Wilder method.',
+        setup: [
+          { label: 'Prior close (bar 1)', value: '100' },
+          { label: 'Bar 2 H/L/C', value: '105 / 99 / 103' },
+          { label: 'Bar 3 H/L/C', value: '104 / 100 / 101' },
+          { label: 'Bar 4 H/L/C', value: '108 / 102 / 107' },
+        ],
+        diagram: {
+          type: 'bars',
+          title: 'True ranges → first ATR (toy N=3)',
+          caption:
+            'Each bar is one true range (TR2=6, TR3=4, TR4=7). Dashed line is first ATR = average = 5.67. Production uses N=14 with the same idea.',
+          bars: [
+            { label: 'TR2', value: 6, note: 'max(6,5,1)' },
+            { label: 'TR3', value: 4, note: 'max(4,1,3)' },
+            { label: 'TR4', value: 7, note: 'max(6,7,1)' },
+          ],
+          averageLine: { value: 5.67, label: 'First ATR' },
+        },
+        timeline: [
+          {
+            label: 'Bar 2',
+            ohlc: 'H 105 / L 99 / C 103',
+            note: 'TR = max(6, 5, 1) = 6 (includes gap vs prior close 100).',
+          },
+          {
+            label: 'Bar 3',
+            ohlc: 'H 104 / L 100 / C 101',
+            note: 'TR = max(4, 1, 3) = 4.',
+          },
+          {
+            label: 'Bar 4',
+            ohlc: 'H 108 / L 102 / C 107',
+            note: 'TR = max(6, 7, 1) = 7. First ATR = mean(6,4,7) = 5.67.',
+          },
+        ],
+        scoreboards: [
+          {
+            label: 'After first ATR',
+            rows: [
+              { metric: 'ATR', value: '≈ 5.67' },
+              { metric: 'If next TR = 3', value: 'ATR = (5.67×2 + 3)/3 ≈ 4.78' },
+            ],
+          },
+        ],
+        steps: [
+          'True range takes the largest of bar height and gap distances to prior close.',
+          'First ATR averages the first N true ranges.',
+          'Later bars use Wilder smoothing so ATR changes gradually.',
+        ],
+        result:
+          'With enough bars, TIP always has an ATR number patterns can freeze at detect.',
+      },
+      {
+        id: 'consume',
+        title: 'How patterns use ATR',
+        narrative:
+          'When Breakout detects, it freezes atr_at_detect. That single number drives retest distance, strengthen distance, the no-retest target, and R for MFE/MAE.',
+        setup: [
+          { label: 'Example frozen ATR', value: '2' },
+          { label: 'Breakout reference', value: '100' },
+          { label: 'No-retest target', value: '100 + 2×2 = 104' },
+          { label: 'Retest band (0.25×ATR)', value: 'within 0.5 of reference' },
+          { label: 'If entry 101 and best high 104.3', value: 'MFE(R) = (104.3−101)/2 = 1.65 R' },
+        ],
+        diagram: {
+          type: 'candles',
+          title: 'How breakout consumes ATR = 2',
+          caption:
+            'Same rails as the Breakout success story: stop/ref at 100, entry 101, target = ref + 2×ATR = 104. ATR is the yardstick, not a signal by itself.',
+          candles: [
+            { o: 100.5, h: 101.5, l: 100.2, c: 101, label: 'Detect', emphasis: true },
+            { o: 101.2, h: 102.0, l: 100.5, c: 101.8, label: 'B1' },
+            { o: 101.2, h: 104.3, l: 101.5, c: 103.9, label: 'Target' },
+          ],
+          levels: [
+            { price: 104, label: 'Tgt 2×ATR', kind: 'target' },
+            { price: 101, label: 'Entry', kind: 'entry' },
+            { price: 100, label: 'Ref/Stop', kind: 'reference' },
+          ],
+        },
+        steps: [
+          'ATR answers “how big is normal?” so a ₹2 stock and a ₹2000 stock can share the same R language.',
+          'Patterns that need ATR will not open while ATR is still warming up.',
+          'Open the Breakout Learn page for a full trade timeline using ATR = 2.',
+        ],
+        result:
+          'ATR itself does not detect breakouts — breakout/breakdown/pinbars/etc. consume ATR as a yardstick.',
+      },
+    ],
   },
   tipParameters: [
     tipParam('indicators.atr.period', 'Default Wilder period (AtrIndicator.DEFAULT_PERIOD)'),
@@ -57,5 +152,5 @@ export const atr14: LearnTopic = {
   ],
   sourceDocs: ['docs/indicators/atr-14.md'],
   sourceCode: ['backend/app/indicators/atr.py'],
-  lastReviewed: '2026-08-03',
+  lastReviewed: '2026-08-04',
 }

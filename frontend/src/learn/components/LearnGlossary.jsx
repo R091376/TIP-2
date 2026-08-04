@@ -74,17 +74,22 @@ const STATS_TERMS = [
   {
     term: 'MFE (Maximum Favorable Excursion)',
     gloss:
-      'Best favorable move the virtual trade saw before it ended — “how good did it get in your direction?” Dashboard shows the average as MFE (R).',
+      'Best favorable move the virtual trade saw before it ended — “how good did it get in your direction?” Updated every open bar from price extremes; recorded on both wins and losses. Dashboard average is MFE (R). Walk a full numbers story on Learn → Breakout.',
   },
   {
     term: 'MAE (Maximum Adverse Excursion)',
     gloss:
-      'Worst move against the virtual trade before it ended — “how much pain before exit?” Lower average MAE (R) is usually better. Dashboard sorts MAE ascending when you pick that sort.',
+      'Worst move against the virtual trade before it ended — “how much pain before exit?” Also updated every open bar and kept on success and fail. Lower average MAE (R) is usually better. Dashboard sorts MAE ascending when you pick that sort.',
   },
   {
     term: 'MFE (R) / MAE (R)',
     gloss:
-      'MFE or MAE divided by the setup’s R-unit (typically ATR at detect). Using R makes a ₹2 stock comparable to a ₹2000 stock.',
+      'MFE or MAE divided by the setup’s R-unit (typically ATR at detect). Using R makes a ₹2 stock comparable to a ₹2000 stock. Not the same as target/stop — those end the trade; MFE/MAE score the path.',
+  },
+  {
+    term: 'Target vs stop vs MFE/MAE',
+    gloss:
+      'Target and stop are decision rules (when to mark Succeeded or Failed). MFE and MAE are measurements of the best/worst path while the setup was open. Hitting target does not erase MAE; failing does not erase MFE.',
   },
   {
     term: 'Avg move (R)',

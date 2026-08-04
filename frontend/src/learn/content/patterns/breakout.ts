@@ -1,3 +1,4 @@
+import { LONG_TRADE_RULES_VS_MEASUREMENTS } from '../../exampleBlocks'
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
 
@@ -31,21 +32,206 @@ export const breakout: LearnTopic = {
     'retest: low ≤ reference + 0.25×ATR and close ≥ reference\n' +
     'target (no retest) ≈ reference + 2×ATR',
   workedExample: {
-    narrative: 'Prior ceiling is 100. Bar closes at 101 with solid volume; later retests 100.1 then runs.',
+    narrative:
+      'Prior ceiling 100, ATR 2, detect close 101. Success hits target 104; fail closes back under 100. Both paths track MFE and MAE.',
     inputs: [
-      { label: 'Prior Donchian high', value: '100' },
-      { label: 'Signal close / volume', value: '101 / 2.0× avg' },
+      { label: 'Prior Donchian high (reference)', value: '100' },
       { label: 'ATR at detect', value: '2' },
+      { label: 'Detect close / high / low', value: '101 / 101.5 / 100.2' },
+      { label: 'No-retest target', value: '100 + 2×2 = 104' },
     ],
     steps: [
-      'close 101 > 100 → Detected, reference frozen at 100',
-      'Volume 2× avg ≥ 1.5× → volume leg of confirmation OK',
-      'Later bar closes 100.5 > 100 → Confirmed',
-      'Low 100.1 within 0.25×ATR of 100, close still ≥ 100 → Retested',
-      'Target path uses measured move from retest floor (or 2×ATR if no retest)',
+      'Detect freezes entry 101, stop 100, target 104, ATR 2',
+      'Every open bar updates best high (for MFE) and worst low (for MAE)',
+      'Fail if close < 100; succeed if high ≥ 104',
     ],
     result:
-      'TIP would mark Detected (and can progress Confirmed / Retested). A later close below 100 would Failed.',
+      'TIP journals both MFE(R) and MAE(R) whether the setup succeeds or fails — target/stop end the game; MFE/MAE score the path.',
+    scenarios: [
+      {
+        id: 'success',
+        title: 'Success path (target hit, no retest)',
+        narrative:
+          'Think of a virtual long trade. At detect, TIP freezes the rails. Each later closed bar first updates the path scoreboard (best high / worst low), then checks fail and success rules.',
+        setup: [
+          { label: 'Reference (prior 20-bar high)', value: '100' },
+          { label: 'ATR at detect (R-unit)', value: '2' },
+          { label: 'Detect O/H/L/C', value: '100.5 / 101.5 / 100.2 / 101' },
+          { label: 'Entry (detect close)', value: '101' },
+          { label: 'Stop (reference)', value: '100' },
+          { label: 'Target (no retest)', value: '100 + 2×ATR = 104' },
+        ],
+        diagram: {
+          type: 'candles',
+          title: 'Breakout success — rails + path',
+          caption:
+            'Blue band = detect bar. Yellow dashed = reference/stop 100. Blue = entry 101. Green = target 104. Bar 3 high clears the target.',
+          candles: [
+            { o: 100.5, h: 101.5, l: 100.2, c: 101, label: 'B0 detect', emphasis: true },
+            { o: 101.2, h: 102.0, l: 100.5, c: 101.8, label: 'B1' },
+            { o: 101.5, h: 101.7, l: 100.1, c: 100.8, label: 'B2 dip' },
+            { o: 101.2, h: 104.3, l: 101.5, c: 103.9, label: 'B3 win' },
+          ],
+          levels: [
+            { price: 104, label: 'Target', kind: 'target' },
+            { price: 101, label: 'Entry', kind: 'entry' },
+            { price: 100, label: 'Stop/Ref', kind: 'stop' },
+          ],
+        },
+        timeline: [
+          {
+            label: 'Bar 0 (detect)',
+            ohlc: 'O 100.5 / H 101.5 / L 100.2 / C 101',
+            note: 'close 101 > 100 → Detected. Freeze entry 101, stop 100, target 104. Start path: best high 101.5, worst low 100.2.',
+          },
+          {
+            label: 'Bar 1',
+            ohlc: 'H 102.0 / L 100.5 / C 101.8',
+            note: 'Update scoreboard → best high 102, worst low still 100.2. Close not < 100; high not ≥ 104 → still open.',
+          },
+          {
+            label: 'Bar 2 (dip)',
+            ohlc: 'H 101.7 / L 100.1 / C 100.8',
+            note: 'Worst low → 100.1 (more pain). Still close ≥ 100 → not failed. Still below target.',
+          },
+          {
+            label: 'Bar 3 (target)',
+            ohlc: 'H 104.3 / L 101.5 / C 103.9',
+            note: 'Best high → 104.3. High ≥ 104 → Succeeded (price_target). Trade ends.',
+          },
+        ],
+        scoreboards: [
+          {
+            label: 'After detect (bar 0)',
+            rows: [
+              { metric: 'Entry / Stop / Target', value: '101 / 100 / 104' },
+              { metric: 'MFE (R)', value: '(101.5−101)/2 = 0.25 R' },
+              { metric: 'MAE (R)', value: '(101−100.2)/2 = 0.40 R' },
+              { metric: 'Stage', value: 'Detected (open)' },
+            ],
+          },
+          {
+            label: 'Final (bar 3 success)',
+            rows: [
+              { metric: 'Outcome', value: 'Succeeded' },
+              { metric: 'MFE (R)', value: '(104.3−101)/2 = 1.65 R' },
+              { metric: 'MAE (R)', value: '(101−100.1)/2 = 0.45 R' },
+              { metric: 'Move (R) at end close', value: '(103.9−101)/2 = 1.45 R' },
+            ],
+          },
+        ],
+        steps: [
+          'Detect only when a closed bar’s close is above the prior ceiling (signal bar not in that window).',
+          'At detect: freeze entry, stop, first target, and ATR used as the R-unit.',
+          'On every later bar: update best high / worst low first, then check fail (close < stop), then success (high ≥ target).',
+          'MFE can exceed the target distance if price overshoots (here 104.3 vs target 104).',
+          'Winners still have MAE — this success absorbed 0.45 R of adverse dip first.',
+        ],
+        rulesVsMeasurements: { ...LONG_TRADE_RULES_VS_MEASUREMENTS },
+        result:
+          'TIP marks Succeeded with MFE ≈ 1.65 R and MAE ≈ 0.45 R. Target decided the win; MFE/MAE describe how the path looked.',
+      },
+      {
+        id: 'fail',
+        title: 'Fail path (close back under reference)',
+        narrative:
+          'Same detect rails. Price goes a little in favor, then a closed bar finishes below the stop/reference → Failed. MFE is still recorded.',
+        setup: [
+          { label: 'Same freeze as success story', value: 'entry 101, stop 100, target 104, ATR 2' },
+        ],
+        diagram: {
+          type: 'candles',
+          title: 'Breakout fail — close back under stop',
+          caption:
+            'Same rails as success. Bar 1 makes a small favorable high (MFE). Bar 2 closes under 100 → Failed; MAE uses the low at 99.5.',
+          candles: [
+            { o: 100.5, h: 101.5, l: 100.2, c: 101, label: 'B0 detect', emphasis: true },
+            { o: 101.0, h: 102.0, l: 100.4, c: 101.5, label: 'B1' },
+            { o: 101.0, h: 101.0, l: 99.5, c: 99.7, label: 'B2 fail' },
+          ],
+          levels: [
+            { price: 104, label: 'Target', kind: 'target' },
+            { price: 101, label: 'Entry', kind: 'entry' },
+            { price: 100, label: 'Stop/Ref', kind: 'stop' },
+          ],
+        },
+        timeline: [
+          {
+            label: 'Bar 0 (detect)',
+            ohlc: 'H 101.5 / L 100.2 / C 101',
+            note: 'Detected; rails frozen.',
+          },
+          {
+            label: 'Bar 1',
+            ohlc: 'H 102.0 / L 100.4 / C 101.5',
+            note: 'Best high 102 → some favorable room. Still open.',
+          },
+          {
+            label: 'Bar 2 (fail)',
+            ohlc: 'H 101.0 / L 99.5 / C 99.7',
+            note: 'Update worst low to 99.5, then close 99.7 < 100 → Failed (invalidation).',
+          },
+        ],
+        scoreboards: [
+          {
+            label: 'Final (failed)',
+            rows: [
+              { metric: 'Outcome', value: 'Failed' },
+              { metric: 'MFE (R)', value: '(102−101)/2 = 0.50 R' },
+              { metric: 'MAE (R)', value: '(101−99.5)/2 = 0.75 R' },
+              { metric: 'Note', value: 'Went +0.5 R first, then failed' },
+            ],
+          },
+        ],
+        steps: [
+          'Fail rule for breakout: closed bar close < reference/stop.',
+          'Scoreboard still keeps the best high seen before failure (MFE).',
+          'MAE often reaches beyond the stop if the low wicks further (99.5 vs stop 100).',
+        ],
+        rulesVsMeasurements: { ...LONG_TRADE_RULES_VS_MEASUREMENTS },
+        result:
+          'TIP marks Failed with both MFE and MAE filled in. Fail does not mean “only MAE matters.”',
+      },
+      {
+        id: 'retest-target',
+        title: 'Optional: retest can rewrite the target',
+        narrative:
+          'After confirm, if price dips into the retest band near the reference without closing below it, TIP may set a measured target from the retest floor.',
+        setup: [
+          { label: 'Reference', value: '100' },
+          { label: 'ATR', value: '2' },
+          { label: 'Retest band (0.25×ATR)', value: '100 + 0.5 = up to 100.5 zone' },
+          { label: 'Example retest floor (low)', value: '99.5 (still close ≥ 100)' },
+          { label: 'Risk', value: '100 − 99.5 = 0.5' },
+          { label: 'New target (success_rr = 2)', value: '100 + 2×0.5 = 101' },
+        ],
+        diagram: {
+          type: 'candles',
+          title: 'Retest rewrites target 104 → 101',
+          caption:
+            'After detect, a retest dips to floor 99.5 while close stays ≥ 100. Measured target becomes ref + 2× risk = 101 (green). Old ATR target 104 is no longer the active success line.',
+          candles: [
+            { o: 100.5, h: 101.5, l: 100.2, c: 101, label: 'Detect', emphasis: true },
+            { o: 101, h: 102, l: 100.8, c: 101.2, label: 'Hold' },
+            { o: 101, h: 101.2, l: 99.5, c: 100.2, label: 'Retest' },
+            { o: 100.5, h: 101.5, l: 100.3, c: 101.3, label: 'New tgt' },
+          ],
+          levels: [
+            { price: 104, label: 'Old tgt', kind: 'other' },
+            { price: 101, label: 'New tgt', kind: 'target' },
+            { price: 100, label: 'Ref/Stop', kind: 'reference' },
+            { price: 99.5, label: 'Retest fl', kind: 'stop' },
+          ],
+        },
+        steps: [
+          'Initial no-retest target was 104; after a valid retest with floor under reference, target becomes reference + 2× risk.',
+          'MFE/MAE continue updating from highs/lows independently of that rewrite.',
+          'Success still means price reaches whatever the current target is.',
+        ],
+        result:
+          'Retest changes the success rule (target), not the definition of MFE/MAE.',
+      },
+    ],
   },
   tipParameters: [
     tipParam('breakout.lookback_candles', 'Bars in the prior high window (excludes signal bar)'),
@@ -80,6 +266,6 @@ export const breakout: LearnTopic = {
   patternTypeId: 'breakout',
   sourceDocs: ['docs/patterns/breakout.md'],
   sourceCode: ['backend/app/patterns/breakout.py'],
-  lastReviewed: '2026-08-03',
+  lastReviewed: '2026-08-04',
   detectorVersionHint: 'breakout-v1',
 }

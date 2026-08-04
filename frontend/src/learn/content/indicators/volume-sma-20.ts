@@ -33,12 +33,88 @@ export const volumeSma20: LearnTopic = {
       { label: 'Multiplier (breakout default)', value: '1.5×' },
     ],
     steps: [
-      'prior SMA = (1000+1200+800+1100+900) / 5 = 1000',
+      'prior SMA = 1000',
       'Threshold at 1.5× = 1500',
-      'Signal volume 2000 ≥ 1500 → volume confirmation would pass',
+      '2000 ≥ 1500 → volume confirmation passes',
     ],
-    result:
-      'TIP would count this as busy enough for volume confirmation (with the toy window). On indices with zero volume, breakout falls back to close-only mode instead.',
+    result: 'Busy enough for breakout’s volume leg (toy window).',
+    scenarios: [
+      {
+        id: 'busy-enough',
+        title: 'Busy enough for breakout volume leg',
+        narrative:
+          'Breakout’s default confirmation wants detect-bar volume ≥ 1.5 × prior volume SMA. Volume breakout uses a stricter 2× by default.',
+        periodNote: 'Example uses N=5; TIP uses 20.',
+        setup: [
+          { label: 'Prior volumes', value: '1000, 1200, 800, 1100, 900' },
+          { label: 'Prior SMA', value: '1000' },
+          { label: 'Signal volume', value: '2000' },
+          { label: 'Breakout multiplier', value: '1.5× → threshold 1500' },
+        ],
+        diagram: {
+          type: 'bars',
+          title: 'Prior volumes + busy signal vs 1.5× SMA',
+          caption:
+            'Bars P1–P5 average to 1000 (dashed). Signal 2000 clears the 1.5× threshold at 1500 — volume leg OK for breakout.',
+          bars: [
+            { label: 'P1', value: 1000 },
+            { label: 'P2', value: 1200 },
+            { label: 'P3', value: 800 },
+            { label: 'P4', value: 1100 },
+            { label: 'P5', value: 900 },
+            { label: 'Signal', value: 2000 },
+          ],
+          averageLine: { value: 1500, label: '1.5× SMA' },
+        },
+        timeline: [
+          {
+            label: 'Prior bars',
+            note: 'Average volume = 1000 (signal excluded from the baseline).',
+          },
+          {
+            label: 'Signal bar',
+            note: 'Volume 2000 ≥ 1500 → volume_ok for breakout confirmation.',
+          },
+        ],
+        steps: [
+          'Always compare the signal to a baseline that does not include itself.',
+          'On the chart, the blue line is the same period family so you can eye-check “busy vs quiet.”',
+          'Volume breakout requires both high volume and a wide bar vs ATR — see that pattern page.',
+        ],
+        result: 'TIP would count this as volume-confirmed for breakout’s volume leg (with the toy window).',
+      },
+      {
+        id: 'too-quiet',
+        title: 'Too quiet (volume leg fails)',
+        narrative: 'Same baseline, weaker signal volume — fails the 1.5× test.',
+        setup: [
+          { label: 'Prior SMA', value: '1000' },
+          { label: 'Signal volume', value: '1200' },
+          { label: 'Threshold 1.5×', value: '1500' },
+        ],
+        diagram: {
+          type: 'bars',
+          title: 'Signal volume under 1.5× threshold',
+          caption:
+            'Same baseline idea: 1.5× SMA = 1500 (dashed). Signal 1200 stays below — volume leg fails.',
+          bars: [
+            { label: 'P1', value: 1000 },
+            { label: 'P2', value: 1200 },
+            { label: 'P3', value: 800 },
+            { label: 'P4', value: 1100 },
+            { label: 'P5', value: 900 },
+            { label: 'Signal', value: 1200 },
+          ],
+          averageLine: { value: 1500, label: '1.5× SMA' },
+        },
+        steps: [
+          '1200 < 1500 → volume_ok is false.',
+          'With confirmation_mode = both, breakout still needs the later close confirmation path and will not treat volume as OK.',
+          'On index symbols with unusable volume, breakout falls back to close-only confirmation instead of inventing volume.',
+        ],
+        result: 'TIP would not mark the volume leg OK. Close-fallback on indices is a different rule — not a fake volume number.',
+      },
+    ],
   },
   tipParameters: [
     tipParam('indicators.volume_sma.period', 'Backend VolumeSmaIndicator.DEFAULT_PERIOD'),
@@ -54,5 +130,5 @@ export const volumeSma20: LearnTopic = {
     'backend/app/indicators/volume_sma.py',
     'frontend/src/chart/helpers.js',
   ],
-  lastReviewed: '2026-08-03',
+  lastReviewed: '2026-08-04',
 }

@@ -97,7 +97,11 @@ export default function LearnDetailPage() {
       </section>
 
       <section className="admin-card learn-detail__section">
-        <h2>Worked example</h2>
+        <h2>
+          {topic.workedExample?.scenarios?.length > 1
+            ? 'Worked examples'
+            : 'Worked example'}
+        </h2>
         <LearnWorkedExample example={topic.workedExample} />
       </section>
 

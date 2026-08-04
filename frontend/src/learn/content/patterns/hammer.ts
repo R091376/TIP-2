@@ -1,3 +1,4 @@
+import { LONG_TRADE_RULES_VS_MEASUREMENTS } from '../../exampleBlocks'
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
 
@@ -27,18 +28,129 @@ export const hammer: LearnTopic = {
     'lower ≥ 2×body; upper ≤ 0.25×range; body ≤ 0.35×range\n' +
     'range ≥ 0.5×ATR',
   workedExample: {
-    narrative: 'Bar opens 100, trades to 94, closes 99.5; ATR is 4.',
+    narrative: 'Bar opens 100, trades to 94, closes 99.5; ATR is 4. Geometry passes → long pin lifecycle.',
     inputs: [
       { label: 'O/H/L/C', value: '100 / 100.2 / 94 / 99.5' },
       { label: 'ATR', value: '4' },
     ],
     steps: [
-      'body = 0.5; range = 6.2; lower ≈ 5.5; upper ≈ 0.2',
-      'range 6.2 ≥ 0.5×4 = 2 → size OK',
-      'lower 5.5 ≥ 2×0.5 → shadow OK; body/range and upper wick OK',
-      'If trend context passes → Detected long hammer',
+      'body 0.5, range 6.2, lower ~5.5 → geometry OK',
+      'Entry ~99.5; target ~99.5+1.5×4; stop under the pin low',
     ],
-    result: 'TIP would Detect a hammer when geometry and context pass on a closed bar.',
+    result: 'Detected hammer when geometry (+ context) pass.',
+    scenarios: [
+      {
+        id: 'success',
+        title: 'Detect geometry → target success',
+        narrative:
+          'First TIP checks candle geometry on the closed bar. If it passes, it freezes a virtual long with stop under the pin and target about 1.5×ATR above entry.',
+        setup: [
+          { label: 'Signal O/H/L/C', value: '100 / 100.2 / 94 / 99.5' },
+          { label: 'ATR', value: '4' },
+          { label: 'body / range / lower / upper', value: '0.5 / 6.2 / ≈5.5 / ≈0.2' },
+          { label: 'Entry (close)', value: '99.5' },
+          { label: 'Stop (under pin)', value: 'near 94' },
+          { label: 'Target (~1.5×ATR)', value: '99.5 + 6 = 105.5' },
+        ],
+        diagram: {
+          type: 'candles',
+          title: 'Hammer — long lower wick then run to target',
+          caption:
+            'Detect bar shows the pin (long lower shadow). Stop under the low (94), entry at close (99.5), target at 105.5. Later bars push up into the target.',
+          candles: [
+            { o: 100, h: 100.2, l: 94, c: 99.5, label: 'B0 pin', emphasis: true },
+            { o: 99.5, h: 102, l: 98, c: 101, label: 'B1' },
+            { o: 101, h: 106, l: 101, c: 105, label: 'B2 win' },
+          ],
+          levels: [
+            { price: 105.5, label: 'Target', kind: 'target' },
+            { price: 99.5, label: 'Entry', kind: 'entry' },
+            { price: 94, label: 'Stop', kind: 'stop' },
+          ],
+        },
+        timeline: [
+          {
+            label: 'Bar 0 (detect)',
+            ohlc: 'O 100 / H 100.2 / L 94 / C 99.5',
+            note: 'range ≥ 0.5×ATR, lower ≥ 2×body, small upper → Detected long hammer. Path starts high 100.2 / low 94.',
+          },
+          {
+            label: 'Bar 1',
+            ohlc: 'H 102 / L 98 / C 101',
+            note: 'Update MFE/MAE. May confirm if close clears signal high. Still open.',
+          },
+          {
+            label: 'Bar 2 (target)',
+            ohlc: 'H 106 / L 101 / C 105',
+            note: 'High ≥ 105.5 → Succeeded.',
+          },
+        ],
+        scoreboards: [
+          {
+            label: 'Final',
+            rows: [
+              { metric: 'Outcome', value: 'Succeeded' },
+              { metric: 'MFE (R)', value: '(106−99.5)/4 ≈ 1.63 R' },
+              { metric: 'MAE (R)', value: '(99.5−94)/4 ≈ 1.38 R (pin low on detect counts)' },
+            ],
+          },
+        ],
+        steps: [
+          'Geometry is checked only on closed bars.',
+          'ATR filters out tiny pins.',
+          'After detect, the short lifecycle is the same family as other long virtual trades (confirm / target / stop).',
+        ],
+        rulesVsMeasurements: { ...LONG_TRADE_RULES_VS_MEASUREMENTS },
+        result: 'Succeeded hammer: target rule ends the trade; MFE/MAE still describe the path.',
+      },
+      {
+        id: 'fail',
+        title: 'Fail through stop under the pin',
+        narrative: 'After detect, a closed bar finishes under the pin low → Failed. MFE may still show a bounce first.',
+        setup: [
+          { label: 'Entry / stop', value: '99.5 / ~94' },
+        ],
+        diagram: {
+          type: 'candles',
+          title: 'Hammer fail — close under pin low',
+          caption:
+            'After a small bounce (B1), B2 closes under the stop near 94 → Failed. MFE from the bounce is still kept.',
+          candles: [
+            { o: 100, h: 100.2, l: 94, c: 99.5, label: 'B0 pin', emphasis: true },
+            { o: 99.5, h: 101, l: 97, c: 100, label: 'B1' },
+            { o: 99, h: 98, l: 92, c: 93, label: 'B2 fail' },
+          ],
+          levels: [
+            { price: 105.5, label: 'Target', kind: 'target' },
+            { price: 99.5, label: 'Entry', kind: 'entry' },
+            { price: 94, label: 'Stop', kind: 'stop' },
+          ],
+        },
+        timeline: [
+          {
+            label: 'Bar 0',
+            ohlc: 'H 100.2 / L 94 / C 99.5',
+            note: 'Detected.',
+          },
+          {
+            label: 'Bar 1',
+            ohlc: 'H 101 / L 97 / C 100',
+            note: 'Small bounce — some MFE. Still open.',
+          },
+          {
+            label: 'Bar 2 (fail)',
+            ohlc: 'H 98 / L 92 / C 93',
+            note: 'close under stop → Failed. MAE uses the worst low.',
+          },
+        ],
+        steps: [
+          'Stop lives under the hammer’s low region.',
+          'Failure still records how far price went in favor first (MFE).',
+        ],
+        rulesVsMeasurements: { ...LONG_TRADE_RULES_VS_MEASUREMENTS },
+        result: 'Failed hammer with both MFE and MAE present.',
+      },
+    ],
   },
   tipParameters: [
     tipParam('pinbar.shadow_body_mult', 'Dominant wick must be ≥ this × body'),
@@ -67,6 +179,6 @@ export const hammer: LearnTopic = {
   patternTypeId: 'hammer',
   sourceDocs: ['docs/patterns/hammer-shooting-star.md'],
   sourceCode: ['backend/app/patterns/pinbar.py'],
-  lastReviewed: '2026-08-03',
+  lastReviewed: '2026-08-04',
   detectorVersionHint: 'pinbar-v1',
 }

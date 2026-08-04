@@ -1,3 +1,4 @@
+import { SHORT_TRADE_RULES_VS_MEASUREMENTS } from '../../exampleBlocks'
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
 
@@ -28,18 +29,149 @@ export const breakdown: LearnTopic = {
     'Detected when close_t < reference\n' +
     'retest: high ≥ reference − 0.25×ATR and close ≤ reference',
   workedExample: {
-    narrative: 'Prior floor 50. Bar closes 49 with strong volume.',
+    narrative:
+      'Prior floor 50, ATR 2, detect close 49. Short target without retest ≈ 46. Success pushes lower; fail reclaims above 50.',
     inputs: [
       { label: 'Prior Donchian low', value: '50' },
-      { label: 'Signal close', value: '49' },
-      { label: 'ATR', value: '1.5' },
+      { label: 'ATR', value: '2' },
+      { label: 'Detect close', value: '49' },
+      { label: 'No-retest target', value: '50 − 2×2 = 46' },
     ],
     steps: [
-      'close 49 < 50 → Detected, reference 50',
-      'Later close 49.2 still < 50 → close confirmation path',
-      'Close back at 50.5 → Failed',
+      'Detect freezes short entry 49, stop 50, target 46',
+      'Favorable = price falling; adverse = price rising',
+      'Fail if close > 50; succeed if low ≤ 46',
     ],
-    result: 'TIP would mark Detected on the break under 50; a reclaim close above 50 fails the setup.',
+    result: 'Same mental model as breakout, mirrored for shorts — both MFE and MAE on every outcome.',
+    scenarios: [
+      {
+        id: 'success',
+        title: 'Success path (downside target hit)',
+        narrative:
+          'Virtual short: profit when price falls. At detect TIP freezes rails. Each bar updates path extremes, then checks reclaim-fail and target-success.',
+        setup: [
+          { label: 'Reference (prior 20-bar low)', value: '50' },
+          { label: 'ATR at detect', value: '2' },
+          { label: 'Detect H/L/C', value: '49.8 / 48.5 / 49' },
+          { label: 'Entry (detect close)', value: '49' },
+          { label: 'Stop (reference)', value: '50' },
+          { label: 'Target (no retest)', value: '50 − 2×ATR = 46' },
+        ],
+        diagram: {
+          type: 'candles',
+          title: 'Breakdown success — short rails to 46',
+          caption:
+            'Stop/ref 50, entry 49, target 46. Price works lower; B3 low clears the downside target.',
+          candles: [
+            { o: 49.5, h: 49.8, l: 48.5, c: 49, label: 'B0 detect', emphasis: true },
+            { o: 49, h: 49.5, l: 47.5, c: 48, label: 'B1' },
+            { o: 48.2, h: 49.6, l: 47.8, c: 48.5, label: 'B2 bounce' },
+            { o: 48, h: 47.0, l: 45.5, c: 46.2, label: 'B3 win' },
+          ],
+          levels: [
+            { price: 50, label: 'Stop/Ref', kind: 'stop' },
+            { price: 49, label: 'Entry', kind: 'entry' },
+            { price: 46, label: 'Target', kind: 'target' },
+          ],
+        },
+        timeline: [
+          {
+            label: 'Bar 0 (detect)',
+            ohlc: 'H 49.8 / L 48.5 / C 49',
+            note: 'close 49 < 50 → Detected short. Freeze entry 49, stop 50, target 46.',
+          },
+          {
+            label: 'Bar 1',
+            ohlc: 'H 49.5 / L 47.5 / C 48',
+            note: 'Price drops — favorable for short. Still above target 46; close still ≤ 50 → open.',
+          },
+          {
+            label: 'Bar 2 (bounce)',
+            ohlc: 'H 49.6 / L 47.8 / C 48.5',
+            note: 'Bounce raises adverse excursion (pain for short) but close 48.5 still under stop 50.',
+          },
+          {
+            label: 'Bar 3 (target)',
+            ohlc: 'H 47.0 / L 45.5 / C 46.2',
+            note: 'Low 45.5 ≤ 46 → Succeeded. Trade ends.',
+          },
+        ],
+        scoreboards: [
+          {
+            label: 'Final (success)',
+            rows: [
+              { metric: 'Outcome', value: 'Succeeded' },
+              { metric: 'MFE (R) short', value: '(49 − 45.5)/2 = 1.75 R' },
+              { metric: 'MAE (R) short', value: '(49.6 − 49)/2 = 0.30 R' },
+            ],
+          },
+        ],
+        steps: [
+          'Detect when close breaks under the prior floor.',
+          'MFE for shorts uses how far price fell from entry; MAE uses how far it rose against you.',
+          'Success and fail both keep both measurements.',
+        ],
+        rulesVsMeasurements: { ...SHORT_TRADE_RULES_VS_MEASUREMENTS },
+        result: 'TIP marks Succeeded short with both MFE and MAE filled — target was the win rule.',
+      },
+      {
+        id: 'fail',
+        title: 'Fail path (reclaim above reference)',
+        narrative: 'Price dips a little, then a closed bar finishes back above the floor → Failed short.',
+        setup: [
+          { label: 'Rails', value: 'entry 49, stop 50, target 46, ATR 2' },
+        ],
+        diagram: {
+          type: 'candles',
+          title: 'Breakdown fail — reclaim above 50',
+          caption:
+            'B1 dips (MFE for the short). B2 closes back above stop/ref 50 → Failed; MAE uses the adverse high.',
+          candles: [
+            { o: 49.5, h: 49.8, l: 48.5, c: 49, label: 'B0 detect', emphasis: true },
+            { o: 49, h: 49.2, l: 48.0, c: 48.4, label: 'B1' },
+            { o: 48.5, h: 50.8, l: 48.8, c: 50.4, label: 'B2 fail' },
+          ],
+          levels: [
+            { price: 50, label: 'Stop/Ref', kind: 'stop' },
+            { price: 49, label: 'Entry', kind: 'entry' },
+            { price: 46, label: 'Target', kind: 'target' },
+          ],
+        },
+        timeline: [
+          {
+            label: 'Bar 0 (detect)',
+            ohlc: 'H 49.8 / L 48.5 / C 49',
+            note: 'Detected short.',
+          },
+          {
+            label: 'Bar 1',
+            ohlc: 'H 49.2 / L 48.0 / C 48.4',
+            note: 'Some favorable drop (MFE grows). Still open.',
+          },
+          {
+            label: 'Bar 2 (fail)',
+            ohlc: 'H 50.8 / L 48.8 / C 50.4',
+            note: 'close 50.4 > 50 → Failed (reclaim). Adverse high 50.8 updates MAE.',
+          },
+        ],
+        scoreboards: [
+          {
+            label: 'Final (failed)',
+            rows: [
+              { metric: 'Outcome', value: 'Failed' },
+              { metric: 'MFE (R)', value: '(49 − 48.0)/2 = 0.50 R' },
+              { metric: 'MAE (R)', value: '(50.8 − 49)/2 = 0.90 R' },
+            ],
+          },
+        ],
+        steps: [
+          'Fail rule: close back above the reference/stop.',
+          'You still record how far the short went in favor before failing (MFE).',
+        ],
+        rulesVsMeasurements: { ...SHORT_TRADE_RULES_VS_MEASUREMENTS },
+        result: 'TIP marks Failed with MFE and MAE both present — same scoreboard idea as breakout.',
+      },
+    ],
   },
   tipParameters: [
     tipParam('breakdown.lookback_candles', 'Bars in the prior low window'),
@@ -71,6 +203,6 @@ export const breakdown: LearnTopic = {
   patternTypeId: 'breakdown',
   sourceDocs: ['docs/patterns/breakdown.md'],
   sourceCode: ['backend/app/patterns/breakdown.py'],
-  lastReviewed: '2026-08-03',
+  lastReviewed: '2026-08-04',
   detectorVersionHint: 'breakdown-v1',
 }

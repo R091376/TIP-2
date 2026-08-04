@@ -1,3 +1,4 @@
+import { LONG_TRADE_RULES_VS_MEASUREMENTS } from '../../exampleBlocks'
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
 
@@ -27,18 +28,126 @@ export const bullishEngulfing: LearnTopic = {
     'open_t ≤ close_{t−1} and close_t ≥ open_{t−1}\n' +
     'range_t ≥ 0.5×ATR',
   workedExample: {
-    narrative: 'Red bar 105→102, then green bar opens 101.5 and closes 106.',
+    narrative: 'Red 105→102, then green opens 101.5 closes 106; ATR 2 → detect long.',
     inputs: [
       { label: 'Prior O/C', value: '105 / 102' },
-      { label: 'Signal O/C', value: '101.5 / 106' },
+      { label: 'Signal O/H/L/C', value: '101.5 / 106.5 / 101 / 106' },
       { label: 'ATR', value: '2' },
     ],
     steps: [
-      'Prior bearish, signal bullish',
-      '101.5 ≤ 102 and 106 ≥ 105 → body engulfs',
-      'If range ≥ 0.5×ATR → Detected long',
+      'Bodies engulf + range OK → Detected',
+      'Entry 106; target 106+3=109; stop near two-bar low',
     ],
-    result: 'TIP would Detect bullish_engulfing when geometry and ATR filter pass.',
+    result: 'Long bullish_engulfing with short lifecycle.',
+    scenarios: [
+      {
+        id: 'success',
+        title: 'Two-bar detect → target success',
+        narrative:
+          'Detect needs both bars closed. Rails freeze on the engulfing bar. Later bars update MFE/MAE and apply stop/target.',
+        setup: [
+          { label: 'Prior (bearish) O/C', value: '105 / 102' },
+          { label: 'Signal O/H/L/C', value: '101.5 / 106.5 / 101 / 106' },
+          { label: 'ATR', value: '2' },
+          { label: 'Entry / target', value: '106 / 109 (1.5×ATR)' },
+          { label: 'Stop region', value: 'near min lows of the two bars (~101)' },
+        ],
+        diagram: {
+          type: 'candles',
+          title: 'Bullish engulfing → long to target',
+          caption:
+            'Red prior bar, then green body engulfs. Entry 106, stop ~101, target 109. Later high clears target.',
+          candles: [
+            { o: 105, h: 105.5, l: 101.5, c: 102, label: 'Prior' },
+            { o: 101.5, h: 106.5, l: 101, c: 106, label: 'Detect', emphasis: true },
+            { o: 106, h: 108, l: 105, c: 107, label: 'B1' },
+            { o: 107, h: 110, l: 107, c: 109.5, label: 'B2 win' },
+          ],
+          levels: [
+            { price: 109, label: 'Target', kind: 'target' },
+            { price: 106, label: 'Entry', kind: 'entry' },
+            { price: 101, label: 'Stop', kind: 'stop' },
+          ],
+        },
+        timeline: [
+          {
+            label: 'Prior bar',
+            ohlc: 'O 105 / C 102',
+            note: 'Bearish body — first half of the pattern (not a detect yet).',
+          },
+          {
+            label: 'Bar 0 (detect)',
+            ohlc: 'O 101.5 / H 106.5 / L 101 / C 106',
+            note: 'Bullish body engulfs prior body; range ≥ 0.5×ATR → Detected long.',
+          },
+          {
+            label: 'Bar 1',
+            ohlc: 'H 108 / L 105 / C 107',
+            note: 'Path updates; may confirm above signal high 106.5. Still open.',
+          },
+          {
+            label: 'Bar 2 (target)',
+            ohlc: 'H 110 / L 107 / C 109.5',
+            note: 'High ≥ 109 → Succeeded.',
+          },
+        ],
+        scoreboards: [
+          {
+            label: 'Final',
+            rows: [
+              { metric: 'Outcome', value: 'Succeeded' },
+              { metric: 'MFE (R)', value: '(110−106)/2 = 2.0 R' },
+              { metric: 'MAE (R)', value: '(106−101)/2 = 2.5 R' },
+            ],
+          },
+        ],
+        steps: [
+          'Body engulf is about open/close relationships, not necessarily full wicks.',
+          'ATR size filter blocks micro engulfs.',
+          'Stop uses the two-bar low region; target is ATR-based from entry.',
+        ],
+        rulesVsMeasurements: { ...LONG_TRADE_RULES_VS_MEASUREMENTS },
+        result: 'Succeeded engulfing long; MFE/MAE both journaled.',
+      },
+      {
+        id: 'fail',
+        title: 'Fail through two-bar low stop',
+        narrative: 'After detect, price closes back under the stop region → Failed.',
+        setup: [{ label: 'Entry / stop', value: '106 / ~101' }],
+        diagram: {
+          type: 'candles',
+          title: 'Bullish engulfing fail under stop',
+          caption: 'After detect, close under the two-bar low stop ~101 → Failed.',
+          candles: [
+            { o: 105, h: 105.5, l: 101.5, c: 102, label: 'Prior' },
+            { o: 101.5, h: 106.5, l: 101, c: 106, label: 'Detect', emphasis: true },
+            { o: 105, h: 105, l: 99, c: 100, label: 'Fail' },
+          ],
+          levels: [
+            { price: 109, label: 'Target', kind: 'target' },
+            { price: 106, label: 'Entry', kind: 'entry' },
+            { price: 101, label: 'Stop', kind: 'stop' },
+          ],
+        },
+        timeline: [
+          {
+            label: 'Bar 0',
+            ohlc: 'H 106.5 / L 101 / C 106',
+            note: 'Detected.',
+          },
+          {
+            label: 'Bar 1 (fail)',
+            ohlc: 'H 105 / L 99 / C 100',
+            note: 'close under stop → Failed. MAE uses worst low 99.',
+          },
+        ],
+        steps: [
+          'Even a clean engulf can fail quickly — journal keeps path metrics either way.',
+        ],
+        rulesVsMeasurements: { ...LONG_TRADE_RULES_VS_MEASUREMENTS },
+        result: 'Failed bullish_engulfing with MFE/MAE present.',
+      },
+    ],
   },
   tipParameters: [
     tipParam('engulfing.min_range_atr_mult', 'Min signal range vs ATR'),
@@ -61,6 +170,6 @@ export const bullishEngulfing: LearnTopic = {
   patternTypeId: 'bullish_engulfing',
   sourceDocs: ['docs/patterns/engulfing.md'],
   sourceCode: ['backend/app/patterns/engulfing.py'],
-  lastReviewed: '2026-08-03',
+  lastReviewed: '2026-08-04',
   detectorVersionHint: 'engulfing-v1',
 }

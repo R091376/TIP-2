@@ -371,6 +371,21 @@ A topic is shippable only if **all** apply:
 | D7 | Reading target: a non-engineer admin can answer “why might this have fired?” after one read |
 | D8 | Banned in copy: `com.tip.*`, raw Java class names, unexplained acronyms (R, ATR, SMA, MFE, MAE must be glossed once) |
 | D9 | Eng self-review checklist completed (open detector + config + docs side-by-side); product writer optional |
+| D10 | Deep examples: every topic has `workedExample.scenarios` with **≥2** scenarios; each has `id`, `title`, `setup`, `steps`, `result` |
+| D11 | Patterns: at least one scenario includes `rulesVsMeasurements` (target/stop vs MFE/MAE or regime equivalent) |
+| D12 | Prefer bar-by-bar `timeline` and/or `scoreboards` for directional patterns; indicators may use compute + consume scenarios |
+
+### Deep worked examples (authoring)
+
+Learn topics ship a **legacy** single block (`narrative` / `inputs` / `steps` / `result`) plus optional **`scenarios[]`**. When `scenarios` is present, `LearnWorkedExample` renders multi-scenario deep examples (setup, bar timeline table, scoreboards, rules-vs-measurements callout).
+
+**Shared copy helpers:** `frontend/src/learn/exampleBlocks.ts` (`LONG_TRADE_RULES_VS_MEASUREMENTS`, `SHORT_…`, `REGIME_…`).
+
+**Pattern template:** (1) success path with detect → rails freeze → per-bar MFE/MAE → terminal; (2) fail or no-detect path. Optional third for retest/target rewrite.
+
+**Indicator template:** (1) compute toy numbers with `periodNote` if N ≠ production; (2) who consumes the number (link via `relatedSlugs`).
+
+**Accuracy:** re-read detector lifecycle; update extremes before terminal checks; R = excursion ÷ ATR at detect; no invented rules.
 
 **Index page must include a short glossary card** (always visible, not only in detail):
 

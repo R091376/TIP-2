@@ -89,3 +89,48 @@ describe('tipDefaults shape', () => {
     }
   })
 })
+
+describe('deep worked examples', () => {
+  it('every topic has a workedExample with steps and result', () => {
+    for (const t of ALL_TOPICS) {
+      expect(t.workedExample?.steps?.length, `${t.slug} steps`).toBeGreaterThan(0)
+      expect(t.workedExample?.result, `${t.slug} result`).toBeTruthy()
+    }
+  })
+
+  it('every topic has ≥2 deep scenarios with unique ids', () => {
+    for (const t of ALL_TOPICS) {
+      const scenarios = t.workedExample.scenarios
+      expect(scenarios, `${t.slug} scenarios`).toBeTruthy()
+      expect(scenarios!.length, `${t.slug} scenario count`).toBeGreaterThanOrEqual(2)
+      const ids = scenarios!.map((s) => s.id)
+      expect(new Set(ids).size, `${t.slug} unique scenario ids`).toBe(ids.length)
+      for (const s of scenarios!) {
+        expect(s.title, `${t.slug}/${s.id} title`).toBeTruthy()
+        expect(s.steps?.length, `${t.slug}/${s.id} steps`).toBeGreaterThan(0)
+        expect(s.result, `${t.slug}/${s.id} result`).toBeTruthy()
+        expect(s.setup?.length, `${t.slug}/${s.id} setup`).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('every pattern has rulesVsMeasurements on at least one scenario', () => {
+    for (const t of PATTERN_TOPICS) {
+      const withRvm = t.workedExample.scenarios?.some((s) => s.rulesVsMeasurements)
+      expect(withRvm, `${t.slug} rulesVsMeasurements`).toBe(true)
+    }
+  })
+
+  it('every topic ships a code-drawn diagram on every scenario', () => {
+    for (const t of ALL_TOPICS) {
+      for (const sc of t.workedExample.scenarios || []) {
+        expect(sc.diagram, `${t.slug}/${sc.id} diagram`).toBeTruthy()
+        if (sc.diagram!.type === 'candles') {
+          expect(sc.diagram!.candles.length, `${t.slug}/${sc.id} candles`).toBeGreaterThan(0)
+        } else {
+          expect(sc.diagram!.bars.length, `${t.slug}/${sc.id} bars`).toBeGreaterThan(0)
+        }
+      }
+    }
+  })
+})
