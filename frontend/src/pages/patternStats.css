@@ -65,8 +65,11 @@
   box-shadow: inset 3px 0 0 #22c55e;
 }
 
+/* Resolved %, Move, MFE, MAE */
 .stats-row--highlight td:nth-child(7),
-.stats-row--highlight td:nth-child(8) {
+.stats-row--highlight td:nth-child(8),
+.stats-row--highlight td:nth-child(9),
+.stats-row--highlight td:nth-child(10) {
   color: #86efac;
   font-weight: 600;
 }

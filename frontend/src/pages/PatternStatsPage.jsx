@@ -10,6 +10,7 @@ const BASE_PATTERN_TYPES = ['all', 'breakout', 'breakdown']
 
 const SORT_OPTIONS = [
   { value: 'resolvedSuccessRate', label: 'Resolved success %' },
+  { value: 'avgMoveR', label: 'Avg move (R)' },
   { value: 'avgMfeR', label: 'Avg MFE (R)' },
   { value: 'avgMaeR', label: 'Avg MAE (R)' },
   { value: 'sampleSize', label: 'Sample size' },
@@ -47,6 +48,7 @@ function computeHighlightKeys(rows, sortKey, minSampleSize) {
   if (ready.length === 0) return new Set()
 
   const metric = (r) => {
+    if (sortKey === 'avgMoveR') return r.avgMoveR
     if (sortKey === 'avgMfeR') return r.avgMfeR
     if (sortKey === 'avgMaeR') return r.avgMaeR
     if (sortKey === 'sampleSize') return r.sampleSize
@@ -88,6 +90,9 @@ function sortRows(rows, sortKey, minSampleSize) {
 
     let primary = 0
     switch (sortKey) {
+      case 'avgMoveR':
+        primary = cmpNum(a.avgMoveR, b.avgMoveR)
+        break
       case 'avgMfeR':
         primary = cmpNum(a.avgMfeR, b.avgMfeR)
         break
@@ -107,7 +112,9 @@ function sortRows(rows, sortKey, minSampleSize) {
     }
     if (primary !== 0) return primary
 
-    // Secondary: MFE desc, then n desc, then symbol
+    // Secondary: avg move desc, then MFE, n, symbol
+    const move = cmpNum(a.avgMoveR, b.avgMoveR)
+    if (move !== 0) return move
     const mfe = cmpNum(a.avgMfeR, b.avgMfeR)
     if (mfe !== 0) return mfe
     const n = cmpNum(a.sampleSize, b.sampleSize)
@@ -290,7 +297,8 @@ export default function PatternStatsPage() {
         </div>
         <p className="stats-legend">
           Highlight = top quartile among <strong>Ready</strong> rows for current sort (relative
-          rank in this view). S / F / E = success / fail / expired counts.
+          rank in this view). S / F / E = success / fail / expired. Move (R) = average terminal
+          exit vs entry in ATR units (signed with the setup).
         </p>
       </section>
 
@@ -321,6 +329,9 @@ export default function PatternStatsPage() {
                   <th>S / F / E</th>
                   <th>n</th>
                   <th>Resolved %</th>
+                  <th title="Average terminal move vs entry, in ATR units (signed in trade direction)">
+                    Move (R)
+                  </th>
                   <th>MFE (R)</th>
                   <th>MAE (R)</th>
                   <th>Status</th>
@@ -395,6 +406,7 @@ function FragmentRow({ item, ready, open, highlight, minSampleSize, onToggle, on
         </td>
         <td className="admin-mono">{item.sampleSize ?? 0}</td>
         <td className="admin-mono">{ready ? pct(item.resolvedSuccessRate) : '—'}</td>
+        <td className="admin-mono">{ready ? num(item.avgMoveR) : '—'}</td>
         <td className="admin-mono">{ready ? num(item.avgMfeR) : '—'}</td>
         <td className="admin-mono">{ready ? num(item.avgMaeR) : '—'}</td>
         <td>
@@ -412,7 +424,7 @@ function FragmentRow({ item, ready, open, highlight, minSampleSize, onToggle, on
       </tr>
       {open && (
         <tr className="stats-detail-row">
-          <td colSpan={11}>
+          <td colSpan={12}>
             <div className="stats-detail">
               <div>
                 <span className="stats-detail__label">Inventory success %</span>
@@ -433,10 +445,6 @@ function FragmentRow({ item, ready, open, highlight, minSampleSize, onToggle, on
                 <span className="admin-mono">
                   {item.resolvedSampleSize ?? (item.successCount ?? 0) + (item.failCount ?? 0)}
                 </span>
-              </div>
-              <div>
-                <span className="stats-detail__label">Avg move (R)</span>
-                <span className="admin-mono">{ready ? num(item.avgMoveR) : '—'}</span>
               </div>
               <div>
                 <span className="stats-detail__label">Avg duration (bars)</span>
