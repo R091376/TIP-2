@@ -1,11 +1,22 @@
 /* ── App shell ─────────────────────────────────────────────────────── */
 
+/*
+ * Fixed to the visual frame so mobile browser chrome / 100dvh drift cannot
+ * make the app slightly taller than the tab (tiny top/bottom scroll).
+ * Safe-area padding keeps content clear of notches and rounded corners.
+ */
 .app-shell {
   display: flex;
-  height: 100svh;
-  height: 100dvh;
-  max-height: 100dvh;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
   overflow: hidden;
+  padding-top: var(--tip-safe-top, env(safe-area-inset-top, 0px));
+  padding-left: var(--tip-safe-left, env(safe-area-inset-left, 0px));
+  padding-right: var(--tip-safe-right, env(safe-area-inset-right, 0px));
+  /* bottom inset owned by bottom nav so content + bar stay aligned */
   background-color: var(--tip-bg-app, #0a0e1a);
   background-image:
     linear-gradient(var(--tip-grid-line, rgba(148, 163, 184, 0.04)) 1px, transparent 1px),
@@ -275,8 +286,8 @@
 @media (max-width: 899px) {
   .app-sidebar {
     position: fixed;
-    top: 0;
-    left: 0;
+    top: var(--tip-safe-top, env(safe-area-inset-top, 0px));
+    left: var(--tip-safe-left, env(safe-area-inset-left, 0px));
     bottom: 0;
     width: min(var(--tip-sidebar-width-expanded, 200px), 84vw);
     transform: translateX(-105%);
@@ -284,6 +295,7 @@
     box-shadow: none;
     /* Above main content; when open, raised further above bottom nav (see below) */
     z-index: 50;
+    padding-bottom: var(--tip-safe-bottom, env(safe-area-inset-bottom, 0px));
   }
 
   .app-shell--drawer-open .app-shell__backdrop {
@@ -312,9 +324,9 @@
     padding: 10px 12px;
   }
 
-  /* Keep account footer clear of home-indicator / bottom chrome */
+  /* Footer sits above shell safe-area padding (sidebar already has bottom inset) */
   .app-sidebar__footer {
-    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: 14px;
     flex-shrink: 0;
     background: var(--tip-bg-sidebar, #0c1020);
   }
@@ -355,12 +367,16 @@
   .app-mobile-bottom-nav {
     display: flex;
     position: fixed;
+    /* Full-bleed bar (covers home-indicator black corners); content uses side safe padding */
     left: 0;
     right: 0;
     bottom: 0;
     z-index: 55;
-    height: 56px;
-    padding: 0 4px env(safe-area-inset-bottom, 0);
+    /* Total height = bar + home-indicator; border-box so padding is inside */
+    height: var(--tip-mobile-nav-total, calc(56px + env(safe-area-inset-bottom, 0px)));
+    padding: 0 max(4px, var(--tip-safe-right, env(safe-area-inset-right, 0px)))
+      var(--tip-safe-bottom, env(safe-area-inset-bottom, 0px))
+      max(4px, var(--tip-safe-left, env(safe-area-inset-left, 0px)));
     background: var(--tip-bg-sidebar, #0c1020);
     border-top: 1px solid var(--tip-border-subtle, #1e293b);
     justify-content: space-around;
@@ -368,7 +384,7 @@
   }
 
   .app-shell--with-mobile-nav .app-main {
-    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: var(--tip-mobile-nav-total, calc(56px + env(safe-area-inset-bottom, 0px)));
   }
 
   .app-mobile-bottom-nav__item {

@@ -157,6 +157,30 @@ button,
     border-radius: 12px 12px 0 0;
   }
 
+  /*
+   * Full-bleed chart on phones: rounded corners + overflow:hidden were
+   * clipping OHLC / price-scale labels into the dark panel (“black corners”).
+   */
+  .chart-page--in-shell .chart-panel {
+    padding: 0 0 4px;
+  }
+
+  .chart-page--in-shell .chart-container {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  .chart-page--in-shell .chart-top-toolbar {
+    top: 8px;
+    left: 8px;
+    max-width: calc(100% - 16px);
+  }
+
+  .chart-page--in-shell .volume-pane-legend {
+    left: 8px;
+  }
+
   .chart-body {
     flex-direction: column;
     position: relative;

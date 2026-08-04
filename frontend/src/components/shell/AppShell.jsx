@@ -70,6 +70,16 @@ export default function AppShell() {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
+  // Pin the document while the shell is mounted so mobile browsers cannot
+  // rubber-band / micro-scroll under the fixed chrome (URL bar + 100dvh drift).
+  useEffect(() => {
+    const root = document.documentElement
+    root.classList.add('app-shell-active')
+    return () => {
+      root.classList.remove('app-shell-active')
+    }
+  }, [])
+
   return (
     <ToastProvider>
       <div

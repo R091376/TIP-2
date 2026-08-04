@@ -57,7 +57,6 @@ export default function LearnIndexPage() {
       </header>
 
       <LearnDisclaimer />
-      <LearnGlossary />
 
       <section className="admin-card">
         <h2>Topics</h2>
@@ -115,6 +114,8 @@ export default function LearnIndexPage() {
           <p className="admin-empty">No topics match your search.</p>
         ) : null}
       </section>
+
+      <LearnGlossary />
     </div>
   )
 }
