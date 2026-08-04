@@ -104,6 +104,9 @@ class NoOpPatternJournal:
     def find_recent(self, symbol_id, status_filter, limit) -> list[ActivePattern]:
         return []
 
+    def find_by_id(self, pattern_id):
+        return None
+
     def find_statistics(self, symbol_id, pattern_type, timeframe):
         return None
 
@@ -237,6 +240,16 @@ class InMemoryPatternJournal:
             items.sort(key=lambda p: p.detected_at, reverse=True)
             return items[: max(1, limit)]
 
+    def find_by_id(self, pattern_id) -> ActivePattern | None:
+        try:
+            from uuid import UUID
+
+            pid = pattern_id if isinstance(pattern_id, UUID) else UUID(str(pattern_id))
+        except (TypeError, ValueError):
+            return None
+        with self._lock:
+            return self._instances.get(pid)
+
     def find_statistics(
         self, symbol_id: str, pattern_type: str, timeframe: str
     ) -> PatternStatisticsSnapshot | None:
@@ -335,6 +348,12 @@ class InMemoryPatternJournal:
                             "receivedAt": int(et.timestamp() * 1000)
                             if et is not None
                             else int(ct * 1000),
+                            "entryPrice": float(inst.entry_price),
+                            "stopLevel": float(inst.stop_level),
+                            "targetLevel": float(inst.target_level)
+                            if inst.target_level is not None
+                            else None,
+                            "atrAtDetect": float(inst.atr_at_detect),
                         }
                     )
         alerts.sort(key=lambda a: (a["time"], a["receivedAt"]), reverse=True)

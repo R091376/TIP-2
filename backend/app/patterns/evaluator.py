@@ -106,11 +106,49 @@ class PatternEvaluator:
                 patterns = self._journal.find_open_for_symbol(symbol_id)
             if timeframe:
                 patterns = [p for p in patterns if p.timeframe == timeframe]
+        elif f == "closed":
+            patterns = self._journal.find_recent(symbol_id, "closed", 100)
+            if timeframe:
+                patterns = [p for p in patterns if p.timeframe == timeframe]
         else:
-            patterns = self._journal.find_recent(symbol_id, f, 100)
+            # status=all: always merge live store opens ∪ journal opens ∪ recent
+            by_id: dict[str, object] = {}
+            for p in self._store.get_open_for_symbol(symbol_id) or []:
+                by_id[str(getattr(p, "id", ""))] = p
+            if self._journal.is_active():
+                for p in self._journal.find_open_for_symbol(symbol_id) or []:
+                    pid = str(getattr(p, "id", ""))
+                    # Live store wins when both present (fresher MFE/MAE/status)
+                    if pid and pid not in by_id:
+                        by_id[pid] = p
+                for p in self._journal.find_recent(symbol_id, "all", 100) or []:
+                    pid = str(getattr(p, "id", ""))
+                    if pid and pid not in by_id:
+                        by_id[pid] = p
+            patterns = [p for p in by_id.values() if p is not None]
             if timeframe:
                 patterns = [p for p in patterns if p.timeframe == timeframe]
         return [p.to_dto() for p in patterns]
+
+    def get_instance(self, symbol_id: str, instance_id: str) -> dict | None:
+        """Resolve one instance by id (live store first, then journal)."""
+        if not symbol_id or not instance_id:
+            return None
+        want = str(instance_id)
+        for p in self._store.get_open_for_symbol(symbol_id) or []:
+            if str(getattr(p, "id", "")) == want:
+                return p.to_dto()
+        find = getattr(self._journal, "find_by_id", None)
+        if callable(find):
+            p = find(instance_id)
+            if p is not None and getattr(p, "symbol_id", None) == symbol_id:
+                return p.to_dto()
+        # Fallback scan (memory journal without find_by_id)
+        for filt in ("active", "closed", "all"):
+            for item in self.list_for_symbol(symbol_id, status=filt, timeframe=None):
+                if str(item.get("id", "")) == want:
+                    return item
+        return None
 
     def statistics_for_symbol(
         self, symbol_id: str, pattern_type: str | None, timeframe: str | None
@@ -279,11 +317,19 @@ class PatternEvaluator:
                     pattern_type=pattern.pattern_type.value,
                     stage=e.stage.value,
                     payload={
-                        "id": str(pattern.id),
+                        # Stable event id (matches journal day-alerts shape)
+                        "id": f"{pattern.id}:{e.stage.value}:{e.candle_time}:{e.price}",
+                        "instanceId": str(pattern.id),
                         "referenceLevel": pattern.reference_level,
                         "price": e.price,
                         "time": e.candle_time,
                         "direction": pattern.direction.value,
+                        # Rails frozen at detect — available for DET and every later stage
+                        "entryPrice": pattern.entry_price,
+                        "stopLevel": pattern.stop_level,
+                        "targetLevel": pattern.target_level,
+                        "atrAtDetect": pattern.atr_at_detect,
+                        "status": pattern.status.value,
                     },
                 )
             )

@@ -70,6 +70,7 @@ def get_patterns(
     _user: AuthUser,
     status: str | None = "active",
     timeframe: str | None = None,
+    instanceId: str | None = None,
 ):
     if symbol_id.endswith("/patterns"):
         symbol_id = symbol_id[: -len("/patterns")]
@@ -79,6 +80,19 @@ def get_patterns(
     entry = c.watchlist_repo.find_by_symbol_id(symbol_id)
     if entry is None or not entry.active:
         raise HTTPException(status_code=404, detail=f"Symbol not on watchlist: {symbol_id}")
+
+    # Single-instance lookup (inspect panel) — avoids multi-list fan-out on the client.
+    if instanceId:
+        one = c.pattern_service.get_instance(symbol_id, instanceId)
+        instances = [one] if one else []
+        return {
+            "symbolId": symbol_id,
+            "status": "instance",
+            "instanceId": instanceId,
+            "patterns": instances,
+            "instances": instances,
+        }
+
     filt = (status or "active").lower()
     if filt not in ("active", "closed", "all"):
         raise HTTPException(status_code=400, detail="status must be active, closed, or all")

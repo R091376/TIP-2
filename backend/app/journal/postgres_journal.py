@@ -60,6 +60,16 @@ class PostgresPatternJournal:
             if s.get(PatternInstanceRow, pattern.id) is not None:
                 logger.debug("Pattern instance already exists: %s", pattern.id)
                 return
+            # Same detect fingerprint already journaled under another UUID — no-op.
+            if self._find_row_by_fingerprint(s, pattern) is not None:
+                logger.info(
+                    "Skip insert_detected: fingerprint exists for %s %s %s t=%s",
+                    pattern.symbol_id,
+                    pattern.pattern_type.value,
+                    pattern.timeframe,
+                    pattern.detect_candle_time,
+                )
+                return
             s.add(to_new_row(pattern, now))
             if detected_event is not None:
                 self._insert_event_if_absent(s, detected_event, now)
@@ -120,11 +130,18 @@ class PostgresPatternJournal:
         now = datetime.now(timezone.utc)
         events = all_events or []
         with self._sf() as s:
-            if s.get(PatternInstanceRow, pattern.id) is None:
-                s.add(to_new_row(pattern, now))
-                s.flush()
+            self._ensure_instance_row(s, pattern, now)
             self._persist_mutable_and_events_in_session(s, pattern, events, now)
             s.commit()
+
+    def find_by_id(self, pattern_id: str | UUID) -> ActivePattern | None:
+        try:
+            pid = pattern_id if isinstance(pattern_id, UUID) else UUID(str(pattern_id))
+        except (TypeError, ValueError):
+            return None
+        with self._sf() as s:
+            row = s.get(PatternInstanceRow, pid)
+            return to_domain(row) if row is not None else None
 
     def find_open(self, symbol_id: str, timeframe: str) -> list[ActivePattern]:
         with self._sf() as s:
@@ -308,6 +325,13 @@ class PostgresPatternJournal:
                     "direction": inst.direction,
                     "status": inst.status,
                     "receivedAt": received_ms,
+                    # Rails available from detect (not only success/fail)
+                    "entryPrice": float(inst.entry_price),
+                    "stopLevel": float(inst.stop_level),
+                    "targetLevel": float(inst.target_level)
+                    if inst.target_level is not None
+                    else None,
+                    "atrAtDetect": float(inst.atr_at_detect),
                 }
             )
             if len(alerts) >= lim:
@@ -326,6 +350,45 @@ class PostgresPatternJournal:
             self._persist_mutable_and_events_in_session(s, pattern, stage_events, now)
             s.commit()
 
+    def _find_row_by_fingerprint(
+        self, s: Session, pattern: ActivePattern
+    ) -> PatternInstanceRow | None:
+        ptype = (
+            pattern.pattern_type.value
+            if hasattr(pattern.pattern_type, "value")
+            else str(pattern.pattern_type)
+        )
+        return s.scalars(
+            select(PatternInstanceRow).where(
+                PatternInstanceRow.symbol_id == pattern.symbol_id,
+                PatternInstanceRow.pattern_type == ptype,
+                PatternInstanceRow.timeframe == pattern.timeframe,
+                PatternInstanceRow.detect_candle_time == int(pattern.detect_candle_time),
+                PatternInstanceRow.reference_level == float(pattern.reference_level),
+            )
+        ).first()
+
+    def _ensure_instance_row(
+        self, s: Session, pattern: ActivePattern, now: datetime
+    ) -> PatternInstanceRow:
+        """Return the DB row for this pattern; avoid fingerprint UniqueViolation."""
+        row = s.get(PatternInstanceRow, pattern.id)
+        if row is not None:
+            return row
+        existing = self._find_row_by_fingerprint(s, pattern)
+        if existing is not None:
+            logger.info(
+                "Reuse journal row %s for fingerprint (incoming id %s)",
+                existing.id,
+                pattern.id,
+            )
+            return existing
+        s.add(to_new_row(pattern, now))
+        s.flush()
+        row = s.get(PatternInstanceRow, pattern.id)
+        assert row is not None
+        return row
+
     def _persist_mutable_and_events_in_session(
         self,
         s: Session,
@@ -335,35 +398,39 @@ class PostgresPatternJournal:
     ) -> None:
         if not stage_events and not pattern.is_terminal():
             row = s.get(PatternInstanceRow, pattern.id)
+            if row is None:
+                row = self._find_row_by_fingerprint(s, pattern)
             if row is not None:
                 copy_mutable(pattern, row, now)
             return
 
-        row = s.get(PatternInstanceRow, pattern.id)
-        if row is None:
-            s.add(to_new_row(pattern, now))
-            s.flush()
-            row = s.get(PatternInstanceRow, pattern.id)
-            assert row is not None
+        row = self._ensure_instance_row(s, pattern, now)
+        # Events/outcomes attach to the durable row id (may differ if fingerprint reused).
+        durable_id = row.id
 
         for ev in stage_events:
-            self._insert_event_if_absent(s, ev, now)
+            self._insert_event_if_absent(s, ev, now, instance_id=durable_id)
 
         copy_mutable(pattern, row, now)
 
         if pattern.is_terminal() and pattern.final_outcome is not None:
-            existing = s.get(PatternOutcomeRow, pattern.id)
+            existing = s.get(PatternOutcomeRow, durable_id)
             if existing is None:
-                s.add(self._build_outcome(pattern, now))
+                s.add(self._build_outcome(pattern, now, instance_id=durable_id))
                 self._upsert_statistics(s, pattern, now)
 
     def _insert_event_if_absent(
-        self, s: Session, ev: PatternStageEvent, now: datetime
+        self,
+        s: Session,
+        ev: PatternStageEvent,
+        now: datetime,
+        instance_id: UUID | None = None,
     ) -> None:
         event_type = ev.stage.value
+        pid = instance_id if instance_id is not None else ev.pattern_id
         exists = s.scalars(
             select(PatternEventRow).where(
-                PatternEventRow.pattern_instance_id == ev.pattern_id,
+                PatternEventRow.pattern_instance_id == pid,
                 PatternEventRow.event_type == event_type,
             )
         ).first()
@@ -371,7 +438,7 @@ class PostgresPatternJournal:
             return
         s.add(
             PatternEventRow(
-                pattern_instance_id=ev.pattern_id,
+                pattern_instance_id=pid,
                 event_type=event_type,
                 event_time=_utc(ev.at) or now,
                 candle_time=ev.candle_time,
@@ -381,7 +448,12 @@ class PostgresPatternJournal:
             )
         )
 
-    def _build_outcome(self, p: ActivePattern, now: datetime) -> PatternOutcomeRow:
+    def _build_outcome(
+        self,
+        p: ActivePattern,
+        now: datetime,
+        instance_id: UUID | None = None,
+    ) -> PatternOutcomeRow:
         reason = p.terminal_reason
         skip = p.suppress_excursion_stats or reason == "startup_recovery"
         seconds = 0
@@ -391,7 +463,7 @@ class PostgresPatternJournal:
                 det = det.replace(tzinfo=timezone.utc)
             seconds = max(0, int((now - det).total_seconds()))
         return PatternOutcomeRow(
-            pattern_instance_id=p.id,
+            pattern_instance_id=instance_id if instance_id is not None else p.id,
             final_outcome=p.final_outcome.value if p.final_outcome else "expired",
             duration_candles=p.duration_candles,
             duration_seconds=seconds,

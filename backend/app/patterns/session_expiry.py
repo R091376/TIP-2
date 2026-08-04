@@ -142,10 +142,17 @@ class SessionExpiryReconciler:
                     pattern_type=pattern.pattern_type.value,
                     stage=e.stage.value,
                     payload={
-                        "id": str(pattern.id),
+                        "id": f"{pattern.id}:{e.stage.value}:{e.candle_time}:{e.price}",
+                        "instanceId": str(pattern.id),
                         "referenceLevel": pattern.reference_level,
                         "price": e.price,
                         "time": e.candle_time,
+                        "direction": pattern.direction.value,
+                        "entryPrice": pattern.entry_price,
+                        "stopLevel": pattern.stop_level,
+                        "targetLevel": pattern.target_level,
+                        "atrAtDetect": pattern.atr_at_detect,
+                        "status": pattern.status.value,
                     },
                 )
             )
