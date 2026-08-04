@@ -48,7 +48,7 @@ describe('paperTradeDisabledReason', () => {
   })
 
   it('index / non-EQ → index not tradeable message', () => {
-    const msg = 'Index not tradeable — pick an equity (e.g. RELIANCE)'
+    const msg = 'Index not tradeable'
     expect(
       paperTradeDisabledReason(
         {

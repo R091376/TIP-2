@@ -93,7 +93,8 @@ export default function PaperTradingPage() {
 
   useEffect(() => {
     refresh({ force: true })
-    const t = setInterval(() => refresh(), 3000)
+    // Automatic refresh only; close/actions still call refresh({ force: true }).
+    const t = setInterval(() => refresh(), 30_000)
     return () => clearInterval(t)
   }, [refresh])
 

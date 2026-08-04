@@ -156,7 +156,8 @@ export default function PaperOrdersPage() {
 
   useEffect(() => {
     refresh({ force: true })
-    const t = setInterval(() => refresh(), 3000)
+    // Automatic refresh only; place/cancel/modify still call refresh({ force: true }).
+    const t = setInterval(() => refresh(), 30_000)
     return () => clearInterval(t)
   }, [refresh])
 

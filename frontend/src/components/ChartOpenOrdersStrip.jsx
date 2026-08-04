@@ -7,8 +7,8 @@ import {
 } from '../services/paperApi'
 import { OPEN_ORDER_STATUSES } from '../utils/paperOrderConstants'
 
-/** Poll interval while tab is visible (2–3s range). */
-const POLL_MS = 2500
+/** Poll interval while tab is visible (min gap between automatic order list calls). */
+const POLL_MS = 30_000
 
 /**
  * Raise list cap toward API max so open working orders are less likely to fall
