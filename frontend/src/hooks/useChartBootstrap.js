@@ -12,7 +12,6 @@ import {
 import { fetchWatchlist } from '../services/watchlistApi'
 import { createLiveSocket } from '../services/liveSocket'
 import {
-  applyVolumePaneHeight,
   defaultChartOptions,
   findCandleByChartTime,
   latestCandleFromMap,
@@ -55,6 +54,7 @@ export function useChartBootstrap({
   loadCandles,
   mountSeries,
   clearEngineRefs,
+  layoutSubpanes,
   onLiveMessage,
   onLiveStatus,
 }) {
@@ -184,7 +184,7 @@ export function useChartBootstrap({
         localChart = chart
         chartRef.current = chart
         mountSeries(chart, chartTypeRef.current)
-        applyVolumePaneHeight(chart, containerRef.current?.clientHeight ?? 0)
+        layoutSubpanes?.(chart, containerRef.current?.clientHeight ?? 0)
 
         chart.subscribeCrosshairMove((param) => {
           if (isStale()) return
@@ -208,7 +208,7 @@ export function useChartBootstrap({
         resizeObserver = new ResizeObserver((entriesRo) => {
           const { width, height } = entriesRo[0].contentRect
           chart.applyOptions({ width, height })
-          applyVolumePaneHeight(chart, height)
+          layoutSubpanes?.(chart, height)
         })
         resizeObserver.observe(containerRef.current)
 

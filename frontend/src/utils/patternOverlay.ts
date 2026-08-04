@@ -159,17 +159,28 @@ type LwcPriceLine = any
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type LwcMarkersPlugin = any
 
+export type PatternOverlayRails = {
+  reference?: number | null
+  entry?: number | null
+  stop?: number | null
+  target?: number | null
+}
+
 export type PatternOverlayHandle = {
   series: LwcSeries
   priceLine?: LwcPriceLine | null
+  /** Extra rails (entry / stop / target). */
+  railLines?: LwcPriceLine[]
   markersPlugin?: LwcMarkersPlugin | null
   instanceId?: string
   focusAlertId?: string
   symbolId?: string
   timeframe?: string
+  /** Chart times (NSE-shifted) that have markers for this paint. */
+  markerChartTimes?: number[]
 }
 
-/** Clear previous price line + series markers plugin. */
+/** Clear previous price lines + series markers plugin. */
 export function clearPatternOverlay(handle: PatternOverlayHandle | null | undefined): void {
   if (!handle?.series) return
   try {
@@ -178,6 +189,15 @@ export function clearPatternOverlay(handle: PatternOverlayHandle | null | undefi
     }
   } catch {
     // series may already be disposed
+  }
+  if (handle.railLines?.length) {
+    for (const line of handle.railLines) {
+      try {
+        handle.series.removePriceLine(line)
+      } catch {
+        // ignore
+      }
+    }
   }
   try {
     if (handle.markersPlugin) {
@@ -198,10 +218,37 @@ export type OverlaySpec = {
   instanceId?: string
   seriesChartTimes?: number[]
   focusView?: boolean
+  /** Optional trade rails from full instance DTO. */
+  rails?: PatternOverlayRails | null
+}
+
+function tryCreatePriceLine(
+  series: LwcSeries,
+  opts: {
+    price: number
+    color: string
+    lineWidth?: number
+    lineStyle?: number
+    title: string
+  },
+): LwcPriceLine | null {
+  if (!Number.isFinite(opts.price)) return null
+  try {
+    return series.createPriceLine({
+      price: opts.price,
+      color: opts.color,
+      lineWidth: opts.lineWidth ?? 1,
+      lineStyle: opts.lineStyle ?? LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: opts.title,
+    })
+  } catch {
+    return null
+  }
 }
 
 /**
- * Draw full instance lifecycle: one reference-level line + markers for each known stage.
+ * Draw full instance lifecycle: reference line + optional entry/stop/target + stage markers.
  */
 export function applyInstanceOverlay(
   series: LwcSeries,
@@ -219,9 +266,11 @@ export function applyInstanceOverlay(
   // Only zoom when explicitly requested — alert clicks must not reshape the viewport.
   const focusView = spec.focusView === true
   const focus = spec.focusAlert || events[events.length - 1]
+  const rails = spec.rails || null
   const ref =
     Number(
-      spec.referenceLevel ??
+      rails?.reference ??
+        spec.referenceLevel ??
         focus.referenceLevel ??
         events.find((e: PatternAlertLike) => e.referenceLevel != null)?.referenceLevel,
     ) || Number(focus.price)
@@ -237,18 +286,55 @@ export function applyInstanceOverlay(
   const direction = spec.direction || focus.direction
   const dirBit = direction ? ` · ${direction}` : ''
 
-  let priceLine: LwcPriceLine | null = null
-  try {
-    priceLine = series.createPriceLine({
-      price: ref,
-      color: lineColors.line,
-      lineWidth: 2,
-      lineStyle: LineStyle.Dashed,
-      axisLabelVisible: true,
-      title: `Ref ${formatShortPrice(ref)}${typeLabel ? ` · ${typeLabel}` : ''}${dirBit}`,
+  const priceLine = tryCreatePriceLine(series, {
+    price: ref,
+    color: lineColors.line,
+    lineWidth: 2,
+    lineStyle: LineStyle.Dashed,
+    title: `Ref ${formatShortPrice(ref)}${typeLabel ? ` · ${typeLabel}` : ''}${dirBit}`,
+  })
+  if (!priceLine) return null
+
+  const railLines: LwcPriceLine[] = []
+  const entry = Number(rails?.entry)
+  const stop = Number(rails?.stop)
+  const target = Number(rails?.target)
+  // Avoid duplicate lines when entry/stop equals reference
+  const near = (a: number, b: number) => Math.abs(a - b) < 1e-9
+
+  if (Number.isFinite(entry) && !near(entry, ref)) {
+    const line = tryCreatePriceLine(series, {
+      price: entry,
+      color: '#38bdf8',
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      title: `Entry ${formatShortPrice(entry)}`,
     })
-  } catch {
-    return null
+    if (line) railLines.push(line)
+  }
+  if (Number.isFinite(stop) && !near(stop, ref) && !(Number.isFinite(entry) && near(stop, entry))) {
+    const line = tryCreatePriceLine(series, {
+      price: stop,
+      color: '#ef4444',
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      title: `Stop ${formatShortPrice(stop)}`,
+    })
+    if (line) railLines.push(line)
+  }
+  if (
+    Number.isFinite(target) &&
+    !near(target, ref) &&
+    !(Number.isFinite(entry) && near(target, entry))
+  ) {
+    const line = tryCreatePriceLine(series, {
+      price: target,
+      color: '#22c55e',
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      title: `Target ${formatShortPrice(target)}`,
+    })
+    if (line) railLines.push(line)
   }
 
   const markerSpecs = events.map((ev: PatternAlertLike) => {
@@ -306,12 +392,87 @@ export function applyInstanceOverlay(
   return {
     series,
     priceLine,
+    railLines,
     markersPlugin,
     instanceId: spec.instanceId || focus.instanceId,
     focusAlertId: focus.id,
     symbolId: focus.symbolId,
     timeframe: focus.timeframe,
+    markerChartTimes: dedupedMarkers.map((m) => Number(m.time)).filter(Number.isFinite),
   }
+}
+
+/**
+ * Find an alert whose candle maps to the **same series bar** as the click.
+ * LWC click times are bar times — we require an exact match after snap (no fuzzy maxDelta).
+ * Prefer events for preferredInstanceId when set.
+ */
+export function findAlertAtChartTime(
+  alerts: PatternAlertLike[] | null | undefined,
+  chartTime: number | null | undefined,
+  opts: {
+    symbolId?: string | null
+    timeframe?: string | null
+    preferredInstanceId?: string | null
+    seriesChartTimes?: number[] | null
+    /**
+     * When set, only hit if the clicked bar is one of these marker chart times
+     * (or an alert that maps onto the same bar). Empty array = no hit.
+     */
+    markerChartTimes?: number[] | null
+    /** @deprecated ignored — exact bar match only */
+    maxDelta?: number
+  } = {},
+): PatternAlertLike | null {
+  if (chartTime == null || !Number.isFinite(Number(chartTime)) || !alerts?.length) {
+    return null
+  }
+  const seriesTimes = opts.seriesChartTimes || []
+  const clickSnap = nearestInSorted(seriesTimes, Number(chartTime))
+  const barTime = clickSnap?.value ?? Number(chartTime)
+
+  // Optional: only bars that currently have painted markers
+  if (opts.markerChartTimes != null) {
+    const markerSet = new Set(
+      opts.markerChartTimes.map(Number).filter((n) => Number.isFinite(n)),
+    )
+    if (!markerSet.has(barTime)) {
+      // Also allow if any marker snaps to this bar
+      let onMarker = false
+      for (const mt of markerSet) {
+        const s = nearestInSorted(seriesTimes, mt)
+        if ((s?.value ?? mt) === barTime) {
+          onMarker = true
+          break
+        }
+      }
+      if (!onMarker) return null
+    }
+  }
+
+  const candidates = alerts.filter((a) => {
+    if (opts.symbolId && a.symbolId !== opts.symbolId) return false
+    if (opts.timeframe && a.timeframe !== opts.timeframe) return false
+    if (a.time == null) return false
+    const raw = utcToNseChartTime(a.time)
+    const snapped = nearestInSorted(seriesTimes, raw)
+    const ct = snapped?.value ?? raw
+    return ct === barTime
+  })
+  if (!candidates.length) return null
+
+  let pool = candidates
+  if (opts.preferredInstanceId) {
+    const preferred = candidates.filter((a) => a.instanceId === opts.preferredInstanceId)
+    if (preferred.length) pool = preferred
+  }
+
+  pool.sort((a, b) => {
+    const oa = STAGE_ORDER[(a.stage || '').toLowerCase()] ?? 9
+    const ob = STAGE_ORDER[(b.stage || '').toLowerCase()] ?? 9
+    return oa - ob
+  })
+  return pool[0]
 }
 
 function formatShortPrice(n: number | null | undefined): string {

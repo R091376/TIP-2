@@ -15,8 +15,16 @@ export const VOLUME_PANE_HEIGHT_RATIO = 0.18
 export const VOLUME_PANE_MAX_PX = 96
 export const VOLUME_PANE_MIN_PX = 52
 
+/** ATR subplot (between price and volume). */
+export const ATR_PANE_HEIGHT_RATIO = 0.12
+export const ATR_PANE_MAX_PX = 72
+export const ATR_PANE_MIN_PX = 40
+
 /** Matches backend breakout volume baseline (docs/indicators/volume-sma-20.md). */
 export const VOLUME_SMA_PERIOD = 20
+
+/** Matches backend `AtrIndicator.DEFAULT_PERIOD` / tip.pattern.atr-period. */
+export const ATR_PERIOD = 14
 
 const VOLUME_UP_COLOR = 'rgba(34, 197, 94, 0.5)'
 const VOLUME_DOWN_COLOR = 'rgba(239, 68, 68, 0.5)'
@@ -24,6 +32,11 @@ const VOLUME_DOWN_COLOR = 'rgba(239, 68, 68, 0.5)'
 export const VOLUME_SMA_COLOR = '#60a5fa'
 /** Human-readable label for the volume SMA series. */
 export const VOLUME_SMA_LABEL = `Vol SMA ${VOLUME_SMA_PERIOD}`
+
+/** Amber line on the ATR pane (Wilder ATR). */
+export const ATR_COLOR = '#fbbf24'
+/** Human-readable label for the ATR series. */
+export const ATR_LABEL = `ATR ${ATR_PERIOD}`
 
 export const MARKET_CLOSED_MSG = 'Market is closed. Showing last available candle data.'
 
@@ -111,6 +124,75 @@ export function lastVolumeSmaPoint(candles, period = VOLUME_SMA_PERIOD) {
   }
 }
 
+/**
+ * True range for one bar vs previous close (Wilder / backend AtrIndicator).
+ * @param {{ high: number, low: number }} bar
+ * @param {number} previousClose
+ */
+export function trueRange(bar, previousClose) {
+  const high = Number(bar.high)
+  const low = Number(bar.low)
+  const prev = Number(previousClose)
+  if (![high, low, prev].every(Number.isFinite)) return NaN
+  const hl = high - low
+  const hc = Math.abs(high - prev)
+  const lc = Math.abs(low - prev)
+  return Math.max(hl, hc, lc)
+}
+
+/**
+ * Wilder ATR series. First point after period+1 bars (same as backend AtrIndicator).
+ * @param {Array<{ time: number, high: number, low: number, close: number }>} candles sorted ascending
+ * @param {number} [period=ATR_PERIOD]
+ * @returns {Array<{ time: number, value: number }>}
+ */
+export function mapAtrData(candles, period = ATR_PERIOD) {
+  const list = candles || []
+  if (period < 1 || list.length < period + 1) return []
+
+  const points = []
+  let atr = 0
+  for (let i = 1; i <= period; i++) {
+    const tr = trueRange(list[i], list[i - 1].close)
+    if (!Number.isFinite(tr)) return []
+    atr += tr
+  }
+  atr /= period
+  points.push({
+    time: utcToNseChartTime(list[period].time),
+    value: atr,
+  })
+
+  for (let i = period + 1; i < list.length; i++) {
+    const tr = trueRange(list[i], list[i - 1].close)
+    if (!Number.isFinite(tr)) continue
+    atr = (atr * (period - 1) + tr) / period
+    points.push({
+      time: utcToNseChartTime(list[i].time),
+      value: atr,
+    })
+  }
+  return points
+}
+
+/**
+ * Last Wilder ATR point for live updates (same formula as {@link mapAtrData}).
+ * @returns {{ time: number, value: number } | null}
+ */
+export function lastAtrPoint(candles, period = ATR_PERIOD) {
+  const pts = mapAtrData(candles, period)
+  return pts.length ? pts[pts.length - 1] : null
+}
+
+/**
+ * Latest ATR value only (parity helper / legend).
+ * @returns {number | null}
+ */
+export function latestAtrValue(candles, period = ATR_PERIOD) {
+  const pt = lastAtrPoint(candles, period)
+  return pt ? pt.value : null
+}
+
 export function resolveDisplayStatus(wsStatus, marketPhase) {
   if (marketPhase === 'closed') return 'market_closed'
   if (marketPhase === 'pre_open') return 'pre_open'
@@ -190,8 +272,38 @@ export function ensureSeriesPane(series, paneIndex) {
 }
 
 /**
- * After price series remove/recreate (e.g. candle↔line), LWC can collapse panes and
- * leave volume on pane 0. Re-pin volume series and restore heights.
+ * Apply series visibility for ATR / volume subpanes.
+ * @param {{ atr?: object|null, volume?: object|null, volumeSma?: object|null }} series
+ * @param {{ showAtr?: boolean, showVolume?: boolean }} opts
+ */
+export function applySubpaneVisibility(series, opts = {}) {
+  const showAtr = opts.showAtr !== false
+  const showVolume = opts.showVolume !== false
+  try {
+    series?.atr?.applyOptions?.({ visible: showAtr, lastValueVisible: showAtr })
+  } catch {
+    // ignore
+  }
+  try {
+    series?.volume?.applyOptions?.({ visible: showVolume, lastValueVisible: showVolume })
+  } catch {
+    // ignore
+  }
+  try {
+    series?.volumeSma?.applyOptions?.({
+      visible: showVolume,
+      lastValueVisible: false,
+    })
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * After price series remove/recreate (e.g. candle↔line), LWC can collapse panes.
+ * Re-pin price / ATR / volume and restore heights.
+ * Pane layout: 0 = price, 1 = ATR, 2 = volume (+ SMA).
+ * @param {{ showAtr?: boolean, showVolume?: boolean }} [visibility]
  */
 export function rebalancePriceVolumePanes(
   chart,
@@ -199,14 +311,21 @@ export function rebalancePriceVolumePanes(
   volumeSeries,
   volumeSmaSeries,
   containerHeight,
+  atrSeries = null,
+  visibility = {},
 ) {
   if (!chart) return
   ensureSeriesPane(priceSeries, 0)
-  ensureSeriesPane(volumeSeries, 1)
-  ensureSeriesPane(volumeSmaSeries, 1)
+  if (atrSeries) ensureSeriesPane(atrSeries, 1)
+  ensureSeriesPane(volumeSeries, 2)
+  ensureSeriesPane(volumeSmaSeries, 2)
   try {
     priceSeries?.priceScale()?.applyOptions({
       scaleMargins: { top: 0.08, bottom: 0.05 },
+      borderColor: '#2a3144',
+    })
+    atrSeries?.priceScale()?.applyOptions({
+      scaleMargins: { top: 0.15, bottom: 0.1 },
       borderColor: '#2a3144',
     })
     volumeSeries?.priceScale()?.applyOptions({
@@ -216,7 +335,11 @@ export function rebalancePriceVolumePanes(
   } catch {
     // ignore
   }
-  applyVolumePaneHeight(chart, containerHeight)
+  applySubpaneVisibility(
+    { atr: atrSeries, volume: volumeSeries, volumeSma: volumeSmaSeries },
+    visibility,
+  )
+  applyVolumePaneHeight(chart, containerHeight, visibility)
 }
 
 /** Keep bar width stable after setData / fitContent / series swaps. */
@@ -234,7 +357,7 @@ export function applyBarSpacing(chart) {
 }
 
 /**
- * Volume histogram on a dedicated pane (index 1).
+ * Volume histogram on pane 2 (below ATR).
  * Do not use a custom priceScaleId — that attaches to the main pane overlay scale
  * and paints volume on top of price. Pane series use that pane's default right scale.
  * @returns {import('lightweight-charts').ISeriesApi<'Histogram'>}
@@ -248,9 +371,9 @@ export function createVolumeSeries(chart) {
       lastValueVisible: true,
       base: 0,
     },
-    1,
+    2,
   )
-  ensureSeriesPane(series, 1)
+  ensureSeriesPane(series, 2)
   series.priceScale().applyOptions({
     scaleMargins: { top: 0.12, bottom: 0 },
     borderColor: '#2a3144',
@@ -259,7 +382,7 @@ export function createVolumeSeries(chart) {
 }
 
 /**
- * Volume SMA on the same pane (1) and default scale as the histogram.
+ * Volume SMA on the same pane (2) and default scale as the histogram.
  * @returns {import('lightweight-charts').ISeriesApi<'Line'>}
  */
 export function createVolumeSmaSeries(chart) {
@@ -272,9 +395,35 @@ export function createVolumeSmaSeries(chart) {
       lastValueVisible: false,
       crosshairMarkerVisible: false,
     },
+    2,
+  )
+  ensureSeriesPane(series, 2)
+  return series
+}
+
+/**
+ * Wilder ATR line on pane 1 (between price and volume).
+ * @returns {import('lightweight-charts').ISeriesApi<'Line'>}
+ */
+export function createAtrSeries(chart) {
+  const series = chart.addSeries(
+    LineSeries,
+    {
+      color: ATR_COLOR,
+      lineWidth: 1.5,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: false,
+      priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+      title: ATR_LABEL,
+    },
     1,
   )
   ensureSeriesPane(series, 1)
+  series.priceScale().applyOptions({
+    scaleMargins: { top: 0.15, bottom: 0.1 },
+    borderColor: '#2a3144',
+  })
   return series
 }
 
@@ -291,24 +440,64 @@ export function volumePaneHeightPx(containerHeight) {
 }
 
 /**
- * Size price + volume panes so volume cannot swallow the main chart.
- * Locks volume height (px + stretch factor) so candle↔line does not move the splitter.
- * @param {import('lightweight-charts').IChartApi} chart
+ * Locked ATR pane height in px (ratio target, hard max/min).
  * @param {number} containerHeight
  */
-export function applyVolumePaneHeight(chart, containerHeight) {
+export function atrPaneHeightPx(containerHeight) {
+  if (!(containerHeight > 0)) return ATR_PANE_MAX_PX
+  const fromRatio = Math.round(containerHeight * ATR_PANE_HEIGHT_RATIO)
+  const hardMax = Math.min(ATR_PANE_MAX_PX, Math.floor(containerHeight * 0.16))
+  return Math.min(hardMax, Math.max(ATR_PANE_MIN_PX, fromRatio))
+}
+
+/**
+ * Size price + ATR + volume panes so subpanes cannot swallow the main chart.
+ * Locks heights (px + stretch factors) so candle↔line does not move splitters.
+ * Hidden panes get height 0 (series should also be set visible:false).
+ * @param {import('lightweight-charts').IChartApi} chart
+ * @param {number} containerHeight
+ * @param {{ showAtr?: boolean, showVolume?: boolean }} [opts]
+ */
+export function applyVolumePaneHeight(chart, containerHeight, opts = {}) {
   if (!chart || !(containerHeight > 0)) return
+  const showAtr = opts.showAtr !== false
+  const showVolume = opts.showVolume !== false
   try {
     const panes = chart.panes()
     if (!panes || panes.length < 2) return
-    const volHeight = volumePaneHeightPx(containerHeight)
+
+    // 3-pane layout: price | ATR | volume
+    if (panes.length >= 3) {
+      let atrHeight = showAtr ? atrPaneHeightPx(containerHeight) : 0
+      let volHeight = showVolume ? volumePaneHeightPx(containerHeight) : 0
+      const minPrice = 140
+      if (atrHeight + volHeight + minPrice > containerHeight) {
+        const budget = Math.max(0, containerHeight - minPrice)
+        const total = atrHeight + volHeight || 1
+        atrHeight = Math.floor((budget * atrHeight) / total)
+        volHeight = Math.max(0, budget - atrHeight)
+      }
+      const priceHeight = Math.max(minPrice, containerHeight - atrHeight - volHeight)
+      panes[0].setHeight(priceHeight)
+      panes[1].setHeight(atrHeight)
+      panes[2].setHeight(volHeight)
+      if (typeof panes[0].setStretchFactor === 'function') {
+        panes[0].setStretchFactor(5)
+        panes[1].setStretchFactor(showAtr ? 1 : 0.001)
+        panes[2].setStretchFactor(showVolume ? 1 : 0.001)
+      }
+      return
+    }
+
+    // Fallback: price + single subpane (legacy / partial mount)
+    const subVisible = showVolume || showAtr
+    const volHeight = subVisible ? volumePaneHeightPx(containerHeight) : 0
     const priceHeight = Math.max(160, containerHeight - volHeight)
     panes[0].setHeight(priceHeight)
     panes[1].setHeight(volHeight)
-    // Stretch factors keep the splitter stable when series types change.
     if (typeof panes[0].setStretchFactor === 'function') {
       panes[0].setStretchFactor(5)
-      panes[1].setStretchFactor(1)
+      panes[1].setStretchFactor(subVisible ? 1 : 0.001)
     }
   } catch {
     // panes API may throw if chart is mid-dispose
@@ -355,6 +544,17 @@ export function sanitizeVolumeSmaPoints(candles) {
   for (const p of raw) {
     if (p == null || p.time == null || !Number.isFinite(Number(p.time))) continue
     if (!Number.isFinite(Number(p.value))) continue
+    byTime.set(p.time, p)
+  }
+  return Array.from(byTime.values()).sort((a, b) => a.time - b.time)
+}
+
+export function sanitizeAtrPoints(candles, period = ATR_PERIOD) {
+  const raw = mapAtrData(candles || [], period)
+  const byTime = new Map()
+  for (const p of raw) {
+    if (p == null || p.time == null || !Number.isFinite(Number(p.time))) continue
+    if (!Number.isFinite(Number(p.value)) || p.value < 0) continue
     byTime.set(p.time, p)
   }
   return Array.from(byTime.values()).sort((a, b) => a.time - b.time)

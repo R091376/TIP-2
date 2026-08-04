@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { utcToNseChartTime } from './chartTime'
 import {
   collectInstanceEvents,
+  findAlertAtChartTime,
   nearestInSorted,
   seriesKey,
   stageColors,
@@ -83,5 +85,90 @@ describe('willRestoreOverlay', () => {
     expect(
       willRestoreOverlay({ symbolId: 'B', timeframe: '5m' }, null, 'A', '5m'),
     ).toBe(false)
+  })
+})
+
+describe('findAlertAtChartTime', () => {
+  it('returns alert on the exact series bar only', () => {
+    const t1 = 1_700_000_000
+    const t2 = 1_700_000_300
+    const c1 = utcToNseChartTime(t1)
+    const c2 = utcToNseChartTime(t2)
+    const series = [c1, c2]
+    const alerts = [
+      { id: 'a', instanceId: 'i1', symbolId: 'S', timeframe: '5m', time: t1, stage: 'detected' },
+      { id: 'b', instanceId: 'i2', symbolId: 'S', timeframe: '5m', time: t2, stage: 'detected' },
+      { id: 'c', instanceId: 'i3', symbolId: 'OTHER', timeframe: '5m', time: t1, stage: 'detected' },
+    ]
+    const hit = findAlertAtChartTime(alerts, c1, {
+      symbolId: 'S',
+      timeframe: '5m',
+      seriesChartTimes: series,
+    })
+    expect(hit?.id).toBe('a')
+  })
+
+  it('prefers focused instance when provided', () => {
+    const t = 1_700_000_000
+    const ct = utcToNseChartTime(t)
+    const alerts = [
+      { id: 'a', instanceId: 'i1', symbolId: 'S', timeframe: '5m', time: t, stage: 'detected' },
+      { id: 'b', instanceId: 'i2', symbolId: 'S', timeframe: '5m', time: t, stage: 'confirmed' },
+    ]
+    const hit = findAlertAtChartTime(alerts, ct, {
+      symbolId: 'S',
+      timeframe: '5m',
+      preferredInstanceId: 'i2',
+      seriesChartTimes: [ct],
+    })
+    expect(hit?.instanceId).toBe('i2')
+  })
+
+  it('returns null when click is not on an alert bar', () => {
+    const tAlert = 1_700_000_000
+    const tOther = 1_700_000_300
+    const cAlert = utcToNseChartTime(tAlert)
+    const cOther = utcToNseChartTime(tOther)
+    const alerts = [
+      {
+        id: 'a',
+        instanceId: 'i1',
+        symbolId: 'S',
+        timeframe: '5m',
+        time: tAlert,
+        stage: 'detected',
+      },
+    ]
+    expect(
+      findAlertAtChartTime(alerts, cOther, {
+        symbolId: 'S',
+        timeframe: '5m',
+        seriesChartTimes: [cAlert, cOther],
+      }),
+    ).toBeNull()
+  })
+
+  it('respects markerChartTimes gate', () => {
+    const t = 1_700_000_000
+    const ct = utcToNseChartTime(t)
+    const alerts = [
+      { id: 'a', instanceId: 'i1', symbolId: 'S', timeframe: '5m', time: t, stage: 'detected' },
+    ]
+    expect(
+      findAlertAtChartTime(alerts, ct, {
+        symbolId: 'S',
+        timeframe: '5m',
+        seriesChartTimes: [ct],
+        markerChartTimes: [],
+      }),
+    ).toBeNull()
+    expect(
+      findAlertAtChartTime(alerts, ct, {
+        symbolId: 'S',
+        timeframe: '5m',
+        seriesChartTimes: [ct],
+        markerChartTimes: [ct],
+      })?.id,
+    ).toBe('a')
   })
 })

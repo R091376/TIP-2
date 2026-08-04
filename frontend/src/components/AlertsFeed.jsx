@@ -269,7 +269,7 @@ export default function AlertsFeed({
         <p className="alerts-feed__empty">
           Live pattern events appear here while the app is open. Requires Postgres
           patterns enabled on the backend. Click an alert to show the full instance
-          lifecycle (reference line + stage markers).
+          lifecycle (rails + stage markers) and an inspect card with ATR / stop / target.
         </p>
       ) : items.length === 0 ? (
         <p className="alerts-feed__empty">

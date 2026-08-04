@@ -126,6 +126,11 @@ button,
     left: 12px;
     bottom: calc(12px + 72px - 6px);
   }
+
+  .atr-pane-legend {
+    left: 12px;
+    bottom: calc(12px + 72px + 56px - 8px);
+  }
 }
 
 /* ── Phone: compact single-row header + single panel ───────────────── */
@@ -173,7 +178,8 @@ button,
     max-width: calc(100% - 16px);
   }
 
-  .chart-page--in-shell .volume-pane-legend {
+  .chart-page--in-shell .volume-pane-legend,
+  .chart-page--in-shell .atr-pane-legend {
     left: 8px;
   }
 

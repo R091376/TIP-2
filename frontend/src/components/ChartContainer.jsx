@@ -159,6 +159,11 @@ export default function ChartContainer() {
     clearSeriesDataFor,
     mountSeries,
     clearEngineRefs,
+    layoutSubpanes,
+    showAtr,
+    showVolume,
+    toggleAtrPane,
+    toggleVolumePane,
   } = engine
 
   const updateConnectionStatus = useCallback((wsStatus, marketPhase) => {
@@ -242,6 +247,7 @@ export default function ChartContainer() {
     loadCandles,
     mountSeries,
     clearEngineRefs,
+    layoutSubpanes,
     onLiveMessage,
     onLiveStatus,
   })
@@ -514,6 +520,26 @@ export default function ChartContainer() {
             ohlcLegend={ohlcLegend}
             onClearDrawings={overlay.clearChartDrawings}
             clearDrawingsEnabled={overlay.hasChartDrawings}
+            showAtr={showAtr}
+            showVolume={showVolume}
+            onToggleAtr={toggleAtrPane}
+            onToggleVolume={toggleVolumePane}
+            patternInspect={
+              overlay.focusedAlert ||
+              overlay.focusedInstance ||
+              overlay.instanceLoading ||
+              overlay.instanceError
+                ? {
+                    alert: overlay.focusedAlert,
+                    instance: overlay.focusedInstance,
+                    loading: overlay.instanceLoading,
+                    error: overlay.instanceError,
+                    onClose: () => {
+                      overlay.closeInstanceInspect()
+                    },
+                  }
+                : null
+            }
             tradeSlot={
               chartPaperTradeOn ? (
                 <ChartTradeButtons

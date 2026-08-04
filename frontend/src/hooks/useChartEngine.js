@@ -5,19 +5,44 @@
 import { useCallback, useRef, useState } from 'react'
 import {
   applyBarSpacing,
+  applySubpaneVisibility,
   applyVolumePaneHeight,
+  createAtrSeries,
   createPriceSeries,
   createVolumeSeries,
   createVolumeSmaSeries,
+  lastAtrPoint,
   lastVolumeSmaPoint,
   latestCandleFromMap,
   rebalancePriceVolumePanes,
+  sanitizeAtrPoints,
   sanitizeSeriesPoints,
   sanitizeVolumePoints,
   sanitizeVolumeSmaPoints,
   sortedCandlesFromMap,
   toVolumePoint,
 } from '../chart/helpers'
+
+const LS_SHOW_ATR = 'tip.chart.showAtr'
+const LS_SHOW_VOLUME = 'tip.chart.showVolume'
+
+function readBoolPref(key, fallback = true) {
+  try {
+    const v = localStorage.getItem(key)
+    if (v === null || v === undefined) return fallback
+    return v === '1' || v === 'true'
+  } catch {
+    return fallback
+  }
+}
+
+function writeBoolPref(key, value) {
+  try {
+    localStorage.setItem(key, value ? '1' : '0')
+  } catch {
+    // ignore
+  }
+}
 
 /**
  * @param {{
@@ -29,6 +54,7 @@ export function useChartEngine({ chartTypeRef, overlay }) {
   const containerRef = useRef(null)
   const chartRef = useRef(null)
   const seriesRef = useRef(null)
+  const atrSeriesRef = useRef(null)
   const volumeSeriesRef = useRef(null)
   const volumeSmaSeriesRef = useRef(null)
   const candlesRef = useRef(new Map())
@@ -39,13 +65,97 @@ export function useChartEngine({ chartTypeRef, overlay }) {
   overlayRef.current = overlay
 
   const [ohlcLegend, setOhlcLegend] = useState(null)
+  const [showAtr, setShowAtrState] = useState(() => readBoolPref(LS_SHOW_ATR, true))
+  const [showVolume, setShowVolumeState] = useState(() =>
+    readBoolPref(LS_SHOW_VOLUME, true),
+  )
+  const showAtrRef = useRef(showAtr)
+  const showVolumeRef = useRef(showVolume)
+  showAtrRef.current = showAtr
+  showVolumeRef.current = showVolume
 
-  const applyVolumeSeriesData = useCallback((candles) => {
+  const visibilityOpts = useCallback(
+    () => ({
+      showAtr: showAtrRef.current,
+      showVolume: showVolumeRef.current,
+    }),
+    [],
+  )
+
+  const rebalancePanes = useCallback(
+    (chart, priceSeries, containerHeight) => {
+      rebalancePriceVolumePanes(
+        chart,
+        priceSeries,
+        volumeSeriesRef.current,
+        volumeSmaSeriesRef.current,
+        containerHeight,
+        atrSeriesRef.current,
+        visibilityOpts(),
+      )
+    },
+    [visibilityOpts],
+  )
+
+  /** Resize / bootstrap: apply current ATR/volume visibility + heights. */
+  const layoutSubpanes = useCallback(
+    (chart, containerHeight) => {
+      const c = chart ?? chartRef.current
+      const h =
+        containerHeight ??
+        containerRef.current?.clientHeight ??
+        0
+      if (!c) return
+      applySubpaneVisibility(
+        {
+          atr: atrSeriesRef.current,
+          volume: volumeSeriesRef.current,
+          volumeSma: volumeSmaSeriesRef.current,
+        },
+        visibilityOpts(),
+      )
+      applyVolumePaneHeight(c, h, visibilityOpts())
+    },
+    [visibilityOpts],
+  )
+
+  const setShowAtr = useCallback(
+    (next) => {
+      const v = Boolean(next)
+      showAtrRef.current = v
+      setShowAtrState(v)
+      writeBoolPref(LS_SHOW_ATR, v)
+      layoutSubpanes()
+    },
+    [layoutSubpanes],
+  )
+
+  const setShowVolume = useCallback(
+    (next) => {
+      const v = Boolean(next)
+      showVolumeRef.current = v
+      setShowVolumeState(v)
+      writeBoolPref(LS_SHOW_VOLUME, v)
+      layoutSubpanes()
+    },
+    [layoutSubpanes],
+  )
+
+  const toggleAtrPane = useCallback(() => {
+    setShowAtr(!showAtrRef.current)
+  }, [setShowAtr])
+
+  const toggleVolumePane = useCallback(() => {
+    setShowVolume(!showVolumeRef.current)
+  }, [setShowVolume])
+
+  const applySubpaneSeriesData = useCallback((candles) => {
     try {
+      atrSeriesRef.current?.setData(sanitizeAtrPoints(candles))
       volumeSeriesRef.current?.setData(sanitizeVolumePoints(candles))
       volumeSmaSeriesRef.current?.setData(sanitizeVolumeSmaPoints(candles))
     } catch {
-      // ignore degenerate volume scales
+      // ignore degenerate subpane scales
     }
   }, [])
 
@@ -54,19 +164,25 @@ export function useChartEngine({ chartTypeRef, overlay }) {
     setOhlcLegend(latestCandleFromMap(candlesRef.current))
   }, [])
 
+  /** Live update volume + ATR after candle upsert (price series updated by caller). */
   const updateVolumeLive = useCallback(
     (candle) => {
+      const candles = sortedCandlesFromMap(candlesRef.current)
       try {
         volumeSeriesRef.current?.update(toVolumePoint(candle))
-        const smaPoint = lastVolumeSmaPoint(sortedCandlesFromMap(candlesRef.current))
+        const smaPoint = lastVolumeSmaPoint(candles)
         if (smaPoint) {
           volumeSmaSeriesRef.current?.update(smaPoint)
         }
+        const atrPoint = lastAtrPoint(candles)
+        if (atrPoint) {
+          atrSeriesRef.current?.update(atrPoint)
+        }
       } catch {
-        applyVolumeSeriesData(sortedCandlesFromMap(candlesRef.current))
+        applySubpaneSeriesData(candles)
       }
     },
-    [applyVolumeSeriesData],
+    [applySubpaneSeriesData],
   )
 
   const applySeriesData = useCallback(
@@ -94,17 +210,11 @@ export function useChartEngine({ chartTypeRef, overlay }) {
           // ignore
         }
       }
-      applyVolumeSeriesData(candles)
+      applySubpaneSeriesData(candles)
 
       const chart = chartRef.current
       const h = containerRef.current?.clientHeight ?? 0
-      rebalancePriceVolumePanes(
-        chart,
-        series,
-        volumeSeriesRef.current,
-        volumeSmaSeriesRef.current,
-        h,
-      )
+      rebalancePanes(chart, series, h)
 
       const restoring = restoreOverlay && ov.willRestoreForCurrentSeries()
 
@@ -112,6 +222,7 @@ export function useChartEngine({ chartTypeRef, overlay }) {
         ohlcHoveringRef.current = false
         try {
           series.priceScale().applyOptions({ autoScale: true })
+          atrSeriesRef.current?.priceScale().applyOptions({ autoScale: true })
           volumeSeriesRef.current?.priceScale().applyOptions({ autoScale: true })
         } catch {
           // ignore
@@ -137,13 +248,7 @@ export function useChartEngine({ chartTypeRef, overlay }) {
           }
           applyBarSpacing(chart)
         }
-        rebalancePriceVolumePanes(
-          chart,
-          series,
-          volumeSeriesRef.current,
-          volumeSmaSeriesRef.current,
-          h,
-        )
+        rebalancePanes(chart, series, h)
       } else {
         applyBarSpacing(chart)
       }
@@ -155,7 +260,7 @@ export function useChartEngine({ chartTypeRef, overlay }) {
         ov.restoreOverlayAfterData({ focusView: false })
       }
     },
-    [applyVolumeSeriesData],
+    [applySubpaneSeriesData, rebalancePanes],
   )
 
   const switchChartType = useCallback(
@@ -193,17 +298,11 @@ export function useChartEngine({ chartTypeRef, overlay }) {
       requestAnimationFrame(() => {
         const c = chartRef.current
         const h = containerRef.current?.clientHeight ?? 0
-        rebalancePriceVolumePanes(
-          c,
-          seriesRef.current,
-          volumeSeriesRef.current,
-          volumeSmaSeriesRef.current,
-          h,
-        )
+        rebalancePanes(c, seriesRef.current, h)
         applyBarSpacing(c)
       })
     },
-    [applySeriesData],
+    [applySeriesData, rebalancePanes],
   )
 
   function upsertCandle(candle) {
@@ -228,16 +327,19 @@ export function useChartEngine({ chartTypeRef, overlay }) {
 
   function mountSeries(chart, chartType) {
     seriesRef.current = createPriceSeries(chart, chartType)
+    // Order: ATR pane 1, then volume pane 2 (LWC creates panes as series are added).
+    atrSeriesRef.current = createAtrSeries(chart)
     volumeSeriesRef.current = createVolumeSeries(chart)
     volumeSmaSeriesRef.current = createVolumeSmaSeries(chart)
     applySeriesData(seriesRef.current, chartType)
     const initialHeight = containerRef.current?.clientHeight ?? 0
-    applyVolumePaneHeight(chart, initialHeight)
+    layoutSubpanes(chart, initialHeight)
   }
 
   function clearEngineRefs() {
     chartRef.current = null
     seriesRef.current = null
+    atrSeriesRef.current = null
     volumeSeriesRef.current = null
     volumeSmaSeriesRef.current = null
     ohlcHoveringRef.current = false
@@ -247,6 +349,7 @@ export function useChartEngine({ chartTypeRef, overlay }) {
     containerRef,
     chartRef,
     seriesRef,
+    atrSeriesRef,
     volumeSeriesRef,
     volumeSmaSeriesRef,
     candlesRef,
@@ -254,6 +357,13 @@ export function useChartEngine({ chartTypeRef, overlay }) {
     loadedSeriesKeyRef,
     ohlcLegend,
     setOhlcLegend,
+    showAtr,
+    showVolume,
+    setShowAtr,
+    setShowVolume,
+    toggleAtrPane,
+    toggleVolumePane,
+    layoutSubpanes,
     applySeriesData,
     switchChartType,
     upsertCandle,
@@ -262,6 +372,6 @@ export function useChartEngine({ chartTypeRef, overlay }) {
     clearSeriesDataFor,
     mountSeries,
     clearEngineRefs,
-    applyVolumeSeriesData,
+    applyVolumeSeriesData: applySubpaneSeriesData,
   }
 }

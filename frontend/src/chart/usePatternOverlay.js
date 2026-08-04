@@ -7,10 +7,12 @@ import {
   filterVisibleAlerts,
 } from '../utils/alertList'
 import { fetchTodayPatternAlerts } from '../services/patternAlertsApi'
+import { fetchPatternInstance } from '../services/patternInstancesApi'
 import {
   applyInstanceOverlay,
   clearPatternOverlay,
   collectInstanceEvents,
+  findAlertAtChartTime,
   seriesKey,
   willRestoreOverlay,
 } from '../utils/patternOverlay'
@@ -26,16 +28,33 @@ function instanceSignature(instanceId, alertList) {
     .join('|')
 }
 
-/** Normalize API / WS alert fields for the feed. */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function optionalNum(v) {
+  if (v == null || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+/**
+ * Normalize API / WS alert fields for the feed.
+ * Rails (entry/stop/target/ATR) are frozen at detect — present for DET and later stages.
+ */
 function normalizeAlert(raw) {
   if (!raw) return null
   const time = Number(raw.time)
   const price = Number(raw.price)
-  const instanceId = raw.instanceId || raw.instance_id || ''
+  let instanceId = raw.instanceId || raw.instance_id || ''
+  // Legacy WS used `id` as instance UUID without instanceId
+  if (!instanceId && raw.id && UUID_RE.test(String(raw.id))) {
+    instanceId = String(raw.id)
+  }
   const stage = (raw.stage || '').toLowerCase()
   const id =
-    raw.id ||
-    [instanceId || 'x', stage || 'event', time || '', price || ''].join(':')
+    raw.id && !UUID_RE.test(String(raw.id))
+      ? raw.id
+      : [instanceId || 'x', stage || 'event', time || '', price || ''].join(':')
   return {
     id,
     symbolId: raw.symbolId || raw.symbol_id,
@@ -44,11 +63,47 @@ function normalizeAlert(raw) {
     stage,
     price,
     time,
-    referenceLevel: raw.referenceLevel ?? raw.reference_level,
+    referenceLevel: optionalNum(raw.referenceLevel ?? raw.reference_level),
     instanceId,
     direction: raw.direction,
     status: raw.status,
     receivedAt: Number(raw.receivedAt ?? raw.received_at) || Date.now(),
+    // Rails — available from detect (not only success/fail)
+    entryPrice: optionalNum(raw.entryPrice ?? raw.entry_price),
+    stopLevel: optionalNum(raw.stopLevel ?? raw.stop_level),
+    targetLevel: optionalNum(raw.targetLevel ?? raw.target_level),
+    atrAtDetect: optionalNum(raw.atrAtDetect ?? raw.atr_at_detect),
+  }
+}
+
+/** Build a minimal instance DTO from alert-embedded rails (works on DET). */
+function instanceFromAlertRails(alert) {
+  if (!alert?.instanceId) return null
+  const hasRails =
+    alert.entryPrice != null ||
+    alert.stopLevel != null ||
+    alert.targetLevel != null ||
+    alert.atrAtDetect != null
+  if (!hasRails) return null
+  return {
+    id: String(alert.instanceId),
+    symbolId: alert.symbolId,
+    timeframe: alert.timeframe,
+    patternType: alert.patternType,
+    direction: alert.direction,
+    stage: alert.stage || alert.status || 'detected',
+    status: alert.status || alert.stage || 'detected',
+    referenceLevel: alert.referenceLevel,
+    entryPrice: alert.entryPrice,
+    stopLevel: alert.stopLevel,
+    targetLevel: alert.targetLevel,
+    atrAtDetect: alert.atrAtDetect,
+    terminal: ['succeeded', 'failed', 'expired'].includes(
+      String(alert.stage || '').toLowerCase(),
+    ),
+    active: !['succeeded', 'failed', 'expired'].includes(
+      String(alert.stage || '').toLowerCase(),
+    ),
   }
 }
 
@@ -89,12 +144,24 @@ export function usePatternOverlay({
   const focusedInstanceIdRef = useRef(null)
   const overlayMemoryRef = useRef(new Map())
   const lastPaintedInstanceSigRef = useRef('')
+  /** Cache full instance DTOs by id (rails / ATR). */
+  const instanceCacheRef = useRef(new Map())
+  const instanceLoadGenRef = useRef(0)
+  /** Latest rails used for paint (so live stage refresh keeps stop/target lines). */
+  const railsRef = useRef(null)
+  const focusAlertRef = useRef(null)
 
   const [alerts, setAlerts] = useState([])
   const [selectedAlertId, setSelectedAlertId] = useState(null)
   const [selectedInstanceId, setSelectedInstanceId] = useState(null)
   /** True when a price line / markers handle is currently on the chart. */
   const [hasChartDrawings, setHasChartDrawings] = useState(false)
+  /** Full instance for inspect panel (entry/stop/target/ATR…). */
+  const [focusedInstance, setFocusedInstance] = useState(null)
+  const [instanceLoading, setInstanceLoading] = useState(false)
+  const [instanceError, setInstanceError] = useState(null)
+  /** Alert currently driving the inspect panel (React state for re-render). */
+  const [focusedAlert, setFocusedAlert] = useState(null)
   /** True after a successful HTTP fetch (empty is a valid quiet IST day). */
   const dayAlertsLoadedRef = useRef(false)
   /** Generation token so remounts supersede in-flight requests (StrictMode-safe). */
@@ -196,6 +263,137 @@ export function usePatternOverlay({
     setHasChartDrawings(false)
   }
 
+  function clearInstanceInspect() {
+    instanceLoadGenRef.current += 1
+    railsRef.current = null
+    focusAlertRef.current = null
+    setFocusedAlert(null)
+    setFocusedInstance(null)
+    setInstanceLoading(false)
+    setInstanceError(null)
+  }
+
+  function railsFromInstance(inst) {
+    if (!inst) return null
+    return {
+      reference: inst.referenceLevel,
+      entry: inst.entryPrice,
+      stop: inst.stopLevel,
+      target: inst.targetLevel,
+    }
+  }
+
+  function railsFromAlert(alert) {
+    if (!alert) return null
+    const has =
+      alert.entryPrice != null ||
+      alert.stopLevel != null ||
+      alert.targetLevel != null ||
+      alert.referenceLevel != null
+    if (!has) return null
+    return {
+      reference: alert.referenceLevel,
+      entry: alert.entryPrice,
+      stop: alert.stopLevel,
+      target: alert.targetLevel,
+    }
+  }
+
+  /**
+   * Load full instance for inspect + re-paint rails when ready.
+   * Rails are available from DET (not only success/fail).
+   * @param {object} focusAlert
+   * @param {{ silent?: boolean }} [opts]
+   */
+  async function loadInstanceForFocus(focusAlert, opts = {}) {
+    const silent = opts.silent === true
+    /** When true, skip network if alert already has rails or cache is warm. */
+    const networkIfNeeded = opts.networkIfNeeded !== false
+    if (!focusAlert?.instanceId || !focusAlert?.symbolId) {
+      // Still show alert-embedded rails (DET) if present
+      const fromAlert = instanceFromAlertRails(focusAlert)
+      if (fromAlert) {
+        railsRef.current = railsFromInstance(fromAlert)
+        setFocusedInstance(fromAlert)
+        setInstanceError(null)
+        setInstanceLoading(false)
+        return fromAlert
+      }
+      if (!silent) clearInstanceInspect()
+      return null
+    }
+    const iid = String(focusAlert.instanceId)
+
+    // Immediate: alert rails or cache (works for DET without waiting on network)
+    const fromAlert = instanceFromAlertRails(focusAlert)
+    const cached = instanceCacheRef.current.get(iid)
+    const immediate = cached || fromAlert
+    if (immediate) {
+      railsRef.current = railsFromInstance(immediate)
+      setFocusedInstance(immediate)
+      setInstanceError(null)
+      setInstanceLoading(false)
+      if (
+        focusedInstanceIdRef.current === iid &&
+        seriesRef.current &&
+        chartRef.current
+      ) {
+        paintOverlayIfReady(focusAlert, { focusView: false, skipInstanceLoad: true })
+      }
+    }
+
+    // Alert rails + cache are enough for DET inspect; still refresh once when no cache
+    // (lifecycle MFE/MAE). Never multi-list fan-out — single instanceId GET.
+    if (!networkIfNeeded) return immediate || null
+    if (cached && !opts.forceRefresh) {
+      // Background refresh once in a while is optional; skip for stage repaints.
+      return cached
+    }
+
+    const gen = ++instanceLoadGenRef.current
+    if (!silent && !immediate) {
+      setInstanceLoading(true)
+      setInstanceError(null)
+    }
+    try {
+      const inst = await fetchPatternInstance(
+        focusAlert.symbolId,
+        iid,
+        focusAlert.timeframe,
+      )
+      if (gen !== instanceLoadGenRef.current) return null
+      if (!inst) {
+        if (!immediate) {
+          setFocusedInstance(null)
+          setInstanceError('Instance rails not found (may be outside recent journal window).')
+        }
+        setInstanceLoading(false)
+        return immediate || null
+      }
+      instanceCacheRef.current.set(iid, inst)
+      railsRef.current = railsFromInstance(inst)
+      setFocusedInstance(inst)
+      setInstanceError(null)
+      setInstanceLoading(false)
+      if (
+        focusedInstanceIdRef.current === iid &&
+        seriesRef.current &&
+        chartRef.current
+      ) {
+        paintOverlayIfReady(focusAlert, { focusView: false, skipInstanceLoad: true })
+      }
+      return inst
+    } catch (e) {
+      if (gen !== instanceLoadGenRef.current) return null
+      if (!immediate) {
+        setFocusedInstance(null)
+        setInstanceError(e instanceof Error ? e.message : 'Failed to load instance')
+      }
+      setInstanceLoading(false)
+      return immediate || null
+    }
+  }
+
   function memoryKey(symbolId = activeSymbolIdRef.current, tf = timeframeRef.current) {
     return seriesKey(symbolId, tf)
   }
@@ -236,14 +434,18 @@ export function usePatternOverlay({
     if (!focusAlert) {
       selectedAlertIdRef.current = null
       focusedInstanceIdRef.current = null
+      focusAlertRef.current = null
       setSelectedAlertId(null)
       setSelectedInstanceId(null)
+      setFocusedAlert(null)
       return
     }
     selectedAlertIdRef.current = focusAlert.id
     focusedInstanceIdRef.current = focusAlert.instanceId || null
+    focusAlertRef.current = focusAlert
     setSelectedAlertId(focusAlert.id)
     setSelectedInstanceId(focusAlert.instanceId || null)
+    setFocusedAlert(focusAlert)
   }
 
   function paintOverlayIfReady(focusAlert, opts = {}) {
@@ -261,6 +463,21 @@ export function usePatternOverlay({
     // Never paint on empty series — clears pending and flashes wrong viewport/markers.
     if (!candles.length) return false
 
+    // Prefer rails: cache → alert-embedded (DET+) → last load
+    let rails = railsRef.current
+    const iid = focusAlert.instanceId ? String(focusAlert.instanceId) : null
+    if (iid) {
+      const cached = instanceCacheRef.current.get(iid)
+      if (cached) {
+        rails = railsFromInstance(cached)
+        railsRef.current = rails
+      }
+    }
+    if (!rails) {
+      rails = railsFromAlert(focusAlert)
+      if (rails) railsRef.current = rails
+    }
+
     wipeOverlay()
     overlayHandleRef.current = applyInstanceOverlay(seriesRef.current, chartRef.current, {
       events: drawEvents,
@@ -271,11 +488,18 @@ export function usePatternOverlay({
       referenceLevel: focusAlert.referenceLevel,
       seriesChartTimes: seriesChartTimesFromCandles(candles),
       focusView,
+      rails,
     })
 
     if (overlayHandleRef.current) {
       setHasChartDrawings(true)
       setFocusSelection(focusAlert)
+      // Show inspect immediately from alert rails (including DET)
+      const quick = instanceFromAlertRails(focusAlert)
+      if (quick && !instanceCacheRef.current.get(String(focusAlert.instanceId || ''))) {
+        setFocusedInstance(quick)
+        setInstanceError(null)
+      }
       rememberOverlay(
         focusAlert.symbolId,
         focusAlert.timeframe,
@@ -286,6 +510,9 @@ export function usePatternOverlay({
         focusAlert.instanceId,
         alertsRef.current,
       )
+      if (!opts.skipInstanceLoad) {
+        void loadInstanceForFocus(focusAlert)
+      }
       return true
     }
     setHasChartDrawings(false)
@@ -358,6 +585,7 @@ export function usePatternOverlay({
     wipeOverlay()
     lastPaintedInstanceSigRef.current = ''
     setFocusSelection(null)
+    clearInstanceInspect()
 
     const restore = resolveMemoryFocus(nextSymbolId, nextTimeframe)
     if (restore) {
@@ -405,6 +633,7 @@ export function usePatternOverlay({
     overlayMemoryRef.current.clear()
     focusedInstanceIdRef.current = null
     setFocusSelection(null)
+    clearInstanceInspect()
     wipeOverlay()
   }
 
@@ -412,8 +641,59 @@ export function usePatternOverlay({
     pendingOverlayAlertRef.current = null
     lastPaintedInstanceSigRef.current = ''
     setFocusSelection(null)
+    clearInstanceInspect()
     wipeOverlay()
   }
+
+  /** Close inspect panel only (keeps chart drawings unless caller also clears). */
+  function closeInstanceInspect() {
+    clearInstanceInspect()
+  }
+
+  /**
+   * Chart click: only hit when click lands on the same series bar as a stage event.
+   * If an overlay is painted, further restrict to that instance's marker bars.
+   */
+  function handleChartClick(param) {
+    if (disposedRef.current) return
+    if (param?.time == null) return
+    const chartTime = Number(param.time)
+    if (!Number.isFinite(chartTime)) return
+    const candles = sortedCandlesFromMap(candlesRef.current)
+    const seriesTimes = seriesChartTimesFromCandles(candles)
+    const painted = overlayHandleRef.current
+    const markerTimes = Array.isArray(painted?.markerChartTimes)
+      ? painted.markerChartTimes
+      : null
+    const hit = findAlertAtChartTime(alertsRef.current, chartTime, {
+      symbolId: activeSymbolIdRef.current,
+      timeframe: timeframeRef.current,
+      preferredInstanceId: focusedInstanceIdRef.current,
+      seriesChartTimes: seriesTimes,
+      // When markers are painted, only those bars are clickable (avoids random steals).
+      // When none painted, any day-alert bar for the series is fair game.
+      markerChartTimes: markerTimes && markerTimes.length ? markerTimes : null,
+    })
+    if (!hit) return
+    paintOverlayIfReady(hit, { focusView: false })
+  }
+
+  // Subscribe chart click for marker / bar inspect (rebind when series context changes).
+  useEffect(() => {
+    if (loading) return undefined
+    const chart = chartRef.current
+    if (!chart || typeof chart.subscribeClick !== 'function') return undefined
+    const handler = (param) => handleChartClick(param)
+    chart.subscribeClick(handler)
+    return () => {
+      try {
+        chart.unsubscribeClick(handler)
+      } catch {
+        // disposed
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handler uses refs
+  }, [loading, activeSymbolId, timeframe])
 
   // Live refresh when focused instance gains stages
   useEffect(() => {
@@ -434,7 +714,8 @@ export function usePatternOverlay({
     const sig = instanceSignature(instanceId, alerts)
     if (sig === lastPaintedInstanceSigRef.current) return
     if (!seriesRef.current || !chartRef.current) return
-    paintOverlayIfReady(focus, { focusView: false })
+    // Stage-only repaint: keep rails/cache; do not re-fetch instance (avoids list fan-out).
+    paintOverlayIfReady(focus, { focusView: false, skipInstanceLoad: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- paint uses refs; alerts/selection drive refresh
   }, [alerts, loading, selectedInstanceId, activeSymbolId, timeframe])
 
@@ -443,6 +724,10 @@ export function usePatternOverlay({
     selectedAlertId,
     selectedInstanceId,
     hasChartDrawings,
+    focusedInstance,
+    instanceLoading,
+    instanceError,
+    focusedAlert,
     alertsRef,
     pendingOverlayAlertRef,
     focusedInstanceIdRef,
@@ -460,6 +745,7 @@ export function usePatternOverlay({
     clearPendingAlert,
     clearAllAlerts,
     clearChartDrawings,
+    closeInstanceInspect,
     resetOverlayForEmptyWatchlist,
     willRestoreForCurrentSeries,
     hydrateDayAlerts,

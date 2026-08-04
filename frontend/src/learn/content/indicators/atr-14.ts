@@ -7,10 +7,10 @@ export const atr14: LearnTopic = {
   title: 'ATR (14)',
   shortDescription: 'How big is a normal candle move? TIP’s volatility yardstick.',
   group: 'indicator',
-  plottedOnChart: false,
+  plottedOnChart: true,
   plainEnglish: [
     'ATR means Average True Range. It answers: “How large is a typical move for this symbol on this timeframe?”',
-    'TIP does not plot ATR on the chart. Pattern detectors use it behind the scenes for retest bands, targets, and a unit of risk (R-unit).',
+    'TIP plots Wilder ATR(14) in its own pane under price (amber line), computed on the chart from the same candles. Pattern detectors use the same formula for retest bands, targets, and the R-unit.',
     'True range also counts gaps: a bar that opens far from yesterday’s close still counts as a big move.',
   ],
   howWeCalculate: [

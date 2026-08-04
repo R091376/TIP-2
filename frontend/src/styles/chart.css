@@ -282,12 +282,11 @@
   border: 1px solid #1e2433;
 }
 
-/* Top of locked volume pane: volume SMA chip only */
+/* Subpane chips (approx tops of ATR + volume bands; heights match helpers caps). */
+.atr-pane-legend,
 .volume-pane-legend {
   position: absolute;
   left: 20px;
-  /* Sit just under the price/volume splitter (top of volume band). */
-  bottom: calc(20px + 96px - 8px);
   z-index: 2;
   display: inline-flex;
   align-items: center;
@@ -303,16 +302,88 @@
   letter-spacing: 0.02em;
 }
 
-.volume-pane-legend__swatch {
+/* Top of volume pane (max ~96px). */
+.volume-pane-legend {
+  bottom: calc(20px + 96px - 8px);
+}
+
+/* Top of ATR pane above volume (max ATR ~72px + volume ~96px). */
+.atr-pane-legend {
+  bottom: calc(20px + 96px + 72px - 12px);
+}
+
+/* When volume is hidden, ATR sits just above the bottom edge. */
+.chart-panel--no-volume .atr-pane-legend {
+  bottom: calc(20px + 72px - 12px);
+}
+
+.chart-pane-toggles {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.chart-pane-toggle {
+  pointer-events: auto;
+  position: relative;
+  z-index: 11;
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #2a3144;
+  background: rgba(15, 17, 23, 0.72);
+  color: #64748b;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chart-pane-toggle:hover {
+  border-color: #3b455c;
+  color: #cbd5e1;
+}
+
+.chart-pane-toggle--on {
+  background: rgba(15, 17, 23, 0.92);
+  color: #e2e8f0;
+  border-color: #3b455c;
+}
+
+.chart-pane-toggle--atr.chart-pane-toggle--on {
+  color: #fcd34d;
+  border-color: rgba(251, 191, 36, 0.45);
+}
+
+.chart-pane-toggle--vol.chart-pane-toggle--on {
+  color: #93c5fd;
+  border-color: rgba(96, 165, 250, 0.45);
+}
+
+.volume-pane-legend__swatch,
+.atr-pane-legend__swatch {
   width: 14px;
   height: 2px;
   border-radius: 1px;
   flex-shrink: 0;
+}
+
+.volume-pane-legend__swatch {
   box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.25);
+}
+
+.atr-pane-legend__swatch {
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.3);
 }
 
 .volume-pane-legend__text {
   color: #93c5fd;
+}
+
+.atr-pane-legend__text {
+  color: #fcd34d;
 }
 
 /* OHLC strip + clear drawings at top of price pane.
