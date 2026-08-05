@@ -13,6 +13,9 @@ const SORT_OPTIONS = [
   { value: 'avgMoveR', label: 'Avg move (R)' },
   { value: 'avgMfeR', label: 'Avg MFE (R)' },
   { value: 'avgMaeR', label: 'Avg MAE (R)' },
+  { value: 'avgPlannedRr', label: 'Plan R:R (avg reward ÷ avg risk)' },
+  { value: 'avgRiskR', label: 'Avg risk (R)' },
+  { value: 'avgRewardR', label: 'Avg reward (R)' },
   { value: 'sampleSize', label: 'Sample size' },
   { value: 'symbol', label: 'Symbol' },
 ]
@@ -51,6 +54,9 @@ function computeHighlightKeys(rows, sortKey, minSampleSize) {
     if (sortKey === 'avgMoveR') return r.avgMoveR
     if (sortKey === 'avgMfeR') return r.avgMfeR
     if (sortKey === 'avgMaeR') return r.avgMaeR
+    if (sortKey === 'avgPlannedRr') return r.avgPlannedRr
+    if (sortKey === 'avgRiskR') return r.avgRiskR
+    if (sortKey === 'avgRewardR') return r.avgRewardR
     if (sortKey === 'sampleSize') return r.sampleSize
     if (sortKey === 'symbol') return null
     return r.resolvedSuccessRate
@@ -98,6 +104,15 @@ function sortRows(rows, sortKey, minSampleSize) {
         break
       case 'avgMaeR':
         primary = cmpNum(a.avgMaeR, b.avgMaeR, true)
+        break
+      case 'avgPlannedRr':
+        primary = cmpNum(a.avgPlannedRr, b.avgPlannedRr)
+        break
+      case 'avgRiskR':
+        primary = cmpNum(a.avgRiskR, b.avgRiskR)
+        break
+      case 'avgRewardR':
+        primary = cmpNum(a.avgRewardR, b.avgRewardR)
         break
       case 'sampleSize':
         primary = cmpNum(a.sampleSize, b.sampleSize)
@@ -298,7 +313,9 @@ export default function PatternStatsPage() {
         <p className="stats-legend">
           Highlight = top quartile among <strong>Ready</strong> rows for current sort (relative
           rank in this view). S / F / E = success / fail / expired. Move (R) = average terminal
-          exit vs entry in ATR units (signed with the setup).
+          exit vs entry in ATR units (signed with the setup). Plan R:R = avg reward (R) ÷
+          avg risk (R) from final rails (ratio of averages — not the mean of per-trade RRs).
+          Risk/Reward (R) = those distances ÷ ATR at detect. Consolidation excluded.
         </p>
       </section>
 
@@ -334,6 +351,11 @@ export default function PatternStatsPage() {
                   </th>
                   <th>MFE (R)</th>
                   <th>MAE (R)</th>
+                  <th title="avg(reward in R) ÷ avg(risk in R) from final rails (ratio of averages)">
+                    Plan R:R
+                  </th>
+                  <th title="Average |entry − stop| ÷ ATR at detect">Risk (R)</th>
+                  <th title="Average favorable entry → target ÷ ATR at detect">Reward (R)</th>
                   <th>Status</th>
                   <th aria-label="Open chart" />
                 </tr>
@@ -409,6 +431,11 @@ function FragmentRow({ item, ready, open, highlight, minSampleSize, onToggle, on
         <td className="admin-mono">{ready ? num(item.avgMoveR) : '—'}</td>
         <td className="admin-mono">{ready ? num(item.avgMfeR) : '—'}</td>
         <td className="admin-mono">{ready ? num(item.avgMaeR) : '—'}</td>
+        <td className="admin-mono">
+          {ready && item.avgPlannedRr != null ? `${num(item.avgPlannedRr)}×` : '—'}
+        </td>
+        <td className="admin-mono">{ready ? num(item.avgRiskR) : '—'}</td>
+        <td className="admin-mono">{ready ? num(item.avgRewardR) : '—'}</td>
         <td>
           <span
             className={`admin-pill ${ready ? 'stats-pill--ready' : 'stats-pill--building'}`}
@@ -424,7 +451,7 @@ function FragmentRow({ item, ready, open, highlight, minSampleSize, onToggle, on
       </tr>
       {open && (
         <tr className="stats-detail-row">
-          <td colSpan={12}>
+          <td colSpan={15}>
             <div className="stats-detail">
               <div>
                 <span className="stats-detail__label">Inventory success %</span>
@@ -459,6 +486,30 @@ function FragmentRow({ item, ready, open, highlight, minSampleSize, onToggle, on
               <div>
                 <span className="stats-detail__label">MAE samples</span>
                 <span className="admin-mono">{item.maeSampleSize ?? '—'}</span>
+              </div>
+              <div>
+                <span className="stats-detail__label">Planned R:R samples</span>
+                <span className="admin-mono">{item.plannedRrSampleSize ?? '—'}</span>
+              </div>
+              <div>
+                <span className="stats-detail__label">Min plan R:R</span>
+                <span className="admin-mono">
+                  {ready && item.minPlannedRr != null ? `${num(item.minPlannedRr)}×` : '—'}
+                </span>
+              </div>
+              <div>
+                <span className="stats-detail__label">Median plan R:R</span>
+                <span className="admin-mono">
+                  {ready && item.medianPlannedRr != null
+                    ? `${num(item.medianPlannedRr)}×`
+                    : '—'}
+                </span>
+              </div>
+              <div>
+                <span className="stats-detail__label">Max plan R:R</span>
+                <span className="admin-mono">
+                  {ready && item.maxPlannedRr != null ? `${num(item.maxPlannedRr)}×` : '—'}
+                </span>
               </div>
               <div>
                 <span className="stats-detail__label">Updated</span>

@@ -7,6 +7,7 @@ from typing import Protocol
 from uuid import UUID
 
 from app.patterns.models import ActivePattern, FinalOutcome, PatternStage, PatternStageEvent
+from app.patterns.planned_rails import median_planned_rr, planned_rails_from_pattern
 
 
 @dataclass
@@ -28,6 +29,13 @@ class PatternStatisticsSnapshot:
     move_sample_size: int = 0
     mfe_sample_size: int = 0
     mae_sample_size: int = 0
+    avg_planned_rr: float = 0.0
+    avg_risk_r: float = 0.0
+    avg_reward_r: float = 0.0
+    planned_rr_sample_size: int = 0
+    min_planned_rr: float = 0.0
+    max_planned_rr: float = 0.0
+    median_planned_rr: float = 0.0
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> dict:
@@ -49,6 +57,13 @@ class PatternStatisticsSnapshot:
             "moveSampleSize": self.move_sample_size,
             "mfeSampleSize": self.mfe_sample_size,
             "maeSampleSize": self.mae_sample_size,
+            "avgPlannedRr": self.avg_planned_rr,
+            "avgRiskR": self.avg_risk_r,
+            "avgRewardR": self.avg_reward_r,
+            "plannedRrSampleSize": self.planned_rr_sample_size,
+            "minPlannedRr": self.min_planned_rr,
+            "maxPlannedRr": self.max_planned_rr,
+            "medianPlannedRr": self.median_planned_rr,
             "updatedAt": self.updated_at.isoformat().replace("+00:00", "Z"),
         }
 
@@ -377,6 +392,10 @@ class InMemoryPatternJournal:
                 "mae_n": 0,
                 "dur": 0.0,
                 "dur_n": 0,
+                "risk_r": 0.0,
+                "reward_r": 0.0,
+                "planned_n": 0,
+                "planned_rrs": [],
             },
         )
         snap.sample_size += 1
@@ -403,6 +422,13 @@ class InMemoryPatternJournal:
             sums["mfe_n"] += 1
             sums["mae"] += pattern.max_adverse_r()
             sums["mae_n"] += 1
+            rails = planned_rails_from_pattern(pattern)
+            if rails is not None:
+                sums["risk_r"] += rails.risk_r
+                sums["reward_r"] += rails.reward_r
+                sums["planned_n"] += 1
+                rrs: list = sums["planned_rrs"]
+                rrs.append(rails.planned_rr)
         sums["dur"] += pattern.duration_candles
         sums["dur_n"] += 1
 
@@ -412,6 +438,27 @@ class InMemoryPatternJournal:
         snap.avg_move_r = sums["move"] / sums["move_n"] if sums["move_n"] else 0.0
         snap.avg_mfe_r = sums["mfe"] / sums["mfe_n"] if sums["mfe_n"] else 0.0
         snap.avg_mae_r = sums["mae"] / sums["mae_n"] if sums["mae_n"] else 0.0
+        snap.planned_rr_sample_size = sums["planned_n"]
+        snap.avg_risk_r = sums["risk_r"] / sums["planned_n"] if sums["planned_n"] else 0.0
+        snap.avg_reward_r = (
+            sums["reward_r"] / sums["planned_n"] if sums["planned_n"] else 0.0
+        )
+        # Plan R:R = ratio of averages (not mean of per-trade RRs)
+        snap.avg_planned_rr = (
+            snap.avg_reward_r / snap.avg_risk_r
+            if snap.avg_risk_r > 0 and snap.avg_reward_r > 0
+            else 0.0
+        )
+        rrs_list: list[float] = list(sums["planned_rrs"])
+        if rrs_list:
+            snap.min_planned_rr = min(rrs_list)
+            snap.max_planned_rr = max(rrs_list)
+            med = median_planned_rr(rrs_list)
+            snap.median_planned_rr = med if med is not None else 0.0
+        else:
+            snap.min_planned_rr = 0.0
+            snap.max_planned_rr = 0.0
+            snap.median_planned_rr = 0.0
         snap.avg_duration_candles = sums["dur"] / sums["dur_n"] if sums["dur_n"] else 0.0
         snap.updated_at = datetime.now(timezone.utc)
         self._stats[key] = snap

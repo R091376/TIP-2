@@ -19,9 +19,20 @@ export type PatternStatisticsItem = {
   avgDurationCandles: number | null
   avgMfeR: number | null
   avgMaeR: number | null
+  /** Planned R:R = avgRewardR / avgRiskR (ratio of averages from final rails) */
+  avgPlannedRr: number | null
+  /** Average |entry−stop| / ATR at detect */
+  avgRiskR: number | null
+  /** Average favorable entry→target / ATR at detect */
+  avgRewardR: number | null
+  /** Min / max / median of per-trade planned R:R (secondary) */
+  minPlannedRr?: number | null
+  maxPlannedRr?: number | null
+  medianPlannedRr?: number | null
   moveSampleSize?: number | null
   mfeSampleSize?: number | null
   maeSampleSize?: number | null
+  plannedRrSampleSize?: number | null
   updatedAt?: string | null
 }
 

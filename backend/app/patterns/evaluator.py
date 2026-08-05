@@ -168,6 +168,14 @@ class PatternEvaluator:
         body = snap.to_dict()
         body["status"] = "ok"
         body["minSampleSize"] = min_n
+        # Null planned-rails averages when no valid trade offers in the sample
+        if snap.planned_rr_sample_size <= 0:
+            body["avgPlannedRr"] = None
+            body["avgRiskR"] = None
+            body["avgRewardR"] = None
+            body["minPlannedRr"] = None
+            body["maxPlannedRr"] = None
+            body["medianPlannedRr"] = None
         return body
 
     def bulk_statistics(
@@ -369,6 +377,27 @@ def _snapshot_to_bulk_item(s, entry, min_n: int) -> dict:
         "avgDurationCandles": s.avg_duration_candles if ready else None,
         "avgMfeR": s.avg_mfe_r if ready else None,
         "avgMaeR": s.avg_mae_r if ready else None,
+        "avgPlannedRr": (
+            s.avg_planned_rr
+            if ready and s.planned_rr_sample_size > 0
+            else None
+        ),
+        "avgRiskR": (
+            s.avg_risk_r if ready and s.planned_rr_sample_size > 0 else None
+        ),
+        "avgRewardR": (
+            s.avg_reward_r if ready and s.planned_rr_sample_size > 0 else None
+        ),
+        "minPlannedRr": (
+            s.min_planned_rr if ready and s.planned_rr_sample_size > 0 else None
+        ),
+        "maxPlannedRr": (
+            s.max_planned_rr if ready and s.planned_rr_sample_size > 0 else None
+        ),
+        "medianPlannedRr": (
+            s.median_planned_rr if ready and s.planned_rr_sample_size > 0 else None
+        ),
+        "plannedRrSampleSize": s.planned_rr_sample_size,
     }
     return item
 

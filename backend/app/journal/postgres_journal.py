@@ -39,6 +39,11 @@ from app.journal.mapper import (
 )
 from app.patterns.journal import PatternStatisticsSnapshot
 from app.patterns.models import ActivePattern, FinalOutcome, PatternStage, PatternStageEvent
+from app.patterns.planned_rails import (
+    compute_planned_rails,
+    median_planned_rr,
+    planned_rails_from_pattern,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -417,7 +422,9 @@ class PostgresPatternJournal:
             existing = s.get(PatternOutcomeRow, durable_id)
             if existing is None:
                 s.add(self._build_outcome(pattern, now, instance_id=durable_id))
-                self._upsert_statistics(s, pattern, now)
+                self._upsert_statistics(
+                    s, pattern, now, instance_id=durable_id
+                )
 
     def _insert_event_if_absent(
         self,
@@ -477,8 +484,16 @@ class PostgresPatternJournal:
             closed_at=now,
         )
 
-    def _upsert_statistics(self, s: Session, p: ActivePattern, now: datetime) -> None:
+    def _upsert_statistics(
+        self,
+        s: Session,
+        p: ActivePattern,
+        now: datetime,
+        *,
+        instance_id: UUID | None = None,
+    ) -> None:
         ptype = p.pattern_type.value
+        current_id = instance_id if instance_id is not None else p.id
         row = s.get(
             PatternStatisticsRow,
             {
@@ -505,6 +520,13 @@ class PostgresPatternJournal:
                 move_sample_size=0,
                 mfe_sample_size=0,
                 mae_sample_size=0,
+                avg_planned_rr=0.0,
+                avg_risk_r=0.0,
+                avg_reward_r=0.0,
+                planned_rr_sample_size=0,
+                min_planned_rr=0.0,
+                max_planned_rr=0.0,
+                median_planned_rr=0.0,
                 updated_at=now,
             )
             s.add(row)
@@ -542,8 +564,227 @@ class PostgresPatternJournal:
             na = row.mae_sample_size
             row.avg_mae_r = _running_avg(row.avg_mae_r, na, p.max_adverse_r(), na + 1)
             row.mae_sample_size = na + 1
+            rails = planned_rails_from_pattern(p)
+            if rails is not None:
+                npr = row.planned_rr_sample_size
+                row.avg_risk_r = _running_avg(row.avg_risk_r, npr, rails.risk_r, npr + 1)
+                row.avg_reward_r = _running_avg(
+                    row.avg_reward_r, npr, rails.reward_r, npr + 1
+                )
+                ptype = (
+                    p.pattern_type.value
+                    if hasattr(p.pattern_type, "value")
+                    else str(p.pattern_type)
+                )
+                # Min/max/median from one shared list (avoids DEFAULT-0 min poison
+                # and always includes the current trade by instance id).
+                lo, hi, med = self._planned_rr_extremes_for_bucket(
+                    s,
+                    symbol_id=p.symbol_id,
+                    pattern_type=ptype,
+                    timeframe=p.timeframe,
+                    current_id=current_id,
+                    current_rr=rails.planned_rr,
+                )
+                row.min_planned_rr = lo
+                row.max_planned_rr = hi
+                row.median_planned_rr = med
+                row.planned_rr_sample_size = npr + 1
+                # Plan R:R = ratio of averages (not mean of per-trade RRs)
+                row.avg_planned_rr = _ratio_of_averages(
+                    row.avg_reward_r, row.avg_risk_r
+                )
 
         row.updated_at = now
+
+    def _planned_rr_extremes_for_bucket(
+        self,
+        s: Session,
+        *,
+        symbol_id: str,
+        pattern_type: str,
+        timeframe: str,
+        current_id: UUID,
+        current_rr: float,
+    ) -> tuple[float, float, float]:
+        """Return (min, max, median) of per-trade planned RRs for a stats bucket.
+
+        Builds the multiset from closed instances (skipping startup_recovery), then
+        forces inclusion of the just-closed trade via ``current_id`` → ``current_rr``
+        so median always matches the same sample that updated avgs, whether or not
+        the row is already visible as CLOSED in this session. Overwriting by id
+        prevents double-counting when the scan already contains the current row.
+        """
+        instances = s.scalars(
+            select(PatternInstanceRow).where(
+                PatternInstanceRow.symbol_id == symbol_id,
+                PatternInstanceRow.pattern_type == pattern_type,
+                PatternInstanceRow.timeframe == timeframe,
+                PatternInstanceRow.status.in_(tuple(CLOSED_STATUSES)),
+            )
+        ).all()
+        rrs_by_id: dict[UUID, float] = {}
+        if instances:
+            ids = [i.id for i in instances]
+            outcomes = {
+                o.pattern_instance_id: o
+                for o in s.scalars(
+                    select(PatternOutcomeRow).where(
+                        PatternOutcomeRow.pattern_instance_id.in_(ids)
+                    )
+                ).all()
+            }
+            for inst in instances:
+                outcome = outcomes.get(inst.id)
+                if outcome is not None and outcome.reason == "startup_recovery":
+                    continue
+                rails = compute_planned_rails(
+                    pattern_type=inst.pattern_type,
+                    direction=inst.direction,
+                    entry=inst.entry_price,
+                    stop=inst.stop_level,
+                    target=inst.target_level,
+                    atr=inst.atr_at_detect,
+                )
+                if rails is not None:
+                    rrs_by_id[inst.id] = rails.planned_rr
+
+        # Authoritative rails for the trade currently being upserted
+        rrs_by_id[current_id] = float(current_rr)
+
+        rrs = list(rrs_by_id.values())
+        if not rrs:
+            return 0.0, 0.0, 0.0
+        med = median_planned_rr(rrs)
+        return min(rrs), max(rrs), (med if med is not None else 0.0)
+
+    def recompute_planned_rails_stats(self) -> dict[str, int]:
+        """
+        Backfill planned-rails fields from closed pattern_instances.
+
+        avg_planned_rr = avg_reward_r / avg_risk_r (ratio of averages).
+        min/max/median are over per-trade planned_rr values.
+        Does not rewrite success/fail/MFE aggregates.
+        """
+        now = datetime.now(timezone.utc)
+        with self._sf() as s:
+            # Zero planned fields on all stats rows first
+            stats_rows = s.scalars(select(PatternStatisticsRow)).all()
+            for row in stats_rows:
+                row.avg_planned_rr = 0.0
+                row.avg_risk_r = 0.0
+                row.avg_reward_r = 0.0
+                row.planned_rr_sample_size = 0
+                row.min_planned_rr = 0.0
+                row.max_planned_rr = 0.0
+                row.median_planned_rr = 0.0
+                row.updated_at = now
+
+            # Aggregate from terminal instances
+            instances = s.scalars(
+                select(PatternInstanceRow).where(
+                    PatternInstanceRow.status.in_(tuple(CLOSED_STATUSES))
+                )
+            ).all()
+            outcomes = {
+                o.pattern_instance_id: o
+                for o in s.scalars(select(PatternOutcomeRow)).all()
+            }
+
+            buckets: dict[tuple[str, str, str], dict] = {}
+            included = 0
+            skipped = 0
+            for inst in instances:
+                outcome = outcomes.get(inst.id)
+                reason = outcome.reason if outcome is not None else None
+                if reason == "startup_recovery":
+                    skipped += 1
+                    continue
+                rails = compute_planned_rails(
+                    pattern_type=inst.pattern_type,
+                    direction=inst.direction,
+                    entry=inst.entry_price,
+                    stop=inst.stop_level,
+                    target=inst.target_level,
+                    atr=inst.atr_at_detect,
+                )
+                if rails is None:
+                    skipped += 1
+                    continue
+                key = (inst.symbol_id, inst.pattern_type, inst.timeframe)
+                b = buckets.setdefault(
+                    key,
+                    {
+                        "risk_r": 0.0,
+                        "reward_r": 0.0,
+                        "n": 0,
+                        "rrs": [],
+                    },
+                )
+                b["risk_r"] = float(b["risk_r"]) + rails.risk_r
+                b["reward_r"] = float(b["reward_r"]) + rails.reward_r
+                b["n"] = int(b["n"]) + 1
+                b["rrs"].append(rails.planned_rr)
+                included += 1
+
+            updated_buckets = 0
+            for (sid, ptype, tf), b in buckets.items():
+                n = int(b["n"])
+                if n <= 0:
+                    continue
+                row = s.get(
+                    PatternStatisticsRow,
+                    {"symbol_id": sid, "pattern_type": ptype, "timeframe": tf},
+                )
+                if row is None:
+                    # Stats row missing (edge case): create a shell so planned metrics exist
+                    row = PatternStatisticsRow(
+                        symbol_id=sid,
+                        pattern_type=ptype,
+                        timeframe=tf,
+                        sample_size=0,
+                        success_count=0,
+                        fail_count=0,
+                        expired_count=0,
+                        success_rate=0.0,
+                        resolved_success_rate=None,
+                        avg_move_r=0.0,
+                        avg_duration_candles=0.0,
+                        avg_mfe_r=0.0,
+                        avg_mae_r=0.0,
+                        move_sample_size=0,
+                        mfe_sample_size=0,
+                        mae_sample_size=0,
+                        avg_planned_rr=0.0,
+                        avg_risk_r=0.0,
+                        avg_reward_r=0.0,
+                        planned_rr_sample_size=0,
+                        min_planned_rr=0.0,
+                        max_planned_rr=0.0,
+                        median_planned_rr=0.0,
+                        updated_at=now,
+                    )
+                    s.add(row)
+                rrs: list[float] = list(b["rrs"])
+                row.avg_risk_r = float(b["risk_r"]) / n
+                row.avg_reward_r = float(b["reward_r"]) / n
+                row.avg_planned_rr = _ratio_of_averages(
+                    row.avg_reward_r, row.avg_risk_r
+                )
+                row.planned_rr_sample_size = n
+                row.min_planned_rr = min(rrs)
+                row.max_planned_rr = max(rrs)
+                med = median_planned_rr(rrs)
+                row.median_planned_rr = med if med is not None else 0.0
+                row.updated_at = now
+                updated_buckets += 1
+
+            s.commit()
+            return {
+                "buckets_updated": updated_buckets,
+                "instances_included": included,
+                "instances_skipped": skipped,
+            }
 
     @staticmethod
     def _to_snapshot(s: PatternStatisticsRow) -> PatternStatisticsSnapshot:
@@ -565,6 +806,13 @@ class PostgresPatternJournal:
             move_sample_size=s.move_sample_size,
             mfe_sample_size=s.mfe_sample_size,
             mae_sample_size=s.mae_sample_size,
+            avg_planned_rr=getattr(s, "avg_planned_rr", 0.0) or 0.0,
+            avg_risk_r=getattr(s, "avg_risk_r", 0.0) or 0.0,
+            avg_reward_r=getattr(s, "avg_reward_r", 0.0) or 0.0,
+            planned_rr_sample_size=int(getattr(s, "planned_rr_sample_size", 0) or 0),
+            min_planned_rr=getattr(s, "min_planned_rr", 0.0) or 0.0,
+            max_planned_rr=getattr(s, "max_planned_rr", 0.0) or 0.0,
+            median_planned_rr=getattr(s, "median_planned_rr", 0.0) or 0.0,
             updated_at=s.updated_at
             if s.updated_at.tzinfo
             else s.updated_at.replace(tzinfo=timezone.utc),
@@ -577,6 +825,15 @@ def _running_avg(prev_avg: float, prev_n: int, value: float, new_n: int) -> floa
     if prev_n <= 0:
         return value
     return (prev_avg * prev_n + value) / new_n
+
+
+def _ratio_of_averages(avg_reward_r: float, avg_risk_r: float) -> float:
+    """Planned R:R as avg(reward_r) / avg(risk_r); avoids mean-of-ratios skew."""
+    if avg_risk_r is None or not (avg_risk_r > 0):
+        return 0.0
+    if avg_reward_r is None or not (avg_reward_r > 0):
+        return 0.0
+    return float(avg_reward_r) / float(avg_risk_r)
 
 
 def _utc(dt: datetime | None) -> datetime | None:

@@ -106,6 +106,179 @@ def test_persist_lifecycle_detect_and_success(journal):
     assert snap.sample_size == 1
     assert snap.success_count == 1
     assert snap.success_rate == 1.0
+    # entry 101, stop 100, target 105, atr 2 → planned RR 4, risk 0.5R, reward 2.0R
+    assert snap.planned_rr_sample_size == 1
+    assert snap.avg_planned_rr == 4.0
+    assert snap.avg_risk_r == 0.5
+    assert snap.avg_reward_r == 2.0
+    assert snap.min_planned_rr == 4.0
+    assert snap.max_planned_rr == 4.0
+    assert snap.median_planned_rr == 4.0
+
+
+def test_recompute_planned_rails_stats_backfill(journal):
+    j, sf = journal
+    now = datetime.now(timezone.utc)
+    p = _pattern()
+    j.persist_lifecycle(
+        p, [PatternStageEvent(p.id, PatternStage.DETECTED, p.detect_candle_time, 101.0, now)]
+    )
+    p.mark_terminal(FinalOutcome.SUCCEEDED, PatternStage.SUCCEEDED, "price_target", 105.5)
+    j.apply_events(
+        p,
+        [PatternStageEvent(p.id, PatternStage.SUCCEEDED, p.detect_candle_time + 300, 105.5, now)],
+    )
+
+    # Wipe planned fields as if migration just added zero columns
+    with sf() as s:
+        row = s.get(
+            PatternStatisticsRow,
+            {
+                "symbol_id": "NSE_EQ|TEST",
+                "pattern_type": "breakout",
+                "timeframe": "5m",
+            },
+        )
+        assert row is not None
+        row.avg_planned_rr = 0.0
+        row.avg_risk_r = 0.0
+        row.avg_reward_r = 0.0
+        row.planned_rr_sample_size = 0
+        s.commit()
+
+    result = j.recompute_planned_rails_stats()
+    assert result["instances_included"] == 1
+    assert result["buckets_updated"] == 1
+
+    snap = j.find_statistics("NSE_EQ|TEST", "breakout", "5m")
+    assert snap is not None
+    assert snap.planned_rr_sample_size == 1
+    assert snap.avg_planned_rr == 4.0
+    assert snap.avg_risk_r == 0.5
+    assert snap.avg_reward_r == 2.0
+    assert snap.min_planned_rr == 4.0
+    assert snap.max_planned_rr == 4.0
+    assert snap.median_planned_rr == 4.0
+
+
+def test_planned_rr_is_ratio_of_averages_not_mean_of_rrs(journal):
+    """Tiny-risk outlier must not inflate Plan R:R via mean-of-ratios."""
+    j, _ = journal
+    now = datetime.now(timezone.utc)
+    # Trade A: risk 0.1 pts, reward 2 pts, atr 1 → risk_r 0.1, reward_r 2, RR 20
+    a = _pattern(
+        symbol_id="NSE_EQ|RR",
+        detect_candle_time=100,
+        entry_price=100.0,
+        stop_level=99.9,
+        target_level=102.0,
+        atr_at_detect=1.0,
+    )
+    # Trade B: risk 1, reward 1, atr 1 → risk_r 1, reward_r 1, RR 1
+    b = _pattern(
+        symbol_id="NSE_EQ|RR",
+        detect_candle_time=200,
+        entry_price=100.0,
+        stop_level=99.0,
+        target_level=101.0,
+        atr_at_detect=1.0,
+    )
+    for p in (a, b):
+        j.persist_lifecycle(
+            p,
+            [PatternStageEvent(p.id, PatternStage.DETECTED, p.detect_candle_time, 100.0, now)],
+        )
+        p.mark_terminal(FinalOutcome.SUCCEEDED, PatternStage.SUCCEEDED, "test", 101.0)
+        j.apply_events(
+            p,
+            [
+                PatternStageEvent(
+                    p.id, PatternStage.SUCCEEDED, p.detect_candle_time + 1, 101.0, now
+                )
+            ],
+        )
+
+    snap = j.find_statistics("NSE_EQ|RR", "breakout", "5m")
+    assert snap is not None
+    assert snap.planned_rr_sample_size == 2
+    assert abs(snap.avg_risk_r - 0.55) < 1e-9
+    assert abs(snap.avg_reward_r - 1.5) < 1e-9
+    # ratio of averages ≈ 2.727, not mean of RRs (10.5)
+    assert abs(snap.avg_planned_rr - (1.5 / 0.55)) < 1e-9
+    assert snap.avg_planned_rr < 3.0
+    # Secondary: min / median / max of per-trade RRs {1, 20}
+    assert abs(snap.min_planned_rr - 1.0) < 1e-9
+    assert abs(snap.max_planned_rr - 20.0) < 1e-9
+    assert abs(snap.median_planned_rr - 10.5) < 1e-9
+
+
+def test_planned_rr_extremes_recover_from_zero_defaults(journal):
+    """V9 DEFAULT 0 min/max must not poison extremes when npr>0 (review Issue 1)."""
+    j, sf = journal
+    now = datetime.now(timezone.utc)
+    # First closed trade: RR = 4 (entry 101, stop 100, target 105, atr 2)
+    p1 = _pattern(symbol_id="NSE_EQ|EX", detect_candle_time=100)
+    j.persist_lifecycle(
+        p1,
+        [PatternStageEvent(p1.id, PatternStage.DETECTED, p1.detect_candle_time, 101.0, now)],
+    )
+    p1.mark_terminal(FinalOutcome.SUCCEEDED, PatternStage.SUCCEEDED, "test", 105.0)
+    j.apply_events(
+        p1,
+        [
+            PatternStageEvent(
+                p1.id, PatternStage.SUCCEEDED, p1.detect_candle_time + 1, 105.0, now
+            )
+        ],
+    )
+
+    # Simulate post-migration state: sample size kept, extremes zeroed
+    with sf() as s:
+        row = s.get(
+            PatternStatisticsRow,
+            {
+                "symbol_id": "NSE_EQ|EX",
+                "pattern_type": "breakout",
+                "timeframe": "5m",
+            },
+        )
+        assert row is not None
+        assert row.planned_rr_sample_size == 1
+        row.min_planned_rr = 0.0
+        row.max_planned_rr = 0.0
+        row.median_planned_rr = 0.0
+        s.commit()
+
+    # Second trade: RR = 1 (entry 100, stop 99, target 101, atr 1)
+    p2 = _pattern(
+        symbol_id="NSE_EQ|EX",
+        detect_candle_time=200,
+        entry_price=100.0,
+        stop_level=99.0,
+        target_level=101.0,
+        atr_at_detect=1.0,
+    )
+    j.persist_lifecycle(
+        p2,
+        [PatternStageEvent(p2.id, PatternStage.DETECTED, p2.detect_candle_time, 100.0, now)],
+    )
+    p2.mark_terminal(FinalOutcome.SUCCEEDED, PatternStage.SUCCEEDED, "test", 101.0)
+    j.apply_events(
+        p2,
+        [
+            PatternStageEvent(
+                p2.id, PatternStage.SUCCEEDED, p2.detect_candle_time + 1, 101.0, now
+            )
+        ],
+    )
+
+    snap = j.find_statistics("NSE_EQ|EX", "breakout", "5m")
+    assert snap is not None
+    assert snap.planned_rr_sample_size == 2
+    # Full history {4, 1} — not min(0, 1)=0 or max only from post-zero trades
+    assert abs(snap.min_planned_rr - 1.0) < 1e-9
+    assert abs(snap.max_planned_rr - 4.0) < 1e-9
+    assert abs(snap.median_planned_rr - 2.5) < 1e-9
 
 
 def test_idempotent_event_insert(journal):
@@ -171,9 +344,15 @@ def test_bulk_statistics(journal):
     for i, outcome in enumerate(
         [FinalOutcome.SUCCEEDED, FinalOutcome.FAILED, FinalOutcome.SUCCEEDED]
     ):
-        p = _pattern(symbol_id="NSE_EQ|Z")
+        # Distinct detect_candle_time so fingerprint does not collapse instances
+        p = _pattern(symbol_id="NSE_EQ|Z", detect_candle_time=1_700_000_000 + i)
         j.persist_lifecycle(
-            p, [PatternStageEvent(p.id, PatternStage.DETECTED, i, 100.0, now)]
+            p,
+            [
+                PatternStageEvent(
+                    p.id, PatternStage.DETECTED, p.detect_candle_time, 100.0, now
+                )
+            ],
         )
         stage = {
             FinalOutcome.SUCCEEDED: PatternStage.SUCCEEDED,
@@ -181,13 +360,20 @@ def test_bulk_statistics(journal):
             FinalOutcome.EXPIRED: PatternStage.EXPIRED,
         }[outcome]
         p.mark_terminal(outcome, stage, "test", 102.0)
-        j.apply_events(p, [PatternStageEvent(p.id, stage, i + 1, 102.0, now)])
+        j.apply_events(
+            p, [PatternStageEvent(p.id, stage, p.detect_candle_time + 1, 102.0, now)]
+        )
 
     snaps = j.find_statistics_for_symbols(["NSE_EQ|Z"], "breakout", "5m")
     assert len(snaps) == 1
     assert snaps[0].sample_size == 3
     assert snaps[0].success_count == 2
     assert snaps[0].fail_count == 1
+    assert snaps[0].planned_rr_sample_size == 3
+    # Same rails on each trade: ratio of averages equals per-trade RR
+    assert snaps[0].avg_risk_r == 0.5
+    assert snaps[0].avg_reward_r == 2.0
+    assert snaps[0].avg_planned_rr == 4.0
 
 
 class _FakeWatchlist:
