@@ -212,6 +212,83 @@ class PatternEvaluator:
             "items": items,
         }
 
+    def query_statistics(self, raw_params: dict) -> dict:
+        """
+        Research / composable-filter stats (query-time over instances ⨝ outcomes).
+
+        Raises:
+            ValueError: invalid filters (HTTP 400)
+            PermissionError: not used (auth at API layer)
+            RuntimeError: research disabled / wrong journal (HTTP 503)
+            TimeoutError: statement timeout (HTTP 503)
+        """
+        from app.patterns.research_filters import (
+            ResearchFilterError,
+            parse_research_filters,
+        )
+        from app.patterns.research_metrics import empty_research_response
+
+        if not self._settings.pattern_enabled:
+            raise RuntimeError("Pattern feature disabled")
+        if not getattr(self._settings, "pattern_research_stats_enabled", True):
+            raise RuntimeError("Research stats disabled")
+
+        supports = getattr(self._journal, "supports_research_aggregation", None)
+        if not callable(supports) or not supports():
+            raise RuntimeError("Pattern research requires Postgres journal")
+
+        try:
+            spec = parse_research_filters(
+                raw_params,
+                default_min_sample_size=self._settings.stats_min_sample_size,
+                max_range_days=int(
+                    getattr(self._settings, "research_stats_max_range_days", 180)
+                ),
+                default_lookback_days=int(
+                    getattr(self._settings, "research_stats_default_lookback_days", 180)
+                ),
+            )
+        except ResearchFilterError as exc:
+            raise ValueError(str(exc)) from exc
+
+        active = self._watchlist.find_all_active()
+        by_id = {e.symbol_id: e for e in active}
+        active_ids = [e.symbol_id for e in active]
+        if not active_ids:
+            return empty_research_response(spec)
+
+        # Intersect explicit symbol filter with active watchlist
+        if spec.symbol_ids is not None:
+            wanted = set(spec.symbol_ids)
+            allowed = [s for s in active_ids if s in wanted]
+            if len(spec.symbol_ids) > 200:
+                raise ValueError("symbolId list too long (max 200)")
+            if not allowed:
+                return empty_research_response(spec)
+            if len(allowed) > 200:
+                raise ValueError("symbolId list exceeds 200 after watchlist intersect")
+        else:
+            allowed = active_ids
+            if len(allowed) > 200:
+                allowed = allowed[:200]
+
+        labels = {
+            sid: (
+                by_id[sid].trading_symbol if sid in by_id else None,
+                by_id[sid].display_name if sid in by_id else None,
+            )
+            for sid in allowed
+        }
+        timeout_ms = int(
+            getattr(self._settings, "research_stats_statement_timeout_ms", 5000)
+        )
+        return self._journal.aggregate_filtered(
+            spec,
+            allowed_symbol_ids=allowed,
+            symbol_labels=labels,
+            statement_timeout_ms=timeout_ms,
+        )
+
     def _evaluate(self, symbol_id: str, timeframe: str) -> None:
         closed = self._engine.get_closed_candles(symbol_id, timeframe)
         if not closed:

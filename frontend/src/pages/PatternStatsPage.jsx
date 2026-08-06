@@ -1,15 +1,44 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { fetchPatternStatistics } from '../services/patternStatisticsApi'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../auth/useAuth'
+import { isPatternResearchStatsEnabled } from '../config/featureFlags'
+import {
+  fetchPatternStatistics,
+  fetchResearchStatistics,
+} from '../services/patternStatisticsApi'
+import {
+  BUILTIN_STACK_PRESETS,
+  deleteUserPreset,
+  loadUserPresets,
+  parseResearchFiltersFromSearch,
+  researchFilterChips,
+  saveUserPreset,
+  serializeResearchFilters,
+} from '../utils/researchFilters'
 import './authPages.css'
 import './patternStats.css'
 
 const TIMEFRAMES = ['all', '1m', '5m', '15m', '1h', '4h', '1d']
+const RESEARCH_TFS = ['5m', '15m', '1h', '4h', '1d']
+const RESEARCH_TYPES = [
+  'breakout',
+  'breakdown',
+  'volume_breakout',
+  'consolidation',
+  'hammer',
+  'shooting_star',
+  'bullish_engulfing',
+  'bearish_engulfing',
+  'inside_bar',
+  'higher_high',
+  'lower_low',
+]
 /** Base options; live types from data are merged in. */
 const BASE_PATTERN_TYPES = ['all', 'breakout', 'breakdown']
 
 const SORT_OPTIONS = [
   { value: 'resolvedSuccessRate', label: 'Resolved success %' },
+  { value: 'expectancyR', label: 'Expectancy (R)' },
   { value: 'avgMoveR', label: 'Avg move (R)' },
   { value: 'avgMfeR', label: 'Avg MFE (R)' },
   { value: 'avgMaeR', label: 'Avg MAE (R)' },
@@ -42,16 +71,13 @@ function isReady(item, minSampleSize) {
   return item.status === 'ok' && (item.sampleSize ?? 0) >= minSampleSize
 }
 
-/**
- * Relative highlight among Ready rows in the current filtered view.
- * Top quartile (min 1) by the active sort metric.
- */
 function computeHighlightKeys(rows, sortKey, minSampleSize) {
   const ready = rows.filter((r) => isReady(r, minSampleSize))
   if (ready.length === 0) return new Set()
 
   const metric = (r) => {
     if (sortKey === 'avgMoveR') return r.avgMoveR
+    if (sortKey === 'expectancyR') return r.expectancyR ?? r.avgMoveR
     if (sortKey === 'avgMfeR') return r.avgMfeR
     if (sortKey === 'avgMaeR') return r.avgMaeR
     if (sortKey === 'avgPlannedRr') return r.avgPlannedRr
@@ -62,7 +88,6 @@ function computeHighlightKeys(rows, sortKey, minSampleSize) {
     return r.resolvedSuccessRate
   }
 
-  // MAE: lower is “better” (less adverse pain)
   const ascending = sortKey === 'avgMaeR'
   const scored = ready
     .map((r) => ({ key: rowKey(r), v: metric(r) }))
@@ -80,7 +105,6 @@ function sortRows(rows, sortKey, minSampleSize) {
   copy.sort((a, b) => {
     const aReady = isReady(a, minSampleSize)
     const bReady = isReady(b, minSampleSize)
-    // Ready rows first when sorting by rate metrics
     if (sortKey !== 'symbol' && sortKey !== 'sampleSize' && aReady !== bReady) {
       return aReady ? -1 : 1
     }
@@ -98,6 +122,9 @@ function sortRows(rows, sortKey, minSampleSize) {
     switch (sortKey) {
       case 'avgMoveR':
         primary = cmpNum(a.avgMoveR, b.avgMoveR)
+        break
+      case 'expectancyR':
+        primary = cmpNum(a.expectancyR ?? a.avgMoveR, b.expectancyR ?? b.avgMoveR)
         break
       case 'avgMfeR':
         primary = cmpNum(a.avgMfeR, b.avgMfeR)
@@ -127,7 +154,6 @@ function sortRows(rows, sortKey, minSampleSize) {
     }
     if (primary !== 0) return primary
 
-    // Secondary: avg move desc, then MFE, n, symbol
     const move = cmpNum(a.avgMoveR, b.avgMoveR)
     if (move !== 0) return move
     const mfe = cmpNum(a.avgMfeR, b.avgMfeR)
@@ -141,12 +167,19 @@ function sortRows(rows, sortKey, minSampleSize) {
 
 export default function PatternStatsPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { isAdmin } = useAuth()
+  const researchEnabled = isPatternResearchStatsEnabled() && isAdmin
+
+  const modeFromUrl = searchParams.get('mode') === 'research' ? 'research' : 'dashboard'
+  const mode = researchEnabled ? modeFromUrl : 'dashboard'
 
   const [items, setItems] = useState([])
   const [minSampleSize, setMinSampleSize] = useState(20)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
 
+  // Dashboard filters
   const [patternType, setPatternType] = useState('all')
   const [timeframe, setTimeframe] = useState('all')
   const [readyOnly, setReadyOnly] = useState(false)
@@ -154,27 +187,72 @@ export default function PatternStatsPage() {
   const [sortKey, setSortKey] = useState('resolvedSuccessRate')
   const [expanded, setExpanded] = useState(() => new Set())
 
-  const load = useCallback(async () => {
+  // Research
+  const [researchDraft, setResearchDraft] = useState(() =>
+    mode === 'research' ? parseResearchFiltersFromSearch(searchParams) : {},
+  )
+  const [researchApplied, setResearchApplied] = useState(() =>
+    mode === 'research' ? parseResearchFiltersFromSearch(searchParams) : {},
+  )
+  const [researchSummary, setResearchSummary] = useState(null)
+  const [researchMeta, setResearchMeta] = useState(null)
+  const [userPresets, setUserPresets] = useState(() => loadUserPresets())
+
+  const setMode = (next) => {
+    const sp = new URLSearchParams(searchParams)
+    if (next === 'research') {
+      sp.set('mode', 'research')
+      const qs = serializeResearchFilters(researchApplied)
+      // merge research params
+      const r = new URLSearchParams(qs)
+      for (const [k, v] of r.entries()) sp.set(k, v)
+    } else {
+      sp.delete('mode')
+      // strip research-only keys
+      ;[
+        'flagConfirmed',
+        'flagRetested',
+        'flagStrengthened',
+        'volumeOkAtDetect',
+        'detectTimeIstStart',
+        'detectTimeIstEnd',
+        'detectedFrom',
+        'detectedTo',
+        'resolvedOnly',
+        'excludeReasons',
+        'minPlannedRr',
+        'requireValidRails',
+        'groupBy',
+        'direction',
+        'confirmationMode',
+        'outcome',
+        'detectorVersion',
+        'limitGroups',
+        'minSampleSize',
+        'symbolId',
+      ].forEach((k) => sp.delete(k))
+    }
+    setSearchParams(sp, { replace: true })
+  }
+
+  const loadDashboard = useCallback(async () => {
     setLoading(true)
     setError(null)
     const params = {}
     if (patternType !== 'all') params.patternType = patternType
     if (timeframe !== 'all') params.timeframe = timeframe
-
-    // Cold start is handled by the pre-login startup gate. Empty stats usually
-    // mean no watchlist-scoped rows (product filter), not a sleeping API.
-    // One retry only on hard request failure.
-    const fetchOnce = () => fetchPatternStatistics(params)
     try {
       let data
       try {
-        data = await fetchOnce()
+        data = await fetchPatternStatistics(params)
       } catch {
         await new Promise((r) => setTimeout(r, 400))
-        data = await fetchOnce()
+        data = await fetchPatternStatistics(params)
       }
       setItems(Array.isArray(data.items) ? data.items : [])
       setMinSampleSize(data.minSampleSize || 20)
+      setResearchSummary(null)
+      setResearchMeta(null)
       setError(null)
     } catch (e) {
       setItems([])
@@ -184,9 +262,48 @@ export default function PatternStatsPage() {
     }
   }, [patternType, timeframe])
 
+  const loadResearch = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await fetchResearchStatistics(researchApplied)
+      setItems(Array.isArray(data.items) ? data.items : [])
+      setMinSampleSize(data.minSampleSize || 20)
+      setResearchSummary(data.summary)
+      setResearchMeta({
+        totalMatched: data.totalMatched,
+        totalGroups: data.totalGroups,
+        truncated: data.truncated,
+        disclaimer: data.disclaimer,
+        filters: data.filters,
+      })
+      // Hydrate dates from server echo when client omitted them
+      const f = data.filters || {}
+      if (f.detectedFrom || f.detectedTo) {
+        setResearchDraft((d) => ({
+          ...d,
+          detectedFrom: d.detectedFrom || f.detectedFrom || undefined,
+          detectedTo: d.detectedTo || f.detectedTo || undefined,
+        }))
+      }
+      setError(null)
+    } catch (e) {
+      setItems([])
+      setResearchSummary(null)
+      setResearchMeta(null)
+      setError(e instanceof Error ? e.message : 'Failed to load research statistics')
+    } finally {
+      setLoading(false)
+    }
+  }, [researchApplied])
+
   useEffect(() => {
-    void load()
-  }, [load])
+    if (mode === 'research') {
+      void loadResearch()
+    } else {
+      void loadDashboard()
+    }
+  }, [mode, loadResearch, loadDashboard])
 
   const patternTypeOptions = useMemo(() => {
     const fromData = new Set(
@@ -220,6 +337,11 @@ export default function PatternStatsPage() {
     [filtered, sortKey, minSampleSize],
   )
 
+  const chips = useMemo(
+    () => (mode === 'research' ? researchFilterChips(researchApplied) : []),
+    [mode, researchApplied],
+  )
+
   function toggleExpand(key) {
     setExpanded((prev) => {
       const next = new Set(prev)
@@ -231,10 +353,48 @@ export default function PatternStatsPage() {
 
   function openOnChart(item) {
     const params = new URLSearchParams()
-    if (item.symbolId) params.set('symbol', item.symbolId)
-    if (item.timeframe) params.set('tf', item.timeframe)
+    if (item.symbolId && item.symbolId !== '*') params.set('symbol', item.symbolId)
+    if (item.timeframe && item.timeframe !== '*') params.set('tf', item.timeframe)
     navigate(`/?${params.toString()}`)
   }
+
+  function applyResearch() {
+    setResearchApplied({ ...researchDraft })
+    const sp = new URLSearchParams()
+    sp.set('mode', 'research')
+    const qs = serializeResearchFilters(researchDraft)
+    const r = new URLSearchParams(qs)
+    for (const [k, v] of r.entries()) sp.set(k, v)
+    setSearchParams(sp, { replace: true })
+  }
+
+  function applyPreset(filters) {
+    setResearchDraft({ ...filters })
+    setResearchApplied({ ...filters })
+    const sp = new URLSearchParams()
+    sp.set('mode', 'research')
+    const qs = serializeResearchFilters(filters)
+    const r = new URLSearchParams(qs)
+    for (const [k, v] of r.entries()) sp.set(k, v)
+    setSearchParams(sp, { replace: true })
+  }
+
+  function clearResearch() {
+    setResearchDraft({})
+    setResearchApplied({})
+    setSearchParams(new URLSearchParams({ mode: 'research' }), { replace: true })
+  }
+
+  function onSavePreset() {
+    const name = window.prompt('Preset name')
+    if (!name || !name.trim()) return
+    const id = `user-${Date.now()}`
+    saveUserPreset({ id, name: name.trim(), filters: { ...researchApplied } })
+    setUserPresets(loadUserPresets())
+  }
+
+  const showResearchCols = mode === 'research'
+  const colSpan = showResearchCols ? 18 : 15
 
   return (
     <div className="admin-page admin-page--in-shell stats-page">
@@ -242,86 +402,555 @@ export default function PatternStatsPage() {
         <div>
           <h1 className="admin-header__title">Dashboard · Pattern statistics</h1>
           <p className="admin-header__sub">
-            Research ranking across the watchlist · rates unlock at n ≥ {minSampleSize} ·
-            not trade advice
+            {mode === 'research'
+              ? 'Research · composable stack filters · virtual journal outcomes · ADMIN'
+              : `Research ranking across the watchlist · rates unlock at n ≥ ${minSampleSize} · not trade advice`}
           </p>
         </div>
+        {researchEnabled && (
+          <div className="stats-mode-toggle" role="group" aria-label="Stats mode">
+            <button
+              type="button"
+              className={`admin-btn admin-btn--small ${mode === 'dashboard' ? 'stats-mode--active' : ''}`}
+              onClick={() => setMode('dashboard')}
+            >
+              Dashboard
+            </button>
+            <button
+              type="button"
+              className={`admin-btn admin-btn--small ${mode === 'research' ? 'stats-mode--active' : ''}`}
+              onClick={() => setMode('research')}
+            >
+              Research
+            </button>
+          </div>
+        )}
       </header>
 
       {error && <div className="admin-banner admin-banner--error">{error}</div>}
 
-      <section className="admin-card stats-filters">
-        <div className="admin-form stats-filters__form">
-          <label>
-            Pattern
-            <select value={patternType} onChange={(e) => setPatternType(e.target.value)}>
-              {patternTypeOptions.map((p) => (
-                <option key={p} value={p}>
-                  {p === 'all' ? 'All' : p}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Timeframe
-            <select value={timeframe} onChange={(e) => setTimeframe(e.target.value)}>
-              {TIMEFRAMES.map((tf) => (
-                <option key={tf} value={tf}>
-                  {tf === 'all' ? 'All' : tf}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Sort by
-            <select value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
-              {SORT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Symbol
-            <input
-              type="search"
-              placeholder="Filter symbol…"
-              value={symbolQuery}
-              onChange={(e) => setSymbolQuery(e.target.value)}
-            />
-          </label>
-          <label className="stats-check">
-            <input
-              type="checkbox"
-              checked={readyOnly}
-              onChange={(e) => setReadyOnly(e.target.checked)}
-            />
-            Ready only (n ≥ {minSampleSize})
-          </label>
-          <div className="stats-filters__actions">
-            <button
-              type="button"
-              className="admin-btn admin-btn--small"
-              onClick={() => void load()}
-              disabled={loading}
-            >
-              {loading ? 'Loading…' : 'Refresh'}
-            </button>
+      {mode === 'research' && researchMeta?.disclaimer && (
+        <div className="admin-banner stats-research-disclaimer">{researchMeta.disclaimer}</div>
+      )}
+
+      {mode === 'dashboard' && (
+        <section className="admin-card stats-filters">
+          <div className="admin-form stats-filters__form">
+            <label>
+              Pattern
+              <select value={patternType} onChange={(e) => setPatternType(e.target.value)}>
+                {patternTypeOptions.map((p) => (
+                  <option key={p} value={p}>
+                    {p === 'all' ? 'All' : p}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Timeframe
+              <select value={timeframe} onChange={(e) => setTimeframe(e.target.value)}>
+                {TIMEFRAMES.map((tf) => (
+                  <option key={tf} value={tf}>
+                    {tf === 'all' ? 'All' : tf}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Sort by
+              <select value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
+                {SORT_OPTIONS.filter((o) => o.value !== 'expectancyR').map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Symbol
+              <input
+                type="search"
+                placeholder="Filter symbol…"
+                value={symbolQuery}
+                onChange={(e) => setSymbolQuery(e.target.value)}
+              />
+            </label>
+            <label className="stats-check">
+              <input
+                type="checkbox"
+                checked={readyOnly}
+                onChange={(e) => setReadyOnly(e.target.checked)}
+              />
+              Ready only (n ≥ {minSampleSize})
+            </label>
+            <div className="stats-filters__actions">
+              <button
+                type="button"
+                className="admin-btn admin-btn--small"
+                onClick={() => void loadDashboard()}
+                disabled={loading}
+              >
+                {loading ? 'Loading…' : 'Refresh'}
+              </button>
+            </div>
           </div>
-        </div>
-        <p className="stats-legend">
-          Highlight = top quartile among <strong>Ready</strong> rows for current sort (relative
-          rank in this view). S / F / E = success / fail / expired. Move (R) = average terminal
-          exit vs entry in ATR units (signed with the setup). Plan R:R = avg reward (R) ÷
-          avg risk (R) from final rails (ratio of averages — not the mean of per-trade RRs).
-          Risk/Reward (R) = those distances ÷ ATR at detect. Consolidation excluded.
-        </p>
-      </section>
+          <p className="stats-legend">
+            Highlight = top quartile among <strong>Ready</strong> rows for current sort. S / F / E =
+            success / fail / expired. Plan R:R = avg reward (R) ÷ avg risk (R). Consolidation
+            excluded from planned rails.
+          </p>
+        </section>
+      )}
+
+      {mode === 'research' && (
+        <section className="admin-card rf">
+          {/* Sticky action bar */}
+          <div className="rf-toolbar">
+            <div className="rf-toolbar__left">
+              <span className="rf-toolbar__title">Stack filters</span>
+              {chips.length > 0 && (
+                <span className="rf-toolbar__count">{chips.length} active</span>
+              )}
+            </div>
+            <div className="rf-toolbar__right">
+              <button
+                type="button"
+                className="admin-btn rf-toolbar__apply"
+                onClick={applyResearch}
+                disabled={loading}
+              >
+                {loading ? 'Loading…' : 'Apply'}
+              </button>
+              <button type="button" className="admin-btn admin-btn--small" onClick={clearResearch}>
+                Clear
+              </button>
+              <button type="button" className="admin-btn admin-btn--small" onClick={onSavePreset}>
+                Save
+              </button>
+              <button
+                type="button"
+                className="admin-btn admin-btn--small"
+                onClick={() => {
+                  const url = `${window.location.origin}${window.location.pathname}?${new URLSearchParams({ mode: 'research', ...Object.fromEntries(new URLSearchParams(serializeResearchFilters(researchApplied))) }).toString()}`
+                  void navigator.clipboard?.writeText(url)
+                }}
+              >
+                Link
+              </button>
+            </div>
+          </div>
+
+          {/* Form: fixed label column (property sheet) */}
+          <div className="rf-body">
+            <div className="rf-row">
+              <div className="rf-key">Preset</div>
+              <div className="rf-val rf-val--split">
+                <select
+                  className="rf-control"
+                  value=""
+                  onChange={(e) => {
+                    const id = e.target.value
+                    if (!id) return
+                    const all = [...BUILTIN_STACK_PRESETS, ...userPresets]
+                    const p = all.find((x) => x.id === id)
+                    if (p) applyPreset(p.filters)
+                    e.target.value = ''
+                  }}
+                >
+                  <option value="">Load a stack preset…</option>
+                  <optgroup label="Built-in">
+                    {BUILTIN_STACK_PRESETS.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {userPresets.length > 0 && (
+                    <optgroup label="Saved">
+                      {userPresets.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                {userPresets.length > 0 && (
+                  <select
+                    className="rf-control rf-control--narrow"
+                    value=""
+                    aria-label="Delete saved preset"
+                    onChange={(e) => {
+                      const id = e.target.value
+                      if (!id) return
+                      deleteUserPreset(id)
+                      setUserPresets(loadUserPresets())
+                      e.target.value = ''
+                    }}
+                  >
+                    <option value="">Delete saved…</option>
+                    {userPresets.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+
+            <div className="rf-row">
+              <div className="rf-key">Direction</div>
+              <div className="rf-val rf-val--3">
+                <select
+                  className="rf-control"
+                  value={researchDraft.direction || ''}
+                  onChange={(e) =>
+                    setResearchDraft((d) => ({
+                      ...d,
+                      direction: e.target.value || undefined,
+                    }))
+                  }
+                >
+                  <option value="">Any</option>
+                  <option value="long">Long</option>
+                  <option value="short">Short</option>
+                </select>
+                <select
+                  className="rf-control"
+                  value={researchDraft.groupBy || 'symbol,patternType,timeframe'}
+                  onChange={(e) =>
+                    setResearchDraft((d) => ({ ...d, groupBy: e.target.value }))
+                  }
+                  aria-label="Group by"
+                  title="Group by"
+                >
+                  <option value="symbol,patternType,timeframe">Group: Symbol · type · TF</option>
+                  <option value="patternType,timeframe">Group: Type · TF</option>
+                  <option value="patternType">Group: Type only</option>
+                  <option value="none">Group: Global</option>
+                </select>
+                <input
+                  className="rf-control"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  placeholder="Min plan R:R"
+                  title="Min plan R:R"
+                  value={researchDraft.minPlannedRr ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setResearchDraft((d) => ({
+                      ...d,
+                      minPlannedRr: v === '' ? undefined : Number(v),
+                    }))
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="rf-row">
+              <div className="rf-key">Detect window</div>
+              <div className="rf-val rf-val--4">
+                <input
+                  className="rf-control"
+                  type="date"
+                  title="From (IST)"
+                  aria-label="Detect from IST"
+                  value={researchDraft.detectedFrom || ''}
+                  onChange={(e) =>
+                    setResearchDraft((d) => ({
+                      ...d,
+                      detectedFrom: e.target.value || undefined,
+                    }))
+                  }
+                />
+                <input
+                  className="rf-control"
+                  type="date"
+                  title="To (IST)"
+                  aria-label="Detect to IST"
+                  value={researchDraft.detectedTo || ''}
+                  onChange={(e) =>
+                    setResearchDraft((d) => ({
+                      ...d,
+                      detectedTo: e.target.value || undefined,
+                    }))
+                  }
+                />
+                <input
+                  className="rf-control"
+                  type="time"
+                  title="Session start IST"
+                  aria-label="Session start"
+                  value={researchDraft.detectTimeIstStart || ''}
+                  onChange={(e) =>
+                    setResearchDraft((d) => ({
+                      ...d,
+                      detectTimeIstStart: e.target.value || undefined,
+                    }))
+                  }
+                />
+                <input
+                  className="rf-control"
+                  type="time"
+                  title="Session end IST"
+                  aria-label="Session end"
+                  value={researchDraft.detectTimeIstEnd || ''}
+                  onChange={(e) =>
+                    setResearchDraft((d) => ({
+                      ...d,
+                      detectTimeIstEnd: e.target.value || undefined,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="rf-row rf-row--hint">
+              <div className="rf-key" />
+              <div className="rf-val rf-hint">
+                Dates · session times (IST candle). Empty dates → last 180 days. Session filter
+                excludes 1d.
+              </div>
+            </div>
+
+            <div className="rf-row">
+              <div className="rf-key">Quality</div>
+              <div className="rf-val">
+                <div className="rf-seg" role="group" aria-label="Quality stack">
+                  {[
+                    {
+                      key: 'c',
+                      label: 'Confirmed',
+                      on: researchDraft.flagConfirmed === true,
+                      toggle: () =>
+                        setResearchDraft((d) => ({
+                          ...d,
+                          flagConfirmed: d.flagConfirmed ? undefined : true,
+                        })),
+                    },
+                    {
+                      key: 'r',
+                      label: 'Retested',
+                      on: researchDraft.flagRetested === true,
+                      toggle: () =>
+                        setResearchDraft((d) => ({
+                          ...d,
+                          flagRetested: d.flagRetested ? undefined : true,
+                        })),
+                    },
+                    {
+                      key: 's',
+                      label: 'Strengthened',
+                      on: researchDraft.flagStrengthened === true,
+                      toggle: () =>
+                        setResearchDraft((d) => ({
+                          ...d,
+                          flagStrengthened: d.flagStrengthened ? undefined : true,
+                        })),
+                    },
+                    {
+                      key: 'v',
+                      label: 'Volume OK',
+                      on: researchDraft.volumeOkAtDetect === true,
+                      toggle: () =>
+                        setResearchDraft((d) => ({
+                          ...d,
+                          volumeOkAtDetect: d.volumeOkAtDetect ? undefined : true,
+                        })),
+                    },
+                    {
+                      key: 'o',
+                      label: 'Resolved',
+                      on: researchDraft.resolvedOnly === true,
+                      toggle: () =>
+                        setResearchDraft((d) => ({
+                          ...d,
+                          resolvedOnly: d.resolvedOnly ? undefined : true,
+                        })),
+                    },
+                    {
+                      key: 'x',
+                      label: '− Recovery',
+                      on: (researchDraft.excludeReasons || []).includes('startup_recovery'),
+                      toggle: () =>
+                        setResearchDraft((d) => {
+                          const cur = new Set(d.excludeReasons || [])
+                          if (cur.has('startup_recovery')) cur.delete('startup_recovery')
+                          else cur.add('startup_recovery')
+                          const arr = [...cur]
+                          return { ...d, excludeReasons: arr.length ? arr : undefined }
+                        }),
+                    },
+                  ].map((b) => (
+                    <button
+                      key={b.key}
+                      type="button"
+                      className={`rf-seg__btn ${b.on ? 'is-on' : ''}`}
+                      aria-pressed={b.on}
+                      onClick={b.toggle}
+                    >
+                      {b.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="rf-row rf-row--top">
+              <div className="rf-key">Universe</div>
+              <div className="rf-val rf-val--2">
+                <div className="rf-subfield">
+                  <span className="rf-subfield__label">Timeframes</span>
+                  <select
+                    className="rf-control rf-control--multi"
+                    multiple
+                    size={Math.min(6, RESEARCH_TFS.length)}
+                    value={researchDraft.timeframe || []}
+                    onChange={(e) => {
+                      const selected = [...e.target.selectedOptions].map((o) => o.value)
+                      setResearchDraft((d) => ({
+                        ...d,
+                        timeframe: selected.length ? selected : undefined,
+                      }))
+                    }}
+                  >
+                    {RESEARCH_TFS.map((tf) => (
+                      <option key={tf} value={tf}>
+                        {tf}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="rf-hint rf-hint--inline">Ctrl/Cmd+click · empty = all</span>
+                </div>
+                <div className="rf-subfield">
+                  <span className="rf-subfield__label">Patterns</span>
+                  <select
+                    className="rf-control rf-control--multi rf-control--multi-tall"
+                    multiple
+                    size={6}
+                    value={researchDraft.patternType || []}
+                    onChange={(e) => {
+                      const selected = [...e.target.selectedOptions].map((o) => o.value)
+                      setResearchDraft((d) => ({
+                        ...d,
+                        patternType: selected.length ? selected : undefined,
+                      }))
+                    }}
+                  >
+                    {RESEARCH_TYPES.map((pt) => (
+                      <option key={pt} value={pt}>
+                        {pt.replace(/_/g, ' ')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="rf-row">
+              <div className="rf-key">Table</div>
+              <div className="rf-val rf-val--2">
+                <div className="rf-subfield">
+                  <span className="rf-subfield__label">Sort</span>
+                  <select
+                    className="rf-control"
+                    value={sortKey}
+                    onChange={(e) => setSortKey(e.target.value)}
+                    aria-label="Sort table"
+                  >
+                    {SORT_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="rf-subfield rf-subfield--check">
+                  <span className="rf-subfield__label">Ready only</span>
+                  <label className="rf-check">
+                    <input
+                      type="checkbox"
+                      checked={readyOnly}
+                      onChange={(e) => setReadyOnly(e.target.checked)}
+                    />
+                    n ≥ {minSampleSize}
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {chips.length > 0 && (
+              <div className="rf-row">
+                <div className="rf-key">Applied</div>
+                <div className="rf-val">
+                  <div className="rf-tags">
+                    {chips.map((c) => (
+                      <span key={c.key} className="rf-tag">
+                        {c.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {mode === 'research' && researchSummary && (
+        <section className="admin-card stats-summary">
+          <div className="stats-summary__grid">
+            <div>
+              <span className="stats-detail__label">Matched n</span>
+              <strong className="admin-mono">{researchMeta?.totalMatched ?? researchSummary.sampleSize}</strong>
+            </div>
+            <div>
+              <span className="stats-detail__label">S / F / E</span>
+              <strong className="admin-mono">
+                {researchSummary.successCount} / {researchSummary.failCount} /{' '}
+                {researchSummary.expiredCount}
+              </strong>
+            </div>
+            <div>
+              <span className="stats-detail__label">Resolved %</span>
+              <strong className="admin-mono">{pct(researchSummary.resolvedSuccessRate)}</strong>
+            </div>
+            <div>
+              <span className="stats-detail__label">Expectancy (R)</span>
+              <strong className="admin-mono">{num(researchSummary.expectancyR)}</strong>
+            </div>
+            <div>
+              <span className="stats-detail__label">Plan R:R</span>
+              <strong className="admin-mono">
+                {researchSummary.avgPlannedRr != null
+                  ? `${num(researchSummary.avgPlannedRr)}×`
+                  : '—'}
+              </strong>
+            </div>
+            <div>
+              <span className="stats-detail__label">Ready groups</span>
+              <strong className="admin-mono">{researchSummary.readyGroupCount}</strong>
+            </div>
+            <div>
+              <span className="stats-detail__label">Scan (IST)</span>
+              <strong className="admin-mono">
+                {researchSummary.scannedFrom || '—'} → {researchSummary.scannedTo || '—'}
+              </strong>
+            </div>
+            {researchMeta?.truncated && (
+              <div>
+                <span className="stats-detail__label">Truncated</span>
+                <strong>yes ({researchMeta.totalGroups} groups)</strong>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="admin-card">
         <div className="admin-card__head">
-          <h2>Buckets</h2>
+          <h2>{mode === 'research' ? 'Filtered groups' : 'Buckets'}</h2>
           <span className="stats-count">
             {loading ? '…' : `${filtered.length} row${filtered.length === 1 ? '' : 's'}`}
           </span>
@@ -329,8 +958,9 @@ export default function PatternStatsPage() {
 
         {!loading && filtered.length === 0 && (
           <p className="admin-empty">
-            No statistics rows yet. Pattern journal needs Postgres + closed outcomes on the
-            watchlist. Building history still shows S/F/E counts when any samples exist.
+            {mode === 'research'
+              ? 'No matching closed outcomes for these filters (Postgres journal required). Try a wider date range or fewer stack filters.'
+              : 'No statistics rows yet. Pattern journal needs Postgres + closed outcomes on the watchlist.'}
           </p>
         )}
 
@@ -346,16 +976,15 @@ export default function PatternStatsPage() {
                   <th>S / F / E</th>
                   <th>n</th>
                   <th>Resolved %</th>
-                  <th title="Average terminal move vs entry, in ATR units (signed in trade direction)">
-                    Move (R)
-                  </th>
+                  {showResearchCols && <th title="Avg terminal move R (resolved path samples)">Exp (R)</th>}
+                  <th title="Average terminal move vs entry, in ATR units">Move (R)</th>
                   <th>MFE (R)</th>
                   <th>MAE (R)</th>
-                  <th title="avg(reward in R) ÷ avg(risk in R) from final rails (ratio of averages)">
-                    Plan R:R
-                  </th>
-                  <th title="Average |entry − stop| ÷ ATR at detect">Risk (R)</th>
-                  <th title="Average favorable entry → target ÷ ATR at detect">Reward (R)</th>
+                  {showResearchCols && <th>Win (R)</th>}
+                  {showResearchCols && <th>Loss (R)</th>}
+                  <th title="avg(reward in R) ÷ avg(risk in R)">Plan R:R</th>
+                  <th>Risk (R)</th>
+                  <th>Reward (R)</th>
                   <th>Status</th>
                   <th aria-label="Open chart" />
                 </tr>
@@ -374,6 +1003,8 @@ export default function PatternStatsPage() {
                       open={open}
                       highlight={hi}
                       minSampleSize={minSampleSize}
+                      showResearchCols={showResearchCols}
+                      colSpan={colSpan}
                       onToggle={() => toggleExpand(key)}
                       onOpenChart={() => openOnChart(item)}
                     />
@@ -388,7 +1019,17 @@ export default function PatternStatsPage() {
   )
 }
 
-function FragmentRow({ item, ready, open, highlight, minSampleSize, onToggle, onOpenChart }) {
+function FragmentRow({
+  item,
+  ready,
+  open,
+  highlight,
+  minSampleSize,
+  showResearchCols,
+  colSpan,
+  onToggle,
+  onOpenChart,
+}) {
   const statusLabel = ready
     ? 'Ready'
     : `Building (${item.sampleSize ?? 0}/${minSampleSize})`
@@ -428,9 +1069,18 @@ function FragmentRow({ item, ready, open, highlight, minSampleSize, onToggle, on
         </td>
         <td className="admin-mono">{item.sampleSize ?? 0}</td>
         <td className="admin-mono">{ready ? pct(item.resolvedSuccessRate) : '—'}</td>
+        {showResearchCols && (
+          <td className="admin-mono">{ready ? num(item.expectancyR ?? item.avgMoveR) : '—'}</td>
+        )}
         <td className="admin-mono">{ready ? num(item.avgMoveR) : '—'}</td>
         <td className="admin-mono">{ready ? num(item.avgMfeR) : '—'}</td>
         <td className="admin-mono">{ready ? num(item.avgMaeR) : '—'}</td>
+        {showResearchCols && (
+          <td className="admin-mono">{ready ? num(item.avgWinMoveR) : '—'}</td>
+        )}
+        {showResearchCols && (
+          <td className="admin-mono">{ready ? num(item.avgLossMoveR) : '—'}</td>
+        )}
         <td className="admin-mono">
           {ready && item.avgPlannedRr != null ? `${num(item.avgPlannedRr)}×` : '—'}
         </td>
@@ -451,13 +1101,11 @@ function FragmentRow({ item, ready, open, highlight, minSampleSize, onToggle, on
       </tr>
       {open && (
         <tr className="stats-detail-row">
-          <td colSpan={15}>
+          <td colSpan={colSpan}>
             <div className="stats-detail">
               <div>
                 <span className="stats-detail__label">Inventory success %</span>
-                <span className="admin-mono">
-                  {ready ? pct(item.successRate) : '—'}
-                </span>
+                <span className="admin-mono">{ready ? pct(item.successRate) : '—'}</span>
               </div>
               <div>
                 <span className="stats-detail__label">Expired share</span>
@@ -510,10 +1158,6 @@ function FragmentRow({ item, ready, open, highlight, minSampleSize, onToggle, on
                 <span className="admin-mono">
                   {ready && item.maxPlannedRr != null ? `${num(item.maxPlannedRr)}×` : '—'}
                 </span>
-              </div>
-              <div>
-                <span className="stats-detail__label">Updated</span>
-                <span className="admin-mono">{item.updatedAt || '—'}</span>
               </div>
             </div>
           </td>

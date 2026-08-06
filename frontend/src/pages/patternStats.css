@@ -1,3 +1,42 @@
+/* ── Stats page shell ──────────────────────────────────────────────── */
+
+.stats-page .admin-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stats-mode-toggle {
+  display: inline-flex;
+  gap: 0;
+  flex-shrink: 0;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid #2a3144;
+  background: #0c0e14;
+}
+
+.stats-mode-toggle .admin-btn {
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  border-radius: 7px;
+  min-width: 5.5rem;
+}
+
+.stats-mode-toggle .admin-btn:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.stats-mode--active {
+  background: rgba(99, 102, 241, 0.22) !important;
+  color: #e0e7ff !important;
+  box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.35);
+}
+
 .stats-filters__form {
   align-items: end;
 }
@@ -38,6 +77,348 @@
   font-variant-numeric: tabular-nums;
 }
 
+.stats-research-disclaimer {
+  background: rgba(234, 179, 8, 0.08);
+  border-color: rgba(234, 179, 8, 0.25);
+  color: #fde68a;
+  font-size: 0.8125rem;
+}
+
+/* ── Research filters: property-sheet layout ───────────────────────── */
+/*
+ * Different approach from chip walls / section cards:
+ * fixed label column + value column (like IDE / trading terminal prefs).
+ */
+
+.rf {
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.rf-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #1e2433;
+  background: linear-gradient(180deg, #12151d 0%, #0f1117 100%);
+}
+
+.rf-toolbar__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rf-toolbar__title {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #e2e8f0;
+}
+
+.rf-toolbar__count {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  color: #c7d2fe;
+}
+
+.rf-toolbar__right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.rf-toolbar__apply {
+  min-width: 4.75rem;
+}
+
+.rf-body {
+  /* fixed key column keeps every control edge-aligned */
+  --rf-key: 7.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.rf-row {
+  display: grid;
+  grid-template-columns: var(--rf-key) minmax(0, 1fr);
+  gap: 0 14px;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #161b26;
+}
+
+.rf-row:last-child {
+  border-bottom: none;
+}
+
+.rf-row--hint {
+  min-height: 0;
+  padding-top: 0;
+  padding-bottom: 10px;
+  align-items: start;
+  border-bottom: 1px solid #1e2433;
+}
+
+.rf-key {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #64748b;
+  text-align: right;
+  line-height: 1.25;
+  padding-right: 2px;
+}
+
+.rf-val {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rf-val--split {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.rf-val--2,
+.rf-val--3,
+.rf-val--4 {
+  display: grid;
+  gap: 8px 12px;
+  width: 100%;
+}
+
+.rf-val--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.rf-val--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.rf-val--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.rf-row--top {
+  align-items: start;
+}
+
+.rf-row--top .rf-key {
+  padding-top: 10px;
+}
+
+.rf-subfield {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.rf-subfield__label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #64748b;
+  line-height: 1.2;
+}
+
+.rf-subfield--check {
+  justify-content: center;
+}
+
+.rf-subfield--check .rf-check {
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid #2a3144;
+  background: #141925;
+}
+
+.rf-control {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid #2a3144;
+  background: #141925;
+  color: #f1f5f9;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.rf-control:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.35);
+}
+
+.rf-control--narrow {
+  width: auto;
+  min-width: 9rem;
+  flex: 0 0 auto;
+}
+
+.rf-control--multi {
+  min-height: 0;
+  height: auto;
+  padding: 4px;
+  line-height: 1.4;
+}
+
+.rf-control--multi option {
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.rf-control--multi-tall {
+  max-height: 9.5rem;
+}
+
+.rf-hint {
+  font-size: 0.6875rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.rf-hint--inline {
+  margin-top: 2px;
+}
+
+/* Segmented multi-toggle (quality stack) */
+.rf-seg {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  gap: 0;
+  border: 1px solid #2a3144;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0c0e14;
+}
+
+.rf-seg__btn {
+  flex: 1 1 auto;
+  min-width: 5.5rem;
+  margin: 0;
+  padding: 8px 10px;
+  border: none;
+  border-right: 1px solid #2a3144;
+  background: transparent;
+  color: #94a3b8;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.rf-seg__btn:last-child {
+  border-right: none;
+}
+
+.rf-seg__btn:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.rf-seg__btn.is-on {
+  color: #e0e7ff;
+  background: rgba(99, 102, 241, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.25);
+}
+
+.rf-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #cbd5e1;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.rf-check input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #6366f1;
+}
+
+.rf-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rf-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  background: rgba(16, 185, 129, 0.08);
+  color: #a7f3d0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* Summary metrics */
+.stats-summary {
+  padding: 14px 16px !important;
+}
+
+.stats-summary__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px 14px;
+}
+
+.stats-summary__grid .stats-detail__label {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.stats-summary__grid strong {
+  font-size: 0.9375rem;
+  color: #e2e8f0;
+}
+
+/* ── Table ─────────────────────────────────────────────────────────── */
+
 .stats-table th:first-child,
 .stats-table td:first-child {
   width: 2rem;
@@ -65,7 +446,6 @@
   box-shadow: inset 3px 0 0 #22c55e;
 }
 
-/* Resolved %, Move, MFE, MAE */
 .stats-row--highlight td:nth-child(7),
 .stats-row--highlight td:nth-child(8),
 .stats-row--highlight td:nth-child(9),
@@ -114,4 +494,65 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: #64748b;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .rf-val--4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rf-val--3 {
+    grid-template-columns: 1fr;
+  }
+
+  .rf-val--2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .rf-body {
+    --rf-key: 5.25rem;
+  }
+
+  .rf-row {
+    padding: 10px 12px;
+    gap: 0 10px;
+  }
+
+  .rf-toolbar {
+    padding: 10px 12px;
+  }
+
+  .rf-key {
+    text-align: left;
+  }
+
+  .rf-val--4 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .rf-seg__btn {
+    min-width: 33%;
+    border-right: 1px solid #2a3144;
+    border-bottom: 1px solid #2a3144;
+  }
+}
+
+@media (max-width: 420px) {
+  .rf-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    min-height: 0;
+  }
+
+  .rf-key {
+    text-align: left;
+  }
+
+  .rf-val--4 {
+    grid-template-columns: 1fr;
+  }
 }

@@ -98,6 +98,9 @@ class NoOpPatternJournal:
     def is_active(self) -> bool:
         return False
 
+    def supports_research_aggregation(self) -> bool:
+        return False
+
     def insert_detected(self, pattern, detected_event) -> None:
         pass
 
@@ -153,6 +156,10 @@ class InMemoryPatternJournal:
 
     def is_active(self) -> bool:
         return True
+
+    def supports_research_aggregation(self) -> bool:
+        """Research query-time aggregation is Postgres-only (P0)."""
+        return False
 
     def insert_detected(
         self, pattern: ActivePattern, detected_event: PatternStageEvent | None

@@ -7,6 +7,8 @@ Authoritative math and lifecycle docs for indicators, patterns, and the pattern 
 | Indicators | [`indicators/`](indicators/) (ATR, Donchian, Volume SMA) |
 | Patterns | [`patterns/`](patterns/) |
 | Modules (journal, …) | [`modules/`](modules/) |
+| Planned: classical patterns + stack roadmap | [`design-patterns-stack-and-filtered-stats.md`](design-patterns-stack-and-filtered-stats.md) (not implemented) |
+| **Design: composable stack filters (P0 research stats)** | [`design-composable-stack-filters.md`](design-composable-stack-filters.md) — implement when ready |
 
 ## Standards
 

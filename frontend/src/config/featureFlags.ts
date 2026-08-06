@@ -57,6 +57,17 @@ export function isAdminLearnEnabled(): boolean {
   )
 }
 
+/**
+ * VITE_FEATURE_PATTERN_RESEARCH_STATS — Pattern Stats Research mode (composable stack filters).
+ * default ON; ADMIN-only in UI. Backend also requires Postgres journal + TIP_PATTERN_RESEARCH_STATS_ENABLED.
+ */
+export function isPatternResearchStatsEnabled(): boolean {
+  return envTruthy(
+    import.meta.env.VITE_FEATURE_PATTERN_RESEARCH_STATS as string | undefined,
+    true,
+  )
+}
+
 /** Max time to wait for API + Postgres before showing Retry (ms). */
 export const STARTUP_READY_TIMEOUT_MS = 180_000
 

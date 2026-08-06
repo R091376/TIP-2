@@ -61,10 +61,12 @@ Statistics are keyed by `(symbol_id, pattern_type, timeframe)` — Breakout and 
 | Endpoint | Source |
 |---|---|
 | `GET /api/pattern-statistics?patternType=&timeframe=` | **`pattern_statistics` only** (+ active watchlist filter for symbol ids / labels) |
+| `GET /api/pattern-statistics/query?…` | **Query-time** `pattern_instances` ⨝ `pattern_outcomes` (composable stack filters) |
 
-- Authenticated (all roles). 503 when patterns disabled.
+- Bulk: authenticated (all roles). 503 when patterns disabled.
+- Research query: **ADMIN only**; requires Postgres journal + `TIP_PATTERN_RESEARCH_STATS_ENABLED`. Design: `docs/design-composable-stack-filters.md`.
 - Always returns S/F/E counts; rates/means only when `sample_size >= minSampleSize`.
-- Frontend: `/patterns/stats` (dense table + expand row).
+- Frontend: `/patterns/stats` (Dashboard + ADMIN Research mode).
 
 ## When journal is off
 

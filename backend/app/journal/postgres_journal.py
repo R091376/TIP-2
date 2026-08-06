@@ -5,7 +5,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.journal.entities import (
@@ -785,6 +785,161 @@ class PostgresPatternJournal:
                 "instances_included": included,
                 "instances_skipped": skipped,
             }
+
+    def supports_research_aggregation(self) -> bool:
+        return True
+
+    def aggregate_filtered(
+        self,
+        spec,
+        *,
+        allowed_symbol_ids: list[str],
+        symbol_labels: dict[str, tuple[str | None, str | None]] | None = None,
+        statement_timeout_ms: int = 5000,
+    ) -> dict:
+        """
+        Query-time research aggregation over closed instances ⨝ outcomes.
+
+        Fetches candidate rows (watchlist + closed + coarse date bounds), filters
+        in Python for TOD / flags / rails (parity with compute_planned_rails), then
+        aggregates via research_metrics.
+        """
+        from app.patterns.planned_rails import compute_planned_rails
+        from app.patterns.research_filters import (
+            as_epoch_seconds,
+            row_matches_filters,
+        )
+        from app.patterns.research_metrics import (
+            ResearchRow,
+            aggregate_research,
+            empty_research_response,
+        )
+
+        if not allowed_symbol_ids:
+            return empty_research_response(spec)
+
+        # Coarse epoch bounds for detect_candle_time (IST day start/end)
+        from_d = spec.detected_from
+        to_d = spec.detected_to
+        if from_d is None or to_d is None:
+            return empty_research_response(spec)
+
+        start_ist = datetime.combine(from_d, time(0, 0), tzinfo=_IST)
+        end_ist_excl = datetime.combine(to_d + timedelta(days=1), time(0, 0), tzinfo=_IST)
+        start_epoch = int(start_ist.timestamp())
+        end_epoch = int(end_ist_excl.timestamp()) - 1
+        # Also include ms-stored candle times
+        start_epoch_ms = start_epoch * 1000
+        end_epoch_ms = end_epoch * 1000 + 999
+
+        allowed_set = set(allowed_symbol_ids)
+        timeout_ms = max(500, int(statement_timeout_ms or 5000))
+
+        with self._sf() as s:
+            # Bound scan cost on Postgres
+            try:
+                s.execute(text(f"SET LOCAL statement_timeout = '{int(timeout_ms)}'"))
+            except Exception:
+                logger.debug("statement_timeout not applied", exc_info=True)
+
+            q = (
+                select(PatternInstanceRow, PatternOutcomeRow)
+                .join(
+                    PatternOutcomeRow,
+                    PatternOutcomeRow.pattern_instance_id == PatternInstanceRow.id,
+                )
+                .where(
+                    PatternInstanceRow.symbol_id.in_(list(allowed_symbol_ids)),
+                    PatternInstanceRow.status.in_(tuple(CLOSED_STATUSES)),
+                    or_(
+                        (
+                            (PatternInstanceRow.detect_candle_time >= start_epoch)
+                            & (PatternInstanceRow.detect_candle_time <= end_epoch)
+                        ),
+                        (
+                            (PatternInstanceRow.detect_candle_time >= start_epoch_ms)
+                            & (PatternInstanceRow.detect_candle_time <= end_epoch_ms)
+                        ),
+                    ),
+                )
+            )
+            if spec.pattern_types:
+                q = q.where(PatternInstanceRow.pattern_type.in_(list(spec.pattern_types)))
+            if spec.timeframes:
+                q = q.where(PatternInstanceRow.timeframe.in_(list(spec.timeframes)))
+            if spec.direction:
+                q = q.where(PatternInstanceRow.direction == spec.direction)
+
+            try:
+                pairs = s.execute(q).all()
+            except Exception as exc:
+                # statement_timeout surfaces as DBAPI error
+                msg = str(exc).lower()
+                if "timeout" in msg or "canceling statement" in msg:
+                    raise TimeoutError("Research query timed out") from exc
+                raise
+
+        matched: list = []
+        for inst, outcome in pairs:
+            rails = compute_planned_rails(
+                pattern_type=inst.pattern_type,
+                direction=inst.direction,
+                entry=inst.entry_price,
+                stop=inst.stop_level,
+                target=inst.target_level,
+                atr=inst.atr_at_detect,
+            )
+            planned_rr = rails.planned_rr if rails is not None else None
+            rails_valid = rails is not None
+            if not row_matches_filters(
+                symbol_id=inst.symbol_id,
+                pattern_type=inst.pattern_type,
+                timeframe=inst.timeframe,
+                direction=inst.direction,
+                status=inst.status,
+                flag_confirmed=bool(inst.flag_confirmed),
+                flag_retested=bool(inst.flag_retested),
+                flag_strengthened=bool(inst.flag_strengthened),
+                volume_ok_at_detect=bool(inst.volume_ok_at_detect),
+                confirmation_mode_used=inst.confirmation_mode_used,
+                detector_version=inst.detector_version or "",
+                detect_candle_time=int(inst.detect_candle_time or 0),
+                final_outcome=outcome.final_outcome,
+                reason=outcome.reason,
+                planned_rr=planned_rr,
+                rails_valid=rails_valid,
+                spec=spec,
+                allowed_symbol_ids=allowed_set,
+            ):
+                continue
+            matched.append(
+                ResearchRow(
+                    symbol_id=inst.symbol_id,
+                    pattern_type=inst.pattern_type,
+                    timeframe=inst.timeframe,
+                    direction=inst.direction,
+                    status=inst.status,
+                    flag_confirmed=bool(inst.flag_confirmed),
+                    flag_retested=bool(inst.flag_retested),
+                    flag_strengthened=bool(inst.flag_strengthened),
+                    volume_ok_at_detect=bool(inst.volume_ok_at_detect),
+                    confirmation_mode_used=inst.confirmation_mode_used,
+                    detector_version=inst.detector_version or "",
+                    detect_candle_time=as_epoch_seconds(inst.detect_candle_time),
+                    entry_price=float(inst.entry_price),
+                    stop_level=float(inst.stop_level),
+                    target_level=inst.target_level,
+                    atr_at_detect=float(inst.atr_at_detect or 0),
+                    final_outcome=outcome.final_outcome,
+                    reason=outcome.reason,
+                    duration_candles=int(outcome.duration_candles or 0),
+                    max_favorable_r=outcome.max_favorable_r,
+                    max_adverse_r=outcome.max_adverse_r,
+                    move_r=outcome.move_r,
+                )
+            )
+
+        return aggregate_research(matched, spec, symbol_labels=symbol_labels)
 
     @staticmethod
     def _to_snapshot(s: PatternStatisticsRow) -> PatternStatisticsSnapshot:

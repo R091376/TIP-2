@@ -86,6 +86,19 @@ class Settings(BaseSettings):
     )
     atr_period: int = 14
     stats_min_sample_size: int = 20
+    # Research / composable stack filters (query-time stats)
+    pattern_research_stats_enabled: bool = Field(
+        default=True, alias="TIP_PATTERN_RESEARCH_STATS_ENABLED"
+    )
+    research_stats_max_range_days: int = Field(
+        default=180, alias="TIP_RESEARCH_STATS_MAX_RANGE_DAYS"
+    )
+    research_stats_default_lookback_days: int = Field(
+        default=180, alias="TIP_RESEARCH_STATS_DEFAULT_LOOKBACK_DAYS"
+    )
+    research_stats_statement_timeout_ms: int = Field(
+        default=5000, alias="TIP_RESEARCH_STATS_STATEMENT_TIMEOUT_MS"
+    )
 
     # Pattern detector knobs (mirror Java defaults)
     breakout: dict[str, Any] = Field(
