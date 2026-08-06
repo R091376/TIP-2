@@ -77,6 +77,32 @@
   font-variant-numeric: tabular-nums;
 }
 
+.stats-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px 16px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #1e2433;
+}
+
+.stats-pager__meta {
+  font-size: 0.8125rem;
+  color: #cbd5e1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-pager__size {
+  color: #64748b;
+}
+
+.stats-pager .admin-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .stats-research-disclaimer {
   background: rgba(234, 179, 8, 0.08);
   border-color: rgba(234, 179, 8, 0.25);

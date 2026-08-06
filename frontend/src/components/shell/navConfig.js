@@ -12,7 +12,7 @@ import { isAdminLearnEnabled } from '../../config/featureFlags'
  */
 export function getNavItems({ isAdmin = false } = {}) {
   const items = [
-    { id: 'dashboard', label: 'Dashboard', to: '/patterns/stats', icon: 'dashboard' },
+    { id: 'dashboard', label: 'Stats', to: '/patterns/stats', icon: 'dashboard' },
     { id: 'charts', label: 'Charts', to: '/', icon: 'charts' },
     { id: 'watchlist', label: 'Watchlist', to: '/?panel=watchlist', panel: 'watchlist', icon: 'watchlist' },
     { id: 'orders', label: 'Orders', to: '/paper/orders', icon: 'orders' },

@@ -63,7 +63,7 @@ Last updated: 2026-07-29. Revisit when starting last-day replay or strategy bots
 | Decision | Choice |
 |----------|--------|
 | Chrome | Left **sidebar** app shell for all authenticated routes; login stays outside shell |
-| Nav | Dashboard → Pattern Stats; Charts → `/`; Watchlist/Alerts → `/?panel=…` (chart rail); Orders → `/paper/orders`; Positions → `/paper` |
+| Nav | Stats → Pattern Stats; Charts → `/`; Watchlist/Alerts → `/?panel=…` (chart rail); Orders → `/paper/orders`; Positions → `/paper` |
 | Positions UI | Three metric cards (Today P&L, Total P&L, closed-lot Win Rate) + dense table + Close |
 | Orders UI | Open Orders / Order History panel, client filters, Buy/Sell pills, Working residual qty, Cancel |
 | Flag | **`VITE_FEATURE_APP_SHELL`** (default **ON**); shell is the only authenticated layout |

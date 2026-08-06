@@ -1,5 +1,5 @@
 /**
- * Glossary on the Learn index — pattern basics + Dashboard (/patterns/stats) terms.
+ * Glossary on the Learn index — pattern basics + Stats (/patterns/stats) terms.
  * Keep beginner-friendly; formulas match docs/modules/journal.md statistics.
  */
 
@@ -44,7 +44,7 @@ const STATS_TERMS = [
   {
     term: 'S / F / E',
     gloss:
-      'Counts of virtual trades that ended as Success, Fail, or Expired. Shown as three numbers on the Dashboard table.',
+      'Counts of virtual trades that ended as Success, Fail, or Expired. Shown as three numbers on the Stats table.',
   },
   {
     term: 'Sample size (n)',
@@ -59,7 +59,7 @@ const STATS_TERMS = [
   {
     term: 'Resolved success % (Resolved %)',
     gloss:
-      'Performance rate among decided outcomes: Success ÷ (Success + Fail). Expired do not count. This is the main “Resolved %” column and default sort on the Dashboard.',
+      'Performance rate among decided outcomes: Success ÷ (Success + Fail). Expired do not count. This is the main “Resolved %” column and default sort on Stats.',
   },
   {
     term: 'Inventory success %',
@@ -74,12 +74,12 @@ const STATS_TERMS = [
   {
     term: 'MFE (Maximum Favorable Excursion)',
     gloss:
-      'Best favorable move the virtual trade saw before it ended — “how good did it get in your direction?” Updated every open bar from price extremes; recorded on both wins and losses. Dashboard average is MFE (R). Walk a full numbers story on Learn → Breakout.',
+      'Best favorable move the virtual trade saw before it ended — “how good did it get in your direction?” Updated every open bar from price extremes; recorded on both wins and losses. Stats average is MFE (R). Walk a full numbers story on Learn → Breakout.',
   },
   {
     term: 'MAE (Maximum Adverse Excursion)',
     gloss:
-      'Worst move against the virtual trade before it ended — “how much pain before exit?” Also updated every open bar and kept on success and fail. Lower average MAE (R) is usually better. Dashboard sorts MAE ascending when you pick that sort.',
+      'Worst move against the virtual trade before it ended — “how much pain before exit?” Also updated every open bar and kept on success and fail. Lower average MAE (R) is usually better. Stats sorts MAE ascending when you pick that sort.',
   },
   {
     term: 'MFE (R) / MAE (R)',
@@ -118,7 +118,7 @@ const STATS_TERMS = [
   {
     term: 'Highlight (top quartile)',
     gloss:
-      'On the Dashboard, among Ready rows in the current filter, the top 25% by the active sort metric are highlighted. For MAE, “top” means lowest adverse excursion.',
+      'On Stats, among Ready rows in the current filter, the top 25% by the active sort metric are highlighted. For MAE, “top” means lowest adverse excursion.',
   },
 ]
 
@@ -143,9 +143,9 @@ export default function LearnGlossary() {
       <h3 className="learn-glossary__section">Pattern basics</h3>
       <TermList terms={PATTERN_TERMS} />
 
-      <h3 className="learn-glossary__section">Dashboard stats (S/F/E, MFE, MAE, Resolved %)</h3>
+      <h3 className="learn-glossary__section">Stats (S/F/E, MFE, MAE, Resolved %)</h3>
       <p className="learn-glossary__hint">
-        These match labels on the Dashboard (/patterns/stats). Virtual trade results are journalled
+        These match labels on Stats (/patterns/stats). Virtual trade results are journalled
         after each setup ends; they are research metrics, not live P&amp;L.
       </p>
       <TermList terms={STATS_TERMS} />

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { isPatternResearchStatsEnabled } from '../config/featureFlags'
 import {
@@ -48,6 +48,9 @@ const SORT_OPTIONS = [
   { value: 'sampleSize', label: 'Sample size' },
   { value: 'symbol', label: 'Symbol' },
 ]
+
+/** Client-side page size for Dashboard + Research tables. */
+const PAGE_SIZE = 100
 
 function pct(value) {
   if (value == null || Number.isNaN(Number(value))) return '—'
@@ -166,7 +169,6 @@ function sortRows(rows, sortKey, minSampleSize) {
 }
 
 export default function PatternStatsPage() {
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { isAdmin } = useAuth()
   const researchEnabled = isPatternResearchStatsEnabled() && isAdmin
@@ -178,6 +180,7 @@ export default function PatternStatsPage() {
   const [minSampleSize, setMinSampleSize] = useState(20)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
 
   // Dashboard filters
   const [patternType, setPatternType] = useState('all')
@@ -332,9 +335,21 @@ export default function PatternStatsPage() {
     return sortRows(rows, sortKey, minSampleSize)
   }, [items, readyOnly, symbolQuery, sortKey, minSampleSize])
 
+  // Reset to page 1 when the visible set or mode changes
+  useEffect(() => {
+    setPage(1)
+  }, [mode, patternType, timeframe, readyOnly, symbolQuery, sortKey, researchApplied, items])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const pageSlice = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE
+    return filtered.slice(start, start + PAGE_SIZE)
+  }, [filtered, safePage])
+
   const highlightKeys = useMemo(
-    () => computeHighlightKeys(filtered, sortKey, minSampleSize),
-    [filtered, sortKey, minSampleSize],
+    () => computeHighlightKeys(pageSlice, sortKey, minSampleSize),
+    [pageSlice, sortKey, minSampleSize],
   )
 
   const chips = useMemo(
@@ -349,13 +364,6 @@ export default function PatternStatsPage() {
       else next.add(key)
       return next
     })
-  }
-
-  function openOnChart(item) {
-    const params = new URLSearchParams()
-    if (item.symbolId && item.symbolId !== '*') params.set('symbol', item.symbolId)
-    if (item.timeframe && item.timeframe !== '*') params.set('tf', item.timeframe)
-    navigate(`/?${params.toString()}`)
   }
 
   function applyResearch() {
@@ -394,17 +402,20 @@ export default function PatternStatsPage() {
   }
 
   const showResearchCols = mode === 'research'
-  const colSpan = showResearchCols ? 18 : 15
+  // expand + core cols (+ research extras); Chart column removed
+  const colSpan = showResearchCols ? 17 : 14
+  const pageFrom = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1
+  const pageTo = Math.min(safePage * PAGE_SIZE, filtered.length)
 
   return (
     <div className="admin-page admin-page--in-shell stats-page">
       <header className="admin-header">
         <div>
-          <h1 className="admin-header__title">Dashboard · Pattern statistics</h1>
+          <h1 className="admin-header__title">Stats · Pattern statistics</h1>
           <p className="admin-header__sub">
             {mode === 'research'
               ? 'Research · composable stack filters · virtual journal outcomes · ADMIN'
-              : `Research ranking across the watchlist · rates unlock at n ≥ ${minSampleSize} · not trade advice`}
+              : `Watchlist ranking · rates unlock at n ≥ ${minSampleSize} · not trade advice`}
           </p>
         </div>
         {researchEnabled && (
@@ -414,7 +425,7 @@ export default function PatternStatsPage() {
               className={`admin-btn admin-btn--small ${mode === 'dashboard' ? 'stats-mode--active' : ''}`}
               onClick={() => setMode('dashboard')}
             >
-              Dashboard
+              Stats
             </button>
             <button
               type="button"
@@ -952,7 +963,11 @@ export default function PatternStatsPage() {
         <div className="admin-card__head">
           <h2>{mode === 'research' ? 'Filtered groups' : 'Buckets'}</h2>
           <span className="stats-count">
-            {loading ? '…' : `${filtered.length} row${filtered.length === 1 ? '' : 's'}`}
+            {loading
+              ? '…'
+              : filtered.length === 0
+                ? '0 rows'
+                : `${pageFrom}–${pageTo} of ${filtered.length}`}
           </span>
         </div>
 
@@ -965,54 +980,80 @@ export default function PatternStatsPage() {
         )}
 
         {filtered.length > 0 && (
-          <div className="admin-table-wrap">
-            <table className="admin-table stats-table">
-              <thead>
-                <tr>
-                  <th aria-label="Expand" />
-                  <th>Symbol</th>
-                  <th>Pattern</th>
-                  <th>TF</th>
-                  <th>S / F / E</th>
-                  <th>n</th>
-                  <th>Resolved %</th>
-                  {showResearchCols && <th title="Avg terminal move R (resolved path samples)">Exp (R)</th>}
-                  <th title="Average terminal move vs entry, in ATR units">Move (R)</th>
-                  <th>MFE (R)</th>
-                  <th>MAE (R)</th>
-                  {showResearchCols && <th>Win (R)</th>}
-                  {showResearchCols && <th>Loss (R)</th>}
-                  <th title="avg(reward in R) ÷ avg(risk in R)">Plan R:R</th>
-                  <th>Risk (R)</th>
-                  <th>Reward (R)</th>
-                  <th>Status</th>
-                  <th aria-label="Open chart" />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((item) => {
-                  const key = rowKey(item)
-                  const ready = isReady(item, minSampleSize)
-                  const open = expanded.has(key)
-                  const hi = highlightKeys.has(key)
-                  return (
-                    <FragmentRow
-                      key={key}
-                      item={item}
-                      ready={ready}
-                      open={open}
-                      highlight={hi}
-                      minSampleSize={minSampleSize}
-                      showResearchCols={showResearchCols}
-                      colSpan={colSpan}
-                      onToggle={() => toggleExpand(key)}
-                      onOpenChart={() => openOnChart(item)}
-                    />
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="admin-table-wrap">
+              <table className="admin-table stats-table">
+                <thead>
+                  <tr>
+                    <th aria-label="Expand" />
+                    <th>Symbol</th>
+                    <th>Pattern</th>
+                    <th>TF</th>
+                    <th>S / F / E</th>
+                    <th>n</th>
+                    <th>Resolved %</th>
+                    {showResearchCols && (
+                      <th title="Avg terminal move R (resolved path samples)">Exp (R)</th>
+                    )}
+                    <th title="Average terminal move vs entry, in ATR units">Move (R)</th>
+                    <th>MFE (R)</th>
+                    <th>MAE (R)</th>
+                    {showResearchCols && <th>Win (R)</th>}
+                    {showResearchCols && <th>Loss (R)</th>}
+                    <th title="avg(reward in R) ÷ avg(risk in R)">Plan R:R</th>
+                    <th>Risk (R)</th>
+                    <th>Reward (R)</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageSlice.map((item) => {
+                    const key = rowKey(item)
+                    const ready = isReady(item, minSampleSize)
+                    const open = expanded.has(key)
+                    const hi = highlightKeys.has(key)
+                    return (
+                      <FragmentRow
+                        key={key}
+                        item={item}
+                        ready={ready}
+                        open={open}
+                        highlight={hi}
+                        minSampleSize={minSampleSize}
+                        showResearchCols={showResearchCols}
+                        colSpan={colSpan}
+                        onToggle={() => toggleExpand(key)}
+                      />
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {totalPages > 1 && (
+              <div className="stats-pager" role="navigation" aria-label="Table pagination">
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--small"
+                  disabled={safePage <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  Previous
+                </button>
+                <span className="stats-pager__meta">
+                  Page {safePage} of {totalPages}
+                  <span className="stats-pager__size"> · {PAGE_SIZE} / page</span>
+                </span>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--small"
+                  disabled={safePage >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
         )}
       </section>
     </div>
@@ -1028,7 +1069,6 @@ function FragmentRow({
   showResearchCols,
   colSpan,
   onToggle,
-  onOpenChart,
 }) {
   const statusLabel = ready
     ? 'Ready'
@@ -1092,11 +1132,6 @@ function FragmentRow({
           >
             {statusLabel}
           </span>
-        </td>
-        <td>
-          <button type="button" className="admin-btn admin-btn--small" onClick={onOpenChart}>
-            Chart
-          </button>
         </td>
       </tr>
       {open && (
