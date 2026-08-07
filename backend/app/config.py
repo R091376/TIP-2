@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     )
     atr_period: int = 14
     stats_min_sample_size: int = 20
+    # Minimum planned stop distance (risk_r = |entry−stop| ÷ ATR) required to
+    # journal a new detection and raise WS/day alerts. Below this, the detect
+    # is suppressed (no instance, no events). Set ≤0 to disable the gate.
+    # Default 0.3R filters tiny-stop / inflated plan-R:R noise.
+    pattern_min_risk_r: float = Field(default=0.3, alias="TIP_PATTERN_MIN_RISK_R")
     # Research / composable stack filters (query-time stats)
     pattern_research_stats_enabled: bool = Field(
         default=True, alias="TIP_PATTERN_RESEARCH_STATS_ENABLED"

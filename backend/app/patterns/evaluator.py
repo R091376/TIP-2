@@ -15,6 +15,7 @@ from app.patterns.journal import PatternJournal
 from app.patterns.lifecycle_support import expire
 from app.patterns.models import ActivePattern, PatternStage, PatternType
 from app.patterns.pinbar import evaluate_pinbar_bar
+from app.patterns.planned_rails import passes_min_risk_r, planned_rails_from_pattern
 from app.patterns.structure import evaluate_structure_bar
 from app.patterns.volume_breakout import evaluate_volume_breakout_bar
 
@@ -355,10 +356,56 @@ class PatternEvaluator:
                 )
             else:
                 ev = evaluate_fn(symbol_id, timeframe, open_items, closed, cfg, now)
-            self._persist_eval(ev.advanced, ev.newly_detected, ev.events)
-            still.extend(ev.still_open)
+            advanced, newly, events, still_open = self._gate_min_risk(
+                ev.advanced, ev.newly_detected, ev.events, ev.still_open
+            )
+            self._persist_eval(advanced, newly, events)
+            still.extend(still_open)
 
         self._store.replace_series(symbol_id, timeframe, still)
+
+    def _gate_min_risk(
+        self,
+        advanced: list[ActivePattern],
+        newly: list[ActivePattern],
+        events: list,
+        still_open: list[ActivePattern],
+    ) -> tuple[list[ActivePattern], list[ActivePattern], list, list[ActivePattern]]:
+        """Drop brand-new detections whose planned risk_r is below the configured floor.
+
+        Suppresses journal rows and WS/day alerts for tiny-stop noise. Already-open
+        instances (advanced) are not re-checked — only ids present in ``newly``.
+        """
+        min_r = float(getattr(self._settings, "pattern_min_risk_r", 0.3) or 0.0)
+        if min_r <= 0 or not newly:
+            return advanced, newly, events, still_open
+
+        kept_newly: list[ActivePattern] = []
+        rejected: set = set()
+        for p in newly:
+            if passes_min_risk_r(p, min_r):
+                kept_newly.append(p)
+                continue
+            rejected.add(p.id)
+            rails = planned_rails_from_pattern(p)
+            risk_s = f"{rails.risk_r:.4f}" if rails else "n/a"
+            logger.info(
+                "Suppress detect (risk_r %s < min %.3f): id=%s type=%s %s %s",
+                risk_s,
+                min_r,
+                p.id,
+                getattr(p.pattern_type, "value", p.pattern_type),
+                p.symbol_id,
+                p.timeframe,
+            )
+
+        if not rejected:
+            return advanced, newly, events, still_open
+
+        advanced = [p for p in advanced if p.id not in rejected]
+        events = [e for e in events if getattr(e, "pattern_id", None) not in rejected]
+        still_open = [p for p in still_open if p.id not in rejected]
+        return advanced, kept_newly, events, still_open
 
     def _persist_eval(
         self,

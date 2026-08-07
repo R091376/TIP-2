@@ -38,7 +38,13 @@ from app.journal.mapper import (
     to_new_row,
 )
 from app.patterns.journal import PatternStatisticsSnapshot
-from app.patterns.models import ActivePattern, FinalOutcome, PatternStage, PatternStageEvent
+from app.patterns.models import (
+    ActivePattern,
+    FinalOutcome,
+    PatternDirection,
+    PatternStage,
+    PatternStageEvent,
+)
 from app.patterns.planned_rails import (
     compute_planned_rails,
     median_planned_rr,
@@ -785,6 +791,84 @@ class PostgresPatternJournal:
                 "instances_included": included,
                 "instances_skipped": skipped,
             }
+
+    def rebuild_all_statistics(self) -> dict[str, int]:
+        """Wipe ``pattern_statistics`` and rebuild from remaining closed instances.
+
+        Use after bulk purges (e.g. low-risk cleanup). Replays each closed instance
+        through ``_upsert_statistics`` so success/fail/move/MFE/planned rails match
+        the journal. Research does not use this table (query-time only).
+        """
+        now = datetime.now(timezone.utc)
+        with self._sf() as s:
+            deleted = s.query(PatternStatisticsRow).delete(synchronize_session=False)
+            instances = s.scalars(
+                select(PatternInstanceRow).where(
+                    PatternInstanceRow.status.in_(tuple(CLOSED_STATUSES))
+                )
+            ).all()
+            outcomes = {
+                o.pattern_instance_id: o
+                for o in s.scalars(select(PatternOutcomeRow)).all()
+            }
+            included = 0
+            skipped = 0
+            for inst in instances:
+                outcome = outcomes.get(inst.id)
+                p = self._domain_for_stats_rebuild(inst, outcome)
+                if p is None:
+                    skipped += 1
+                    continue
+                self._upsert_statistics(s, p, now, instance_id=inst.id)
+                included += 1
+            s.commit()
+            return {
+                "stats_rows_deleted": int(deleted or 0),
+                "instances_included": included,
+                "instances_skipped": skipped,
+            }
+
+    @staticmethod
+    def _domain_for_stats_rebuild(
+        inst: PatternInstanceRow, outcome: PatternOutcomeRow | None
+    ) -> ActivePattern | None:
+        """Map closed instance (+ outcome) into ActivePattern for stats replay."""
+        try:
+            p = to_domain(inst)
+        except Exception:
+            logger.exception("rebuild stats: bad instance %s", getattr(inst, "id", None))
+            return None
+        if not p.is_terminal():
+            # Defensive: only closed rows should be selected
+            return None
+        if outcome is not None:
+            fo_raw = (outcome.final_outcome or "").strip().lower()
+            try:
+                fo = FinalOutcome(fo_raw)
+            except ValueError:
+                fo = p.final_outcome or FinalOutcome.EXPIRED
+            stage = {
+                FinalOutcome.SUCCEEDED: PatternStage.SUCCEEDED,
+                FinalOutcome.FAILED: PatternStage.FAILED,
+                FinalOutcome.EXPIRED: PatternStage.EXPIRED,
+            }.get(fo, PatternStage.EXPIRED)
+            reason = outcome.reason or p.terminal_reason or "rebuild"
+            suppress = reason == "startup_recovery"
+            p.mark_terminal(fo, stage, reason, outcome.end_price, suppress)
+            p.duration_candles = int(outcome.duration_candles or p.duration_candles or 0)
+            # Restore excursion extremes so max_*_r() matches stored outcome when possible
+            fav = outcome.max_favorable_price
+            adv = outcome.max_adverse_price
+            if fav is not None and adv is not None:
+                if p.direction == PatternDirection.SHORT:
+                    p.mae_price = float(fav)
+                    p.mfe_price = float(adv)
+                else:
+                    p.mfe_price = float(fav)
+                    p.mae_price = float(adv)
+            elif outcome.end_price is not None:
+                p.end_price = float(outcome.end_price)
+        return p
 
     def supports_research_aggregation(self) -> bool:
         return True

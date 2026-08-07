@@ -99,6 +99,35 @@ def planned_rails_from_pattern(pattern: Any) -> PlannedRailsMetrics | None:
     )
 
 
+def passes_min_risk_r(pattern: Any, min_risk_r: float) -> bool:
+    """Return True if a new detection may be journaled / alerted.
+
+    - ``min_risk_r <= 0`` disables the gate (always pass).
+    - Consolidation (no classic trade offer) always passes.
+    - Trade patterns need valid rails and ``risk_r >= min_risk_r``.
+    """
+    try:
+        threshold = float(min_risk_r)
+    except (TypeError, ValueError):
+        return True
+    if not (threshold > 0):
+        return True
+
+    ptype = pattern.pattern_type
+    if hasattr(ptype, "value"):
+        ptype = ptype.value
+    ptype_s = str(ptype or "").strip().lower()
+    if ptype_s in _EXCLUDED_PATTERN_TYPES:
+        return True
+
+    rails = planned_rails_from_pattern(pattern)
+    if rails is None:
+        # Classic trade pattern without measurable risk → do not fire
+        return False
+    # Epsilon absorbs float noise on risk/atr (e.g. 0.3 ATR boundary)
+    return float(rails.risk_r) + 1e-12 >= threshold
+
+
 def _finite(x: float) -> bool:
     return x == x and x not in (float("inf"), float("-inf"))
 

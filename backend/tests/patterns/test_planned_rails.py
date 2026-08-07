@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
-from app.patterns.models import PatternDirection, PatternType, new_pattern
-from app.patterns.planned_rails import compute_planned_rails, planned_rails_from_pattern
+from datetime import datetime, timezone
+
+from app.patterns.models import PatternDirection, PatternStage, PatternStageEvent, PatternType, new_pattern
+from app.patterns.planned_rails import (
+    compute_planned_rails,
+    passes_min_risk_r,
+    planned_rails_from_pattern,
+)
 
 
 def test_long_breakout_planned_rr():
@@ -102,6 +108,102 @@ def test_median_planned_rr_helper():
     assert median_planned_rr([3.0]) == 3.0
     assert median_planned_rr([1.0, 20.0]) == 10.5
     assert median_planned_rr([1.0, 2.0, 100.0]) == 2.0
+
+
+def test_passes_min_risk_r_threshold():
+    # risk = 0.2 ATR → below 0.3
+    tiny = new_pattern(
+        pattern_type=PatternType.BREAKOUT,
+        symbol_id="X",
+        timeframe="5m",
+        direction=PatternDirection.LONG,
+        entry_price=100.2,
+        stop_level=100.0,
+        target_level=103.0,
+        atr_at_detect=1.0,
+    )
+    ok = new_pattern(
+        pattern_type=PatternType.BREAKOUT,
+        symbol_id="X",
+        timeframe="5m",
+        direction=PatternDirection.LONG,
+        entry_price=100.5,
+        stop_level=100.0,
+        target_level=103.0,
+        atr_at_detect=1.0,
+    )
+    assert passes_min_risk_r(tiny, 0.3) is False
+    assert passes_min_risk_r(ok, 0.3) is True
+    assert passes_min_risk_r(tiny, 0.0) is True  # disabled
+    # exact boundary: risk_r == 0.3 passes (>=)
+    boundary = new_pattern(
+        pattern_type=PatternType.BREAKOUT,
+        symbol_id="X",
+        timeframe="5m",
+        direction=PatternDirection.LONG,
+        entry_price=100.3,
+        stop_level=100.0,
+        target_level=103.0,
+        atr_at_detect=1.0,
+    )
+    assert passes_min_risk_r(boundary, 0.3) is True
+
+
+def test_passes_min_risk_consolidation_always():
+    p = new_pattern(
+        pattern_type=PatternType.CONSOLIDATION,
+        symbol_id="X",
+        timeframe="5m",
+        direction=PatternDirection.LONG,
+        entry_price=100.0,
+        stop_level=100.0,
+        target_level=100.0,
+        atr_at_detect=1.0,
+    )
+    assert passes_min_risk_r(p, 0.3) is True
+
+
+def test_evaluator_gate_min_risk_suppresses_detect():
+    from app.config import Settings
+    from app.patterns.evaluator import PatternEvaluator
+
+    settings = Settings()
+    object.__setattr__(settings, "pattern_min_risk_r", 0.3)
+    ev = PatternEvaluator(settings, None, None, None, None, None)
+
+    tiny = new_pattern(
+        pattern_type=PatternType.BREAKOUT,
+        symbol_id="X",
+        timeframe="5m",
+        direction=PatternDirection.LONG,
+        entry_price=100.1,
+        stop_level=100.0,
+        target_level=103.0,
+        atr_at_detect=1.0,
+    )
+    good = new_pattern(
+        pattern_type=PatternType.BREAKOUT,
+        symbol_id="Y",
+        timeframe="5m",
+        direction=PatternDirection.LONG,
+        entry_price=100.5,
+        stop_level=100.0,
+        target_level=103.0,
+        atr_at_detect=1.0,
+    )
+    now = datetime.now(timezone.utc)
+    events = [
+        PatternStageEvent(tiny.id, PatternStage.DETECTED, 1, 100.1, now),
+        PatternStageEvent(good.id, PatternStage.DETECTED, 1, 100.5, now),
+    ]
+    advanced, newly, out_events, still = ev._gate_min_risk(
+        [tiny], [tiny, good], events, [tiny, good]
+    )
+    assert [p.id for p in newly] == [good.id]
+    assert all(p.id != tiny.id for p in advanced)
+    assert all(p.id != tiny.id for p in still)
+    assert all(e.pattern_id != tiny.id for e in out_events)
+    assert len(out_events) == 1
 
 
 def test_ratio_of_averages_not_mean_of_ratios():
