@@ -187,58 +187,57 @@ export type StackPreset = {
   filters: ResearchFilterParams
 }
 
+/** Product default: planned stop (risk_r) must be ≤ this ATR multiple. */
+export const DEFAULT_MAX_RISK_R = 1.5
+
 /**
- * Built-in stack presets.
+ * Baseline Research filters applied on empty / Clear.
+ * maxRiskR caps stop size so wide stops cannot inflate true stop-R.
+ */
+export const DEFAULT_RESEARCH_FILTERS: ResearchFilterParams = {
+  maxRiskR: DEFAULT_MAX_RISK_R,
+}
+
+/** Merge product defaults under explicit params (URL / draft / preset). */
+export function withResearchDefaults(params: ResearchFilterParams = {}): ResearchFilterParams {
+  return { ...DEFAULT_RESEARCH_FILTERS, ...params }
+}
+
+/**
+ * Built-in stack presets — all include maxRiskR ≤ 1.5 (product default).
+ * Ordered by expectancyTrueR on prod (tip2-api Neon, risk≤1.5, 2026-08-07):
  *
- * True-R presets (ranked by mean(move_r / risk_r) on 180d Neon journal research):
- * prefer confirmed + sane plan R:R / risk floors over high risk_r alone.
- * High minRiskR (≥2–2.5) inflates ATR avgMoveR but not true stop-R expectancy.
+ * Rank | trueR  | n    | preset
+ *   1  | +2.91  |   86 | short-breakdown-quality
+ *   2  | +2.75  |  140 | retest-volume-session
+ *   3  | +2.50  |   54 | long-breakout-quality
+ *   4  | +2.23  |  209 | full-lifecycle
+ *   5  | +0.76  | 1509 | true-r-confirmed (most robust n)
+ *   6  | +0.68  |   72 | true-r-hh-confirmed
+ *   7  | +0.45  |  467 | true-r-confirmed-risk-1
+ *   8  | +0.36  |  679 | true-r-confirmed-plan-rr-risk-floor
+ *   9  | +0.05  | 3726 | exclude-recovery
+ *  10  | +0.03  | 3106 | resolved-only
+ *  11  | −0.13  |  955 | pin-engulf-intraday
+ *  12  | −0.31  |  349 | plan-rr-breakouts
+ *
+ * Re-rank: `cd backend; python scripts/scan_preset_expectancy.py`
  */
 export const BUILTIN_STACK_PRESETS: StackPreset[] = [
-  // ── True-R / stop-R expectancy (preferred) ─────────────────────────────
   {
-    id: 'true-r-confirmed',
-    name: 'True-R · Confirmed (robust)',
+    id: 'short-breakdown-quality',
+    name: 'Short / breakdown quality',
     filters: {
-      flagConfirmed: true,
-      resolvedOnly: true,
+      patternType: ['breakdown'],
+      direction: 'short',
+      flagRetested: true,
+      volumeOkAtDetect: true,
+      detectTimeIstStart: '09:30',
+      detectTimeIstEnd: '15:00',
       excludeReasons: ['startup_recovery'],
+      maxRiskR: DEFAULT_MAX_RISK_R,
     },
   },
-  {
-    id: 'true-r-confirmed-plan-rr-risk-floor',
-    name: 'True-R · Confirmed · Plan RR ≥ 1.5 · Risk ≥ 0.5',
-    filters: {
-      flagConfirmed: true,
-      minPlannedRr: 1.5,
-      minRiskR: 0.5,
-      resolvedOnly: true,
-      excludeReasons: ['startup_recovery'],
-      requireValidRails: true,
-    },
-  },
-  {
-    id: 'true-r-confirmed-risk-1',
-    name: 'True-R · Confirmed · Risk ≥ 1.0',
-    filters: {
-      flagConfirmed: true,
-      minRiskR: 1.0,
-      resolvedOnly: true,
-      excludeReasons: ['startup_recovery'],
-      requireValidRails: true,
-    },
-  },
-  {
-    id: 'true-r-hh-confirmed',
-    name: 'True-R · Higher high · Confirmed',
-    filters: {
-      patternType: ['higher_high'],
-      flagConfirmed: true,
-      resolvedOnly: true,
-      excludeReasons: ['startup_recovery'],
-    },
-  },
-  // ── Legacy / hypothesis stacks (still useful for exploration) ──────────
   {
     id: 'retest-volume-session',
     name: 'Retest + Volume + Session',
@@ -249,32 +248,7 @@ export const BUILTIN_STACK_PRESETS: StackPreset[] = [
       detectTimeIstEnd: '15:00',
       excludeReasons: ['startup_recovery'],
       timeframe: ['5m', '15m', '1h'],
-    },
-  },
-  {
-    id: 'full-lifecycle',
-    name: 'Full lifecycle quality',
-    filters: {
-      flagConfirmed: true,
-      flagRetested: true,
-      excludeReasons: ['startup_recovery'],
-    },
-  },
-  {
-    id: 'resolved-only',
-    name: 'Resolved only (performance)',
-    filters: {
-      resolvedOnly: true,
-      excludeReasons: ['startup_recovery', 'session_close', 'session_end'],
-    },
-  },
-  {
-    id: 'plan-rr-breakouts',
-    name: 'Plan R:R ≥ 1.5 breakouts',
-    filters: {
-      patternType: ['breakout', 'volume_breakout'],
-      minPlannedRr: 1.5,
-      minRiskR: 0.5,
+      maxRiskR: DEFAULT_MAX_RISK_R,
     },
   },
   {
@@ -288,19 +262,80 @@ export const BUILTIN_STACK_PRESETS: StackPreset[] = [
       detectTimeIstStart: '09:30',
       detectTimeIstEnd: '15:00',
       excludeReasons: ['startup_recovery'],
+      maxRiskR: DEFAULT_MAX_RISK_R,
     },
   },
   {
-    id: 'short-breakdown-quality',
-    name: 'Short / breakdown quality',
+    id: 'full-lifecycle',
+    name: 'Full lifecycle quality',
     filters: {
-      patternType: ['breakdown'],
-      direction: 'short',
+      flagConfirmed: true,
       flagRetested: true,
-      volumeOkAtDetect: true,
-      detectTimeIstStart: '09:30',
-      detectTimeIstEnd: '15:00',
       excludeReasons: ['startup_recovery'],
+      maxRiskR: DEFAULT_MAX_RISK_R,
+    },
+  },
+  {
+    id: 'true-r-confirmed',
+    name: 'True-R · Confirmed (robust)',
+    filters: {
+      flagConfirmed: true,
+      resolvedOnly: true,
+      excludeReasons: ['startup_recovery'],
+      maxRiskR: DEFAULT_MAX_RISK_R,
+    },
+  },
+  {
+    id: 'true-r-hh-confirmed',
+    name: 'True-R · Higher high · Confirmed',
+    filters: {
+      patternType: ['higher_high'],
+      flagConfirmed: true,
+      resolvedOnly: true,
+      excludeReasons: ['startup_recovery'],
+      maxRiskR: DEFAULT_MAX_RISK_R,
+    },
+  },
+  {
+    id: 'true-r-confirmed-risk-1',
+    name: 'True-R · Confirmed · Risk 1.0–1.5',
+    filters: {
+      flagConfirmed: true,
+      minRiskR: 1.0,
+      maxRiskR: DEFAULT_MAX_RISK_R,
+      resolvedOnly: true,
+      excludeReasons: ['startup_recovery'],
+      requireValidRails: true,
+    },
+  },
+  {
+    id: 'true-r-confirmed-plan-rr-risk-floor',
+    name: 'True-R · Confirmed · Plan RR ≥ 1.5 · Risk 0.5–1.5',
+    filters: {
+      flagConfirmed: true,
+      minPlannedRr: 1.5,
+      minRiskR: 0.5,
+      maxRiskR: DEFAULT_MAX_RISK_R,
+      resolvedOnly: true,
+      excludeReasons: ['startup_recovery'],
+      requireValidRails: true,
+    },
+  },
+  {
+    id: 'exclude-recovery',
+    name: 'Clean exclude recovery',
+    filters: {
+      excludeReasons: ['startup_recovery'],
+      maxRiskR: DEFAULT_MAX_RISK_R,
+    },
+  },
+  {
+    id: 'resolved-only',
+    name: 'Resolved only (performance)',
+    filters: {
+      resolvedOnly: true,
+      excludeReasons: ['startup_recovery', 'session_close', 'session_end'],
+      maxRiskR: DEFAULT_MAX_RISK_R,
     },
   },
   {
@@ -313,13 +348,17 @@ export const BUILTIN_STACK_PRESETS: StackPreset[] = [
       detectTimeIstEnd: '15:00',
       resolvedOnly: true,
       excludeReasons: ['startup_recovery'],
+      maxRiskR: DEFAULT_MAX_RISK_R,
     },
   },
   {
-    id: 'exclude-recovery',
-    name: 'Clean exclude recovery',
+    id: 'plan-rr-breakouts',
+    name: 'Plan R:R ≥ 1.5 breakouts',
     filters: {
-      excludeReasons: ['startup_recovery'],
+      patternType: ['breakout', 'volume_breakout'],
+      minPlannedRr: 1.5,
+      minRiskR: 0.5,
+      maxRiskR: DEFAULT_MAX_RISK_R,
     },
   },
 ]

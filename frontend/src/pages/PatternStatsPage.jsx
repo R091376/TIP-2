@@ -8,12 +8,15 @@ import {
 } from '../services/patternStatisticsApi'
 import {
   BUILTIN_STACK_PRESETS,
+  DEFAULT_MAX_RISK_R,
+  DEFAULT_RESEARCH_FILTERS,
   deleteUserPreset,
   loadUserPresets,
   parseResearchFiltersFromSearch,
   researchFilterChips,
   saveUserPreset,
   serializeResearchFilters,
+  withResearchDefaults,
 } from '../utils/researchFilters'
 import './authPages.css'
 import './patternStats.css'
@@ -203,12 +206,16 @@ export default function PatternStatsPage() {
   )
   const [expanded, setExpanded] = useState(() => new Set())
 
-  // Research
+  // Research — default maxRiskR ≤ 1.5 unless URL/preset overrides
   const [researchDraft, setResearchDraft] = useState(() =>
-    mode === 'research' ? parseResearchFiltersFromSearch(searchParams) : {},
+    mode === 'research'
+      ? withResearchDefaults(parseResearchFiltersFromSearch(searchParams))
+      : { ...DEFAULT_RESEARCH_FILTERS },
   )
   const [researchApplied, setResearchApplied] = useState(() =>
-    mode === 'research' ? parseResearchFiltersFromSearch(searchParams) : {},
+    mode === 'research'
+      ? withResearchDefaults(parseResearchFiltersFromSearch(searchParams))
+      : { ...DEFAULT_RESEARCH_FILTERS },
   )
   const [researchSummary, setResearchSummary] = useState(null)
   const [researchMeta, setResearchMeta] = useState(null)
@@ -399,20 +406,26 @@ export default function PatternStatsPage() {
   }
 
   function applyPreset(filters) {
-    setResearchDraft({ ...filters })
-    setResearchApplied({ ...filters })
+    // Presets already include maxRiskR; still merge defaults for safety
+    const next = withResearchDefaults(filters)
+    setResearchDraft({ ...next })
+    setResearchApplied({ ...next })
     const sp = new URLSearchParams()
     sp.set('mode', 'research')
-    const qs = serializeResearchFilters(filters)
+    const qs = serializeResearchFilters(next)
     const r = new URLSearchParams(qs)
     for (const [k, v] of r.entries()) sp.set(k, v)
     setSearchParams(sp, { replace: true })
   }
 
   function clearResearch() {
-    setResearchDraft({})
-    setResearchApplied({})
-    setSearchParams(new URLSearchParams({ mode: 'research' }), { replace: true })
+    const next = { ...DEFAULT_RESEARCH_FILTERS }
+    setResearchDraft(next)
+    setResearchApplied(next)
+    const sp = new URLSearchParams({ mode: 'research' })
+    const r = new URLSearchParams(serializeResearchFilters(next))
+    for (const [k, v] of r.entries()) sp.set(k, v)
+    setSearchParams(sp, { replace: true })
   }
 
   function onSavePreset() {
@@ -707,8 +720,8 @@ export default function PatternStatsPage() {
                   type="number"
                   step="0.1"
                   min="0"
-                  placeholder="Max risk R"
-                  title="Max planned stop distance in ATR (risk_r). Implies valid rails."
+                  placeholder={`Max risk R (default ${DEFAULT_MAX_RISK_R})`}
+                  title={`Max planned stop distance in ATR (risk_r). Default ${DEFAULT_MAX_RISK_R} so risk stays ≤ ${DEFAULT_MAX_RISK_R}. Implies valid rails.`}
                   value={researchDraft.maxRiskR ?? ''}
                   onChange={(e) => {
                     const v = e.target.value
@@ -971,7 +984,8 @@ export default function PatternStatsPage() {
             <p className="rf-hint">
               <strong>True stop-R</strong> = mean(move ÷ planned stop) — profit if 1R equals your stop.
               <strong> Move / Exp (ATR R)</strong> = mean(move ÷ ATR) and can look strong with wide stops even
-              when planned R:R is poor. True-R presets are ranked on true stop-R, not ATR move.
+              when planned R:R is poor. Default and all presets cap risk at ≤ {DEFAULT_MAX_RISK_R} ATR.
+              Built-in presets are ordered by true stop-R expectancy (highest profit first).
             </p>
 
             {chips.length > 0 && (

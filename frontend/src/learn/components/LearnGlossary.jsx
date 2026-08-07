@@ -114,7 +114,7 @@ const STATS_TERMS = [
   {
     term: 'True stop-R (expectancyTrueR)',
     gloss:
-      'Mean of (terminal move ÷ planned stop distance) = mean(move_r / risk_r). This is expectancy if 1R equals your planned stop. Wide stops can make ATR move look great while true stop-R is modest. Research default sort and True-R presets use this metric.',
+      'Mean of (terminal move ÷ planned stop distance) = mean(move_r / risk_r). This is expectancy if 1R equals your planned stop. Wide stops can make ATR move look great while true stop-R is modest. Research default sort and the built-in preset list order use this metric.',
   },
   {
     term: 'Win (R) / Loss (R)',
@@ -129,7 +129,7 @@ const STATS_TERMS = [
   {
     term: 'Risk (R) / avgRiskR',
     gloss:
-      'Planned stop distance in ATR: |entry − stop| ÷ ATR at detect. “Min risk R” / “Max risk R” filters select setups by this size. Very small risk_r can inflate true stop-R when a full ATR target is hit.',
+      'Planned stop distance in ATR: |entry − stop| ÷ ATR at detect. “Min risk R” / “Max risk R” filters select setups by this size. Research defaults to max risk ≤ 1.5 ATR (and every built-in preset includes that cap). Very small risk_r can inflate true stop-R when a full ATR target is hit.',
   },
   {
     term: 'Reward (R) / avgRewardR',
@@ -195,12 +195,12 @@ const RESEARCH_TERMS = [
   {
     term: 'Stack preset',
     gloss:
-      'Saved filter pack. Built-ins include True-R quality stacks (confirmed, plan RR + risk floor, …) plus older hypotheses (retest+volume+session, …). You can also save your own in the browser.',
+      'Saved filter pack. Built-in list is ordered by true stop-R expectancy on production journal research (highest profit first). You can also save your own in the browser.',
   },
   {
     term: 'True-R presets',
     gloss:
-      'Built-in presets ranked using true stop-R expectancy on historical journal research. Prefer them when you care about stop-sized risk, not only ATR avg move.',
+      'Built-in Research stacks ordered by true stop-R expectancy (highest profit first) from production research. Prefer higher ranks for stop-sized risk; check sample size (n) — thin stacks can rank high by chance.',
   },
   {
     term: 'Matched n',
