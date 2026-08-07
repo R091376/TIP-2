@@ -37,9 +37,10 @@ const RESEARCH_TYPES = [
 const BASE_PATTERN_TYPES = ['all', 'breakout', 'breakdown']
 
 const SORT_OPTIONS = [
+  { value: 'expectancyTrueR', label: 'True stop-R (move ÷ stop)' },
+  { value: 'avgMoveR', label: 'Avg move (ATR R)' },
+  { value: 'expectancyR', label: 'Expectancy ATR (R)' },
   { value: 'resolvedSuccessRate', label: 'Resolved success %' },
-  { value: 'expectancyR', label: 'Expectancy (R)' },
-  { value: 'avgMoveR', label: 'Avg move (R)' },
   { value: 'avgMfeR', label: 'Avg MFE (R)' },
   { value: 'avgMaeR', label: 'Avg MAE (R)' },
   { value: 'avgPlannedRr', label: 'Plan R:R (avg reward ÷ avg risk)' },
@@ -48,6 +49,9 @@ const SORT_OPTIONS = [
   { value: 'sampleSize', label: 'Sample size' },
   { value: 'symbol', label: 'Symbol' },
 ]
+
+/** Dashboard bulk API has no true-R / research-only expectancy columns. */
+const DASHBOARD_SORT_EXCLUDE = new Set(['expectancyTrueR', 'expectancyR'])
 
 /** Client-side page size for Dashboard + Research tables. */
 const PAGE_SIZE = 100
@@ -79,6 +83,7 @@ function computeHighlightKeys(rows, sortKey, minSampleSize) {
   if (ready.length === 0) return new Set()
 
   const metric = (r) => {
+    if (sortKey === 'expectancyTrueR') return r.expectancyTrueR
     if (sortKey === 'avgMoveR') return r.avgMoveR
     if (sortKey === 'expectancyR') return r.expectancyR ?? r.avgMoveR
     if (sortKey === 'avgMfeR') return r.avgMfeR
@@ -88,7 +93,8 @@ function computeHighlightKeys(rows, sortKey, minSampleSize) {
     if (sortKey === 'avgRewardR') return r.avgRewardR
     if (sortKey === 'sampleSize') return r.sampleSize
     if (sortKey === 'symbol') return null
-    return r.resolvedSuccessRate
+    if (sortKey === 'resolvedSuccessRate') return r.resolvedSuccessRate
+    return r.avgMoveR
   }
 
   const ascending = sortKey === 'avgMaeR'
@@ -123,6 +129,9 @@ function sortRows(rows, sortKey, minSampleSize) {
 
     let primary = 0
     switch (sortKey) {
+      case 'expectancyTrueR':
+        primary = cmpNum(a.expectancyTrueR, b.expectancyTrueR)
+        break
       case 'avgMoveR':
         primary = cmpNum(a.avgMoveR, b.avgMoveR)
         break
@@ -151,8 +160,10 @@ function sortRows(rows, sortKey, minSampleSize) {
         primary = symbolLabel(a).localeCompare(symbolLabel(b))
         break
       case 'resolvedSuccessRate':
-      default:
         primary = cmpNum(a.resolvedSuccessRate, b.resolvedSuccessRate)
+        break
+      default:
+        primary = cmpNum(a.avgMoveR, b.avgMoveR)
         break
     }
     if (primary !== 0) return primary
@@ -187,7 +198,9 @@ export default function PatternStatsPage() {
   const [timeframe, setTimeframe] = useState('all')
   const [readyOnly, setReadyOnly] = useState(false)
   const [symbolQuery, setSymbolQuery] = useState('')
-  const [sortKey, setSortKey] = useState('resolvedSuccessRate')
+  const [sortKey, setSortKey] = useState(() =>
+    modeFromUrl === 'research' ? 'expectancyTrueR' : 'avgMoveR',
+  )
   const [expanded, setExpanded] = useState(() => new Set())
 
   // Research
@@ -209,8 +222,15 @@ export default function PatternStatsPage() {
       // merge research params
       const r = new URLSearchParams(qs)
       for (const [k, v] of r.entries()) sp.set(k, v)
+      // Prefer true stop-R when entering Research (presets ranked on this metric)
+      setSortKey((prev) =>
+        prev === 'avgMoveR' || DASHBOARD_SORT_EXCLUDE.has(prev) ? 'expectancyTrueR' : prev,
+      )
     } else {
       sp.delete('mode')
+      if (sortKey === 'expectancyTrueR' || sortKey === 'expectancyR') {
+        setSortKey('avgMoveR')
+      }
       // strip research-only keys
       ;[
         'flagConfirmed',
@@ -224,6 +244,8 @@ export default function PatternStatsPage() {
         'resolvedOnly',
         'excludeReasons',
         'minPlannedRr',
+        'minRiskR',
+        'maxRiskR',
         'requireValidRails',
         'groupBy',
         'direction',
@@ -403,7 +425,8 @@ export default function PatternStatsPage() {
 
   const showResearchCols = mode === 'research'
   // expand + core cols (+ research extras); Chart column removed
-  const colSpan = showResearchCols ? 17 : 14
+  // expand + symbol + type + tf + sfe + n + resolved% + [trueR + expATR] + move + mfe + mae + [win + loss] + plan + risk + reward + status
+  const colSpan = showResearchCols ? 18 : 14
   const pageFrom = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1
   const pageTo = Math.min(safePage * PAGE_SIZE, filtered.length)
 
@@ -470,7 +493,7 @@ export default function PatternStatsPage() {
             <label>
               Sort by
               <select value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
-                {SORT_OPTIONS.filter((o) => o.value !== 'expectancyR').map((o) => (
+                {SORT_OPTIONS.filter((o) => !DASHBOARD_SORT_EXCLUDE.has(o.value)).map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
@@ -647,7 +670,7 @@ export default function PatternStatsPage() {
                   step="0.1"
                   min="0"
                   placeholder="Min plan R:R"
-                  title="Min plan R:R"
+                  title="Min planned reward÷risk (implies valid rails)"
                   value={researchDraft.minPlannedRr ?? ''}
                   onChange={(e) => {
                     const v = e.target.value
@@ -659,6 +682,61 @@ export default function PatternStatsPage() {
                 />
               </div>
             </div>
+
+            <div className="rf-row">
+              <div className="rf-key">Rails (ATR)</div>
+              <div className="rf-val rf-val--3">
+                <input
+                  className="rf-control"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  placeholder="Min risk R"
+                  title="Min planned stop distance in ATR (risk_r). Implies valid rails. Prefer ≥0.5 to avoid tiny-stop artifacts."
+                  value={researchDraft.minRiskR ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setResearchDraft((d) => ({
+                      ...d,
+                      minRiskR: v === '' ? undefined : Number(v),
+                    }))
+                  }}
+                />
+                <input
+                  className="rf-control"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  placeholder="Max risk R"
+                  title="Max planned stop distance in ATR (risk_r). Implies valid rails."
+                  value={researchDraft.maxRiskR ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setResearchDraft((d) => ({
+                      ...d,
+                      maxRiskR: v === '' ? undefined : Number(v),
+                    }))
+                  }}
+                />
+                <label className="rf-check" title="Exclude setups without a valid entry/stop/target offer">
+                  <input
+                    type="checkbox"
+                    checked={!!researchDraft.requireValidRails}
+                    onChange={(e) =>
+                      setResearchDraft((d) => ({
+                        ...d,
+                        requireValidRails: e.target.checked ? true : undefined,
+                      }))
+                    }
+                  />
+                  Valid rails
+                </label>
+              </div>
+            </div>
+            <p className="rf-hint">
+              Risk R = |entry−stop|÷ATR. Plan R:R = reward÷risk. High min risk can raise ATR avgMove without
+              improving true stop-R (move÷stop). Prefer plan RR + risk floor for offer quality.
+            </p>
 
             <div className="rf-row">
               <div className="rf-key">Detect window</div>
@@ -890,6 +968,11 @@ export default function PatternStatsPage() {
                 </div>
               </div>
             </div>
+            <p className="rf-hint">
+              <strong>True stop-R</strong> = mean(move ÷ planned stop) — profit if 1R equals your stop.
+              <strong> Move / Exp (ATR R)</strong> = mean(move ÷ ATR) and can look strong with wide stops even
+              when planned R:R is poor. True-R presets are ranked on true stop-R, not ATR move.
+            </p>
 
             {chips.length > 0 && (
               <div className="rf-row">
@@ -928,7 +1011,18 @@ export default function PatternStatsPage() {
               <strong className="admin-mono">{pct(researchSummary.resolvedSuccessRate)}</strong>
             </div>
             <div>
-              <span className="stats-detail__label">Expectancy (R)</span>
+              <span
+                className="stats-detail__label"
+                title="mean(move_r / risk_r) — true stop-R expectancy"
+              >
+                True stop-R
+              </span>
+              <strong className="admin-mono">{num(researchSummary.expectancyTrueR)}</strong>
+            </div>
+            <div>
+              <span className="stats-detail__label" title="mean move in ATR units (not stop-R)">
+                Exp ATR (R)
+              </span>
               <strong className="admin-mono">{num(researchSummary.expectancyR)}</strong>
             </div>
             <div>
@@ -993,9 +1087,16 @@ export default function PatternStatsPage() {
                     <th>n</th>
                     <th>Resolved %</th>
                     {showResearchCols && (
-                      <th title="Avg terminal move R (resolved path samples)">Exp (R)</th>
+                      <th title="mean(move_r ÷ risk_r) — true stop-R expectancy (1R = planned stop)">
+                        True stop-R
+                      </th>
                     )}
-                    <th title="Average terminal move vs entry, in ATR units">Move (R)</th>
+                    {showResearchCols && (
+                      <th title="Avg terminal move in ATR units (same as Exp ATR; not stop-R)">
+                        Exp ATR
+                      </th>
+                    )}
+                    <th title="Average terminal move vs entry, in ATR units">Move (ATR)</th>
                     <th>MFE (R)</th>
                     <th>MAE (R)</th>
                     {showResearchCols && <th>Win (R)</th>}
@@ -1109,6 +1210,11 @@ function FragmentRow({
         </td>
         <td className="admin-mono">{item.sampleSize ?? 0}</td>
         <td className="admin-mono">{ready ? pct(item.resolvedSuccessRate) : '—'}</td>
+        {showResearchCols && (
+          <td className="admin-mono" title={ready ? `n_true=${item.trueRrSampleSize ?? '—'}` : undefined}>
+            {ready ? num(item.expectancyTrueR) : '—'}
+          </td>
+        )}
         {showResearchCols && (
           <td className="admin-mono">{ready ? num(item.expectancyR ?? item.avgMoveR) : '—'}</td>
         )}

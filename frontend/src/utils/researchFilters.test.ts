@@ -31,4 +31,30 @@ describe('researchFilters codec', () => {
     expect(chips.some((c) => c.key === 'flagRetested')).toBe(true)
     expect(chips.some((c) => c.key === 'tod')).toBe(true)
   })
+
+  it('round-trips minRiskR / maxRiskR and chips', () => {
+    const qs = serializeResearchFilters({
+      flagConfirmed: true,
+      minPlannedRr: 1.5,
+      minRiskR: 0.5,
+      maxRiskR: 2.0,
+      resolvedOnly: true,
+    })
+    const parsed = parseResearchFiltersFromSearch(qs)
+    expect(parsed.minRiskR).toBe(0.5)
+    expect(parsed.maxRiskR).toBe(2.0)
+    expect(parsed.minPlannedRr).toBe(1.5)
+    const chips = researchFilterChips(parsed)
+    expect(chips.some((c) => c.key === 'minRiskR' && c.label.includes('0.5'))).toBe(true)
+    expect(chips.some((c) => c.key === 'maxRiskR' && c.label.includes('2'))).toBe(true)
+  })
+
+  it('drops non-finite rails numbers from URL parse', () => {
+    const parsed = parseResearchFiltersFromSearch(
+      'minRiskR=Infinity&maxRiskR=-1&minPlannedRr=nan',
+    )
+    expect(parsed.minRiskR).toBeUndefined()
+    expect(parsed.maxRiskR).toBeUndefined()
+    expect(parsed.minPlannedRr).toBeUndefined()
+  })
 })

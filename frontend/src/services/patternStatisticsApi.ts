@@ -38,6 +38,9 @@ export type PatternStatisticsItem = {
   updatedAt?: string | null
   /** Research-only */
   expectancyR?: number | null
+  /** Research-only: mean(move_r / risk_r) — true stop-R expectancy */
+  expectancyTrueR?: number | null
+  trueRrSampleSize?: number | null
   avgWinMoveR?: number | null
   avgLossMoveR?: number | null
 }
@@ -64,8 +67,11 @@ export type ResearchSummary = {
   successRate: number | null
   resolvedSuccessRate: number | null
   expectancyR: number | null
+  /** mean(move_r / risk_r) when 1R = planned stop */
+  expectancyTrueR: number | null
   avgMoveR: number | null
   avgPlannedRr: number | null
+  trueRrSampleSize?: number | null
   scannedFrom: string | null
   scannedTo: string | null
 }

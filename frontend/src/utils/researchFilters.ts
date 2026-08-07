@@ -28,6 +28,10 @@ export type ResearchFilterParams = {
   excludeReasons?: string[]
   includeReasons?: string[]
   minPlannedRr?: number
+  /** Min planned stop distance in ATR (risk_r). Implies requireValidRails. */
+  minRiskR?: number
+  /** Max planned stop distance in ATR (risk_r). Implies requireValidRails. */
+  maxRiskR?: number
   requireValidRails?: boolean
   detectorVersion?: string[]
   groupBy?: GroupBy
@@ -109,11 +113,18 @@ export function parseResearchFiltersFromSearch(search: string | URLSearchParams)
   const rr = parseBool(sp.get('requireValidRails'))
   if (rr !== undefined) out.requireValidRails = rr
 
-  const minRr = sp.get('minPlannedRr')
-  if (minRr != null && minRr !== '') {
-    const n = Number(minRr)
-    if (!Number.isNaN(n)) out.minPlannedRr = n
+  const parseFiniteNonNeg = (raw: string | null): number | undefined => {
+    if (raw == null || raw === '') return undefined
+    const n = Number(raw)
+    if (!Number.isFinite(n) || n < 0) return undefined
+    return n
   }
+  const minRr = parseFiniteNonNeg(sp.get('minPlannedRr'))
+  if (minRr !== undefined) out.minPlannedRr = minRr
+  const minRisk = parseFiniteNonNeg(sp.get('minRiskR'))
+  if (minRisk !== undefined) out.minRiskR = minRisk
+  const maxRisk = parseFiniteNonNeg(sp.get('maxRiskR'))
+  if (maxRisk !== undefined) out.maxRiskR = maxRisk
 
   const gb = sp.get('groupBy')
   if (gb && GROUP_BY_ALLOWED.has(gb)) out.groupBy = gb as GroupBy
@@ -162,6 +173,8 @@ export function serializeResearchFilters(params: ResearchFilterParams): string {
   if (params.requireValidRails !== undefined)
     sp.set('requireValidRails', String(params.requireValidRails))
   if (params.minPlannedRr !== undefined) sp.set('minPlannedRr', String(params.minPlannedRr))
+  if (params.minRiskR !== undefined) sp.set('minRiskR', String(params.minRiskR))
+  if (params.maxRiskR !== undefined) sp.set('maxRiskR', String(params.maxRiskR))
   if (params.groupBy) sp.set('groupBy', params.groupBy)
   if (params.minSampleSize !== undefined) sp.set('minSampleSize', String(params.minSampleSize))
   if (params.limitGroups !== undefined) sp.set('limitGroups', String(params.limitGroups))
@@ -174,8 +187,58 @@ export type StackPreset = {
   filters: ResearchFilterParams
 }
 
-/** Built-in high-probability stack hypotheses (P0). */
+/**
+ * Built-in stack presets.
+ *
+ * True-R presets (ranked by mean(move_r / risk_r) on 180d Neon journal research):
+ * prefer confirmed + sane plan R:R / risk floors over high risk_r alone.
+ * High minRiskR (≥2–2.5) inflates ATR avgMoveR but not true stop-R expectancy.
+ */
 export const BUILTIN_STACK_PRESETS: StackPreset[] = [
+  // ── True-R / stop-R expectancy (preferred) ─────────────────────────────
+  {
+    id: 'true-r-confirmed',
+    name: 'True-R · Confirmed (robust)',
+    filters: {
+      flagConfirmed: true,
+      resolvedOnly: true,
+      excludeReasons: ['startup_recovery'],
+    },
+  },
+  {
+    id: 'true-r-confirmed-plan-rr-risk-floor',
+    name: 'True-R · Confirmed · Plan RR ≥ 1.5 · Risk ≥ 0.5',
+    filters: {
+      flagConfirmed: true,
+      minPlannedRr: 1.5,
+      minRiskR: 0.5,
+      resolvedOnly: true,
+      excludeReasons: ['startup_recovery'],
+      requireValidRails: true,
+    },
+  },
+  {
+    id: 'true-r-confirmed-risk-1',
+    name: 'True-R · Confirmed · Risk ≥ 1.0',
+    filters: {
+      flagConfirmed: true,
+      minRiskR: 1.0,
+      resolvedOnly: true,
+      excludeReasons: ['startup_recovery'],
+      requireValidRails: true,
+    },
+  },
+  {
+    id: 'true-r-hh-confirmed',
+    name: 'True-R · Higher high · Confirmed',
+    filters: {
+      patternType: ['higher_high'],
+      flagConfirmed: true,
+      resolvedOnly: true,
+      excludeReasons: ['startup_recovery'],
+    },
+  },
+  // ── Legacy / hypothesis stacks (still useful for exploration) ──────────
   {
     id: 'retest-volume-session',
     name: 'Retest + Volume + Session',
@@ -211,6 +274,7 @@ export const BUILTIN_STACK_PRESETS: StackPreset[] = [
     filters: {
       patternType: ['breakout', 'volume_breakout'],
       minPlannedRr: 1.5,
+      minRiskR: 0.5,
     },
   },
   {
@@ -314,6 +378,12 @@ export function researchFilterChips(params: ResearchFilterParams): { key: string
     chips.push({ key: 'excludeReasons', label: `excl: ${params.excludeReasons.join(',')}` })
   if (params.minPlannedRr != null)
     chips.push({ key: 'minPlannedRr', label: `plan RR ≥ ${params.minPlannedRr}` })
+  if (params.minRiskR != null)
+    chips.push({ key: 'minRiskR', label: `risk R ≥ ${params.minRiskR}` })
+  if (params.maxRiskR != null)
+    chips.push({ key: 'maxRiskR', label: `risk R ≤ ${params.maxRiskR}` })
+  if (params.requireValidRails)
+    chips.push({ key: 'requireValidRails', label: 'valid rails' })
   if (params.groupBy && params.groupBy !== 'symbol,patternType,timeframe')
     chips.push({ key: 'groupBy', label: `group: ${params.groupBy}` })
   return chips
