@@ -15,7 +15,7 @@ export function learnTopicPath(kind: LearnKind, slug: string): string {
   return `/learn/${learnKindToPath(kind)}/${slug}`
 }
 
-/** Index path for the standalone Learn desk (admin-only access). */
+/** Index path for the standalone Learn desk (public; no login required). */
 export const LEARN_INDEX_PATH = '/learn'
 
 /**

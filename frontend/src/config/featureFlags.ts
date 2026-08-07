@@ -47,7 +47,8 @@ export function isAppShellEnabled(): boolean {
 }
 
 /**
- * VITE_FEATURE_ADMIN_LEARN — admin Learn education UI (nav + routes).
+ * VITE_FEATURE_ADMIN_LEARN — Learn education UI (public routes + nav + login link).
+ *   Name kept for env compatibility; access is no longer admin-only.
  *   default ON when unset (content shipped); set to "false" / "0" / "off" to disable.
  */
 export function isAdminLearnEnabled(): boolean {
@@ -55,6 +56,11 @@ export function isAdminLearnEnabled(): boolean {
     import.meta.env.VITE_FEATURE_ADMIN_LEARN as string | undefined,
     true,
   )
+}
+
+/** Alias: Learn is public education (guest + all roles). */
+export function isLearnEnabled(): boolean {
+  return isAdminLearnEnabled()
 }
 
 /**

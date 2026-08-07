@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import StartupStatus from '../auth/StartupStatus'
+import { isAdminLearnEnabled } from '../config/featureFlags'
+import { LEARN_INDEX_PATH } from '../learn/routing'
 import './authPages.css'
 
 /**
@@ -105,6 +107,13 @@ export default function LoginPage() {
         <button type="submit" className="auth-submit" disabled={submitting || loading}>
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>
+
+        {isAdminLearnEnabled() && (
+          <p className="auth-card__footer-link">
+            <Link to={LEARN_INDEX_PATH}>Browse Learn</Link>
+            <span> — how TIP calculates patterns &amp; indicators (no account needed)</span>
+          </p>
+        )}
       </form>
     </div>
   )

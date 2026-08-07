@@ -19,11 +19,12 @@ export function getNavItems({ isAdmin = false } = {}) {
     { id: 'positions', label: 'Positions', to: '/paper', icon: 'positions' },
     { id: 'alerts', label: 'Alerts', to: '/?panel=alerts', panel: 'alerts', icon: 'alerts' },
   ]
+  // Learn is public education — available to every signed-in role when flag is on
+  if (isAdminLearnEnabled()) {
+    items.push({ id: 'learn', label: 'Learn', to: '/learn', icon: 'learn' })
+  }
   if (isAdmin) {
     items.push({ id: 'admin', label: 'Admin', to: '/admin/users', icon: 'admin', adminOnly: true })
-    if (isAdminLearnEnabled()) {
-      items.push({ id: 'learn', label: 'Learn', to: '/learn', icon: 'learn', adminOnly: true })
-    }
   }
   return items
 }

@@ -1,4 +1,4 @@
-/* Standalone Learn education desk (admin-gated access) */
+/* Standalone Learn education desk (public + in-app) */
 
 .learn-disclaimer {
   margin: 0 0 1rem;
@@ -9,6 +9,25 @@
   color: var(--text-secondary, #c4c9d2);
   font-size: 0.875rem;
   line-height: 1.45;
+}
+
+.learn-export-card .learn-export-links {
+  margin: 0;
+  padding-left: 1.2rem;
+  line-height: 1.55;
+  font-size: 0.9rem;
+  color: var(--text-secondary, #a8b0bd);
+}
+
+.learn-export-card .learn-export-links a {
+  color: #a5b4fc;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.learn-export-card .learn-export-links a:hover {
+  color: #c7d2fe;
+  text-decoration: underline;
 }
 
 .learn-glossary__summary {
