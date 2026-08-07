@@ -890,6 +890,7 @@ class PostgresPatternJournal:
                 atr=inst.atr_at_detect,
             )
             planned_rr = rails.planned_rr if rails is not None else None
+            risk_r = rails.risk_r if rails is not None else None
             rails_valid = rails is not None
             if not row_matches_filters(
                 symbol_id=inst.symbol_id,
@@ -910,6 +911,7 @@ class PostgresPatternJournal:
                 rails_valid=rails_valid,
                 spec=spec,
                 allowed_symbol_ids=allowed_set,
+                risk_r=risk_r,
             ):
                 continue
             matched.append(

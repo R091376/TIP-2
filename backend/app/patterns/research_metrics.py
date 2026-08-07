@@ -75,6 +75,9 @@ class _Bucket:
     win_move_n: int = 0
     loss_move_sum: float = 0.0
     loss_move_n: int = 0
+    # True stop-R: mean(move_r / risk_r) when 1R = planned stop distance
+    true_r_sum: float = 0.0
+    true_r_n: int = 0
 
     @property
     def sample_size(self) -> int:
@@ -114,6 +117,10 @@ class _Bucket:
                 self.reward_sum += rails.reward_r
                 self.rails_n += 1
                 self.planned_rrs.append(rails.planned_rr)
+                # True stop-R only when path move and stop distance both defined
+                if row.move_r is not None and rails.risk_r > 0:
+                    self.true_r_sum += float(row.move_r) / float(rails.risk_r)
+                    self.true_r_n += 1
 
 
 def group_key(row: ResearchRow, group_by: str) -> tuple[str, str, str]:
@@ -188,6 +195,11 @@ def bucket_to_item(
         "maxPlannedRr": (max(b.planned_rrs) if b.planned_rrs and ready else None),
         "medianPlannedRr": med if ready and b.rails_n > 0 else None,
         "expectancyR": avg_move if ready else None,
+        # True stop-R expectancy: mean(move_r / risk_r); null when not ready or no samples
+        "expectancyTrueR": (
+            _avg(b.true_r_sum, b.true_r_n) if ready and b.true_r_n > 0 else None
+        ),
+        "trueRrSampleSize": b.true_r_n,
         "avgWinMoveR": (
             _avg(b.win_move_sum, b.win_move_n) if ready and b.win_move_n > 0 else None
         ),
@@ -199,13 +211,16 @@ def bucket_to_item(
 
 
 def research_sort_key(item: dict[str, Any]) -> tuple:
-    """Ready first → resolvedSuccessRate desc → sampleSize desc → keys."""
+    """Ready first → true stop-R desc → resolvedSuccessRate desc → sampleSize → keys."""
     ready = 0 if item.get("status") == "ok" else 1
+    true_r = item.get("expectancyTrueR")
+    true_key = -(true_r if true_r is not None else -1.0e9)
     rate = item.get("resolvedSuccessRate")
     rate_key = -(rate if rate is not None else -1.0)
     n = -int(item.get("sampleSize") or 0)
     return (
         ready,
+        true_key,
         rate_key,
         n,
         str(item.get("symbolId") or ""),
@@ -270,8 +285,10 @@ def aggregate_research(
         "successRate": summary_item["successRate"],
         "resolvedSuccessRate": summary_item["resolvedSuccessRate"],
         "expectancyR": summary_item["expectancyR"],
+        "expectancyTrueR": summary_item["expectancyTrueR"],
         "avgMoveR": summary_item["avgMoveR"],
         "avgPlannedRr": summary_item["avgPlannedRr"],
+        "trueRrSampleSize": summary_item["trueRrSampleSize"],
         "scannedFrom": (
             spec.detected_from.isoformat() if spec.detected_from else None
         ),
@@ -312,8 +329,10 @@ def empty_research_response(spec: ResearchFilterSpec) -> dict[str, Any]:
             "successRate": None,
             "resolvedSuccessRate": None,
             "expectancyR": None,
+            "expectancyTrueR": None,
             "avgMoveR": None,
             "avgPlannedRr": None,
+            "trueRrSampleSize": 0,
             "scannedFrom": (
                 spec.detected_from.isoformat() if spec.detected_from else None
             ),

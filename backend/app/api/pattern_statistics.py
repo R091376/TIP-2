@@ -48,6 +48,8 @@ def research_statistics(
     excludeReasons: str | None = None,
     includeReasons: str | None = None,
     minPlannedRr: str | None = None,
+    minRiskR: str | None = None,
+    maxRiskR: str | None = None,
     requireValidRails: str | None = None,
     detectorVersion: str | None = None,
     groupBy: str | None = None,
@@ -57,6 +59,9 @@ def research_statistics(
     """
     Research / composable stack filters — query-time aggregation.
     ADMIN only. Requires Postgres journal.
+
+    Rails geometry filters (ATR units from planned entry/stop/target):
+    ``minPlannedRr``, ``minRiskR``, ``maxRiskR`` each imply valid rails.
     """
     c = request.app.state.container
     if not c.settings.pattern_enabled:
@@ -83,6 +88,8 @@ def research_statistics(
         "excludeReasons": excludeReasons,
         "includeReasons": includeReasons,
         "minPlannedRr": minPlannedRr,
+        "minRiskR": minRiskR,
+        "maxRiskR": maxRiskR,
         "requireValidRails": requireValidRails,
         "detectorVersion": detectorVersion,
         "groupBy": groupBy,

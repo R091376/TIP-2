@@ -367,11 +367,13 @@ Do **not** “ignore TOD for 1d but keep the row” — that mixed semantics con
 |--------|------|-----|-------|--------|---------|------------|
 | Min planned RR | v1 | Number | `minPlannedRr` | `planned_rr` expr | omit | **Implies valid rails** (null rails excluded). Same as `requireValidRails` for inclusion. |
 | Max planned RR | v1.1 | Number | `maxPlannedRr` | same | omit | Also implies valid rails |
-| Min risk R | v1.1 | Number | `minRiskR` | `risk_r` | omit | |
-| Max risk R | v1.1 | Number | `maxRiskR` | `risk_r` | omit | |
+| Min risk R | **v1** | Number | `minRiskR` | `risk_r` (|entry−stop|/ATR) | omit | **Implies valid rails**. Use ≥0.5 as a floor to avoid tiny-stop true-R inflation. |
+| Max risk R | **v1** | Number | `maxRiskR` | `risk_r` | omit | **Implies valid rails**. `minRiskR` ≤ `maxRiskR` when both set. |
 | Min reward R | v1.1 | Number | `minRewardR` | `reward_r` | omit | |
 | Min ATR at detect | v1.1 | Number | `minAtr` | `i.atr_at_detect` | omit | |
-| Require valid trade offer | v1 | Toggle | `requireValidRails` | rails IS NOT NULL | false | Explicit; redundant with minPlannedRr when that is set |
+| Require valid trade offer | v1 | Toggle | `requireValidRails` | rails IS NOT NULL | false | Explicit; also implied by minPlannedRr / minRiskR / maxRiskR |
+
+**Interpretation note (true stop-R):** Research responses include **`expectancyTrueR`** = `mean(move_r / risk_r)` when sizing 1R = planned stop (ready-gated; null if no eligible rails samples). ATR-based `avgMoveR` / `expectancyR` remain mean `move_r`. High `minRiskR` (e.g. ≥2.5) can raise ATR avgMove and WR without improving true stop-R. Prefer **confirmed + plan RR + modest risk floor** for offer-quality presets. UI Research mode defaults sort to true stop-R.
 
 **Compute (Python oracle = `compute_planned_rails`):**
 
@@ -474,7 +476,7 @@ FE multi-select and BE validation share this closed list (module constant + FE c
 | `resolvedOnly=true` + `outcome` includes `expired` | **400** contradictory |
 | `resolvedOnly=true` + `outcome=expired` only | **400** |
 | `excludeReasons` + `includeReasons` both non-empty | **400** |
-| `minPlannedRr` set | Null-rails instances excluded (implicit `requireValidRails`) |
+| `minPlannedRr` / `minRiskR` / `maxRiskR` set | Null-rails instances excluded (implicit `requireValidRails`) |
 | TOD start without end (or reverse) | **400** |
 | Unknown enum token | **400** |
 
@@ -517,7 +519,7 @@ When `skip_excursions`:
 
 | Tier | Filters |
 |------|---------|
-| **v1 must-have** | symbolId, patternType, timeframe, direction, flagConfirmed/Retested/Strengthened, volumeOkAtDetect, confirmationMode, detectTimeIstStart/End, detectedFrom/To (with default 180d lookback), minPlannedRr, requireValidRails, outcome, resolvedOnly, excludeReasons, detectorVersion, groupBy, minSampleSize, limitGroups |
+| **v1 must-have** | symbolId, patternType, timeframe, direction, flagConfirmed/Retested/Strengthened, volumeOkAtDetect, confirmationMode, detectTimeIstStart/End, detectedFrom/To (with default 180d lookback), minPlannedRr, **minRiskR, maxRiskR**, requireValidRails, outcome, resolvedOnly, excludeReasons, detectorVersion, groupBy, minSampleSize, limitGroups |
 | **v1.1 nice** | status multi, hasRetestFloor, minSessionsSeen, minVolumeAtDetect, detectDowIst, detectedAt range, maxPlannedRr, risk/reward/atr bounds, includeReasons, closed date, MFE/MAE/move/duration, hourBucket groupBy, compare presets, funnel |
 | **Out of scope / needs data** | includeOpen, relative volume vs SMA, index regime, news, nearPattern join, confluence grade, classical geometry, CI bands |
 
@@ -1026,10 +1028,14 @@ Built-in FE constants. All respect default 180d lookback unless they set dates.
 
 | # | Name | Filters (intent) | Hypothesis |
 |---|------|------------------|------------|
+| **T1** | **True-R · Confirmed (robust)** | `flagConfirmed=true`, `resolvedOnly`, exclude `startup_recovery` | Largest robust true stop-R lift on 180d journal |
+| **T2** | **True-R · Confirmed · Plan RR ≥ 1.5 · Risk ≥ 0.5** | confirmed + `minPlannedRr=1.5` + `minRiskR=0.5` + resolved + ex startup | Offer quality without tiny-stop inflation |
+| **T3** | **True-R · Confirmed · Risk ≥ 1.0** | confirmed + `minRiskR=1.0` + resolved + ex startup | Higher WR workhorse; moderate true-R |
+| **T4** | **True-R · Higher high · Confirmed** | `patternType=higher_high`, confirmed, resolved, ex startup | Best single-type specialist |
 | 1 | **Retest + Volume + Session** | `flagRetested=true`, `volumeOkAtDetect=true`, `detectTimeIstStart=09:30`, `detectTimeIstEnd=15:00`, `excludeReasons=startup_recovery`, `timeframe=5m,15m,1h` | Liquid-session volume retests outperform raw detects |
 | 2 | **Full lifecycle quality** | `flagConfirmed=true`, `flagRetested=true`, optional strengthened, exclude `startup_recovery` | Full stage progression |
 | 3 | **Resolved only (performance)** | `resolvedOnly=true`, `excludeReasons=startup_recovery,session_close,session_end` | Strip expiry noise (**both** session_close and session_end) |
-| 4 | **Plan R:R ≥ 1.5 breakouts** | `patternType=breakout,volume_breakout`, `minPlannedRr=1.5` (implies valid rails) | Better planned asymmetry |
+| 4 | **Plan R:R ≥ 1.5 breakouts** | `patternType=breakout,volume_breakout`, `minPlannedRr=1.5`, `minRiskR=0.5` | Better planned asymmetry + risk floor |
 | 5 | **Long breakout quality** | breakout + long + retested + volume + session window | Directional long stack |
 | 6 | **Short / breakdown quality** | breakdown + short + retested + volume + session | Short mirror |
 | 7 | **Intraday pin & engulf** | pin+engulf types, `5m,15m`, session, resolvedOnly | Candle family under session quality |
@@ -1084,6 +1090,8 @@ export type ResearchFilterParams = {
   resolvedOnly?: boolean
   excludeReasons?: string[]
   minPlannedRr?: number
+  minRiskR?: number
+  maxRiskR?: number
   requireValidRails?: boolean
   detectorVersion?: string[]
   groupBy?:

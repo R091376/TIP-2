@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
@@ -58,6 +59,10 @@ class ResearchFilterSpec:
     exclude_reasons: list[str] | None = None
     include_reasons: list[str] | None = None
     min_planned_rr: float | None = None
+    # Planned stop/target distances in ATR units (from compute_planned_rails).
+    # Any of min/max risk or min planned RR implies require_valid_rails.
+    min_risk_r: float | None = None
+    max_risk_r: float | None = None
     require_valid_rails: bool = False
     detector_versions: list[str] | None = None
     group_by: str = "symbol,patternType,timeframe"
@@ -109,6 +114,10 @@ class ResearchFilterSpec:
             out["includeReasons"] = list(self.include_reasons)
         if self.min_planned_rr is not None:
             out["minPlannedRr"] = self.min_planned_rr
+        if self.min_risk_r is not None:
+            out["minRiskR"] = self.min_risk_r
+        if self.max_risk_r is not None:
+            out["maxRiskR"] = self.max_risk_r
         if self.detector_versions is not None:
             out["detectorVersion"] = list(self.detector_versions)
         return out
@@ -184,6 +193,19 @@ def clamp_int(value: int | None, lo: int, hi: int, default: int) -> int:
     except (TypeError, ValueError):
         return default
     return max(lo, min(hi, v))
+
+
+def parse_nonneg_float(raw: Any, param_name: str) -> float | None:
+    """Parse optional non-negative finite float query param; empty → None."""
+    if raw is None or str(raw).strip() == "":
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ResearchFilterError(f"invalid {param_name}: {raw!r}") from exc
+    if not math.isfinite(value) or value < 0:
+        raise ResearchFilterError(f"{param_name} must be a finite number >= 0")
+    return value
 
 
 def parse_research_filters(
@@ -301,20 +323,25 @@ def parse_research_filters(
         if bad:
             raise ResearchFilterError(f"unknown includeReasons: {bad}")
 
-    min_planned_rr = None
-    raw_rr = g("minPlannedRr")
-    if raw_rr is not None and str(raw_rr).strip() != "":
-        try:
-            min_planned_rr = float(raw_rr)
-        except (TypeError, ValueError) as exc:
-            raise ResearchFilterError(f"invalid minPlannedRr: {raw_rr!r}") from exc
-        if min_planned_rr < 0:
-            raise ResearchFilterError("minPlannedRr must be >= 0")
+    min_planned_rr = parse_nonneg_float(g("minPlannedRr"), "minPlannedRr")
+    min_risk_r = parse_nonneg_float(g("minRiskR"), "minRiskR")
+    max_risk_r = parse_nonneg_float(g("maxRiskR"), "maxRiskR")
+    if (
+        min_risk_r is not None
+        and max_risk_r is not None
+        and min_risk_r > max_risk_r
+    ):
+        raise ResearchFilterError("minRiskR must be <= maxRiskR")
 
     require_valid_rails = parse_bool(g("requireValidRails"))
     if require_valid_rails is None:
         require_valid_rails = False
-    if min_planned_rr is not None:
+    # Any rails-threshold filter implies a valid trade offer (risk/reward defined).
+    if (
+        min_planned_rr is not None
+        or min_risk_r is not None
+        or max_risk_r is not None
+    ):
         require_valid_rails = True
 
     detector_versions = parse_csv_list(g("detectorVersion"))
@@ -354,6 +381,8 @@ def parse_research_filters(
         exclude_reasons=exclude_reasons,
         include_reasons=include_reasons,
         min_planned_rr=min_planned_rr,
+        min_risk_r=min_risk_r,
+        max_risk_r=max_risk_r,
         require_valid_rails=require_valid_rails,
         detector_versions=detector_versions,
         group_by=group_by,
@@ -404,8 +433,14 @@ def row_matches_filters(
     rails_valid: bool,
     spec: ResearchFilterSpec,
     allowed_symbol_ids: set[str],
+    risk_r: float | None = None,
 ) -> bool:
-    """Return True if a closed instance+outcome row matches the research filter."""
+    """Return True if a closed instance+outcome row matches the research filter.
+
+    ``risk_r`` / ``planned_rr`` come from ``compute_planned_rails`` (ATR units).
+    True stop-R expectancy is research-side: move_r / risk_r; filters here only
+    subset the instance set by planned rails geometry.
+    """
     if symbol_id not in allowed_symbol_ids:
         return False
     if status not in CLOSED_STATUSES:
@@ -468,6 +503,12 @@ def row_matches_filters(
         return False
     if spec.min_planned_rr is not None:
         if planned_rr is None or planned_rr < spec.min_planned_rr:
+            return False
+    if spec.min_risk_r is not None:
+        if risk_r is None or risk_r < spec.min_risk_r:
+            return False
+    if spec.max_risk_r is not None:
+        if risk_r is None or risk_r > spec.max_risk_r:
             return False
 
     return True

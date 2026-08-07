@@ -85,6 +85,73 @@ def test_resolved_only_forces_outcomes():
     assert set(spec.outcomes or []) == {"succeeded", "failed"}
 
 
+def test_parse_min_max_risk_r():
+    spec = parse_research_filters({"minRiskR": "0.5", "maxRiskR": "2.0"})
+    assert spec.min_risk_r == 0.5
+    assert spec.max_risk_r == 2.0
+    # Rails thresholds imply require_valid_rails
+    assert spec.require_valid_rails is True
+    assert "minRiskR" in spec.echo_filters()
+    assert "maxRiskR" in spec.echo_filters()
+
+    with pytest.raises(ResearchFilterError):
+        parse_research_filters({"minRiskR": "2", "maxRiskR": "1"})
+    with pytest.raises(ResearchFilterError):
+        parse_research_filters({"minRiskR": "-0.1"})
+    with pytest.raises(ResearchFilterError):
+        parse_research_filters({"maxRiskR": "nope"})
+    with pytest.raises(ResearchFilterError):
+        parse_research_filters({"minRiskR": "inf"})
+    with pytest.raises(ResearchFilterError):
+        parse_research_filters({"minPlannedRr": "Infinity"})
+    with pytest.raises(ResearchFilterError):
+        parse_research_filters({"maxRiskR": "nan"})
+
+
+def test_row_matches_risk_r_bounds():
+    today = today_ist().isoformat()
+    spec = parse_research_filters(
+        {
+            "detectedFrom": today,
+            "detectedTo": today,
+            "minRiskR": "1.0",
+            "maxRiskR": "2.0",
+        },
+        max_range_days=180,
+    )
+    dt = datetime.combine(today_ist(), time(10, 0), tzinfo=IST)
+    epoch = int(dt.timestamp())
+    base = dict(
+        symbol_id="S1",
+        pattern_type="breakout",
+        timeframe="5m",
+        direction="long",
+        status="succeeded",
+        flag_confirmed=True,
+        flag_retested=False,
+        flag_strengthened=False,
+        volume_ok_at_detect=False,
+        confirmation_mode_used="both",
+        detector_version="breakout-v1",
+        detect_candle_time=epoch,
+        final_outcome="succeeded",
+        reason=None,
+        planned_rr=1.5,
+        rails_valid=True,
+        spec=spec,
+        allowed_symbol_ids={"S1"},
+    )
+    assert row_matches_filters(**base, risk_r=1.0) is True
+    assert row_matches_filters(**base, risk_r=2.0) is True
+    assert row_matches_filters(**base, risk_r=0.99) is False
+    assert row_matches_filters(**base, risk_r=2.01) is False
+    assert row_matches_filters(**base, risk_r=None) is False
+    # Invalid rails excluded when minRiskR set (require_valid_rails)
+    assert (
+        row_matches_filters(**{**base, "rails_valid": False}, risk_r=1.5) is False
+    )
+
+
 def test_detect_candle_ist_and_tod_match():
     # 2026-08-06 10:00 IST
     dt = datetime(2026, 8, 6, 10, 0, tzinfo=IST)
@@ -197,12 +264,40 @@ def test_aggregate_expectancy_and_ready_gate():
     assert body["summary"]["ready"] is True
     assert body["summary"]["successCount"] == 3
     assert body["summary"]["failCount"] == 2
-    # expectancy = mean move = (2+1+3-1-1)/5 = 0.8
+    # expectancy = mean move = (2+1+3-1-1)/5 = 0.8 (ATR units)
     assert body["summary"]["expectancyR"] == pytest.approx(0.8)
     item = body["items"][0]
     assert item["expectancyR"] == pytest.approx(0.8)
     assert item["avgWinMoveR"] == pytest.approx(2.0)
     assert item["avgLossMoveR"] == pytest.approx(-1.0)
+    # True stop-R: risk_r = |100-99|/1 = 1 → true_r == move_r for these rows
+    assert body["summary"]["expectancyTrueR"] == pytest.approx(0.8)
+    assert item["expectancyTrueR"] == pytest.approx(0.8)
+    assert item["trueRrSampleSize"] == 5
+
+
+def test_expectancy_true_r_divides_by_stop_distance():
+    """true R = move_r / risk_r; wide stop shrinks true R vs ATR move."""
+    spec = parse_research_filters(
+        {"minSampleSize": "5", "detectedFrom": "2020-01-01", "detectedTo": "2020-01-10"},
+        max_range_days=180,
+    )
+    # entry=100, stop=98, atr=1 → risk_r=2; move_r=1 → true_r=0.5 each
+    rows = [
+        _row(
+            final_outcome="succeeded",
+            status="succeeded",
+            entry_price=100.0,
+            stop_level=98.0,
+            target_level=103.0,
+            atr_at_detect=1.0,
+            move_r=1.0,
+        )
+        for _ in range(5)
+    ]
+    body = aggregate_research(rows, spec)
+    assert body["summary"]["expectancyR"] == pytest.approx(1.0)
+    assert body["summary"]["expectancyTrueR"] == pytest.approx(0.5)
 
 
 def test_startup_recovery_skipped_from_path_and_rails():
