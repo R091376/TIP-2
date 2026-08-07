@@ -27,3 +27,11 @@ terminals/
 .idea/
 .DS_Store
 *.log
+
+# Local Research / Neon scan tooling (not product code)
+backend/scripts/scan_*.py
+best_preset_stacks.json
+best_true_r_stacks.json
+preset_expectancy_scan.json
+research_filter_scan.json
+research_rails_threshold_scan.json
