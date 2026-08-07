@@ -795,13 +795,11 @@ class PostgresPatternJournal:
     def rebuild_all_statistics(self) -> dict[str, int]:
         """Wipe ``pattern_statistics`` and rebuild from remaining closed instances.
 
-        Use after bulk purges (e.g. low-risk cleanup). Replays each closed instance
-        through ``_upsert_statistics`` so success/fail/move/MFE/planned rails match
-        the journal. Research does not use this table (query-time only).
+        Single-pass aggregation (no per-row re-scan) so Neon rebuilds stay under
+        connection limits. Research does not use this table (query-time only).
         """
         now = datetime.now(timezone.utc)
         with self._sf() as s:
-            deleted = s.query(PatternStatisticsRow).delete(synchronize_session=False)
             instances = s.scalars(
                 select(PatternInstanceRow).where(
                     PatternInstanceRow.status.in_(tuple(CLOSED_STATUSES))
@@ -811,19 +809,136 @@ class PostgresPatternJournal:
                 o.pattern_instance_id: o
                 for o in s.scalars(select(PatternOutcomeRow)).all()
             }
+
+            # key -> running aggregates
+            buckets: dict[tuple[str, str, str], dict] = {}
             included = 0
             skipped = 0
+
             for inst in instances:
                 outcome = outcomes.get(inst.id)
                 p = self._domain_for_stats_rebuild(inst, outcome)
-                if p is None:
+                if p is None or p.final_outcome is None:
                     skipped += 1
                     continue
-                self._upsert_statistics(s, p, now, instance_id=inst.id)
+
+                key = (p.symbol_id, p.pattern_type.value, p.timeframe)
+                b = buckets.get(key)
+                if b is None:
+                    b = {
+                        "sample_size": 0,
+                        "success_count": 0,
+                        "fail_count": 0,
+                        "expired_count": 0,
+                        "duration_sum": 0.0,
+                        "move_sum": 0.0,
+                        "move_n": 0,
+                        "mfe_sum": 0.0,
+                        "mfe_n": 0,
+                        "mae_sum": 0.0,
+                        "mae_n": 0,
+                        "risk_sum": 0.0,
+                        "reward_sum": 0.0,
+                        "planned_n": 0,
+                        "rrs": [],
+                    }
+                    buckets[key] = b
+
+                b["sample_size"] += 1
+                fo = p.final_outcome
+                if fo == FinalOutcome.SUCCEEDED:
+                    b["success_count"] += 1
+                elif fo == FinalOutcome.FAILED:
+                    b["fail_count"] += 1
+                else:
+                    b["expired_count"] += 1
+                b["duration_sum"] += float(p.duration_candles or 0)
+
+                skip = p.suppress_excursion_stats or p.terminal_reason == "startup_recovery"
+                if not skip:
+                    # Prefer outcome-stored R when prices were missing
+                    move = p.move_r()
+                    if move is None and outcome is not None and outcome.move_r is not None:
+                        move = float(outcome.move_r)
+                    if move is not None:
+                        b["move_sum"] += float(move)
+                        b["move_n"] += 1
+
+                    mfe = p.max_favorable_r()
+                    if (
+                        outcome is not None
+                        and outcome.max_favorable_r is not None
+                        and (outcome.max_favorable_price is not None)
+                    ):
+                        mfe = float(outcome.max_favorable_r)
+                    elif outcome is not None and outcome.max_favorable_r is not None:
+                        mfe = float(outcome.max_favorable_r)
+                    b["mfe_sum"] += float(mfe)
+                    b["mfe_n"] += 1
+
+                    mae = p.max_adverse_r()
+                    if outcome is not None and outcome.max_adverse_r is not None:
+                        mae = float(outcome.max_adverse_r)
+                    b["mae_sum"] += float(mae)
+                    b["mae_n"] += 1
+
+                    rails = planned_rails_from_pattern(p)
+                    if rails is not None:
+                        b["risk_sum"] += float(rails.risk_r)
+                        b["reward_sum"] += float(rails.reward_r)
+                        b["planned_n"] += 1
+                        b["rrs"].append(float(rails.planned_rr))
+
                 included += 1
+
+            deleted = s.query(PatternStatisticsRow).delete(synchronize_session=False)
+            for (sid, ptype, tf), b in buckets.items():
+                n = int(b["sample_size"])
+                if n <= 0:
+                    continue
+                resolved = int(b["success_count"]) + int(b["fail_count"])
+                move_n = int(b["move_n"])
+                mfe_n = int(b["mfe_n"])
+                mae_n = int(b["mae_n"])
+                planned_n = int(b["planned_n"])
+                rrs: list[float] = list(b["rrs"])
+                avg_risk = (float(b["risk_sum"]) / planned_n) if planned_n else 0.0
+                avg_reward = (float(b["reward_sum"]) / planned_n) if planned_n else 0.0
+                med = median_planned_rr(rrs) if rrs else None
+                s.add(
+                    PatternStatisticsRow(
+                        symbol_id=sid,
+                        pattern_type=ptype,
+                        timeframe=tf,
+                        sample_size=n,
+                        success_count=int(b["success_count"]),
+                        fail_count=int(b["fail_count"]),
+                        expired_count=int(b["expired_count"]),
+                        success_rate=(int(b["success_count"]) / n) if n else 0.0,
+                        resolved_success_rate=(
+                            (int(b["success_count"]) / resolved) if resolved else None
+                        ),
+                        avg_move_r=(float(b["move_sum"]) / move_n) if move_n else 0.0,
+                        avg_duration_candles=float(b["duration_sum"]) / n,
+                        avg_mfe_r=(float(b["mfe_sum"]) / mfe_n) if mfe_n else 0.0,
+                        avg_mae_r=(float(b["mae_sum"]) / mae_n) if mae_n else 0.0,
+                        move_sample_size=move_n,
+                        mfe_sample_size=mfe_n,
+                        mae_sample_size=mae_n,
+                        avg_planned_rr=_ratio_of_averages(avg_reward, avg_risk),
+                        avg_risk_r=avg_risk,
+                        avg_reward_r=avg_reward,
+                        planned_rr_sample_size=planned_n,
+                        min_planned_rr=min(rrs) if rrs else 0.0,
+                        max_planned_rr=max(rrs) if rrs else 0.0,
+                        median_planned_rr=med if med is not None else 0.0,
+                        updated_at=now,
+                    )
+                )
             s.commit()
             return {
                 "stats_rows_deleted": int(deleted or 0),
+                "stats_rows_written": len(buckets),
                 "instances_included": included,
                 "instances_skipped": skipped,
             }
