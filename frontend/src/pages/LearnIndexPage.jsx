@@ -47,6 +47,30 @@ export default function LearnIndexPage() {
 
       <LearnDisclaimer />
 
+      <section className="admin-card learn-export-card">
+        <h2>AI / plain-text export</h2>
+        <p className="admin-header__sub" style={{ marginBottom: '0.75rem' }}>
+          Static Markdown (no JavaScript) for AI tools like Grok. Prefer these over the SPA if a tool
+          cannot run the browser app.
+        </p>
+        <ul className="learn-export-links">
+          <li>
+            <a href="/learn-export/index.html">HTML index</a>
+            <span> — clickable list of all topics</span>
+          </li>
+          <li>
+            <a href="/learn-export/index.md">index.md</a>
+            <span> — Markdown table of contents</span>
+          </li>
+          <li>
+            <a href="/learn-export/ALL.md">
+              <strong>ALL.md</strong>
+            </a>
+            <span> — every topic in one file (best for pasting into chat)</span>
+          </li>
+        </ul>
+      </section>
+
       <section className="admin-card">
         <h2>Topics</h2>
         <p className="admin-header__sub" style={{ marginBottom: '0.75rem' }}>

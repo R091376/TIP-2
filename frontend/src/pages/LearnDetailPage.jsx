@@ -4,6 +4,7 @@ import LearnDisclaimer from '../learn/components/LearnDisclaimer'
 import LearnParamsTable from '../learn/components/LearnParamsTable'
 import LearnWorkedExample from '../learn/components/LearnWorkedExample'
 import { LEARN_INDEX_PATH, learnTopicPath, parseLearnKind } from '../learn/routing'
+import { topicExportUrl } from '../learn/toMarkdown'
 import './authPages.css'
 import './adminLearn.css'
 
@@ -59,6 +60,10 @@ export default function LearnDetailPage() {
         <Link className="admin-link" to={LEARN_INDEX_PATH}>
           ← All topics
         </Link>
+        {' · '}
+        <a className="admin-link" href={topicExportUrl(topic)}>
+          Markdown (AI / plain text)
+        </a>
       </p>
 
       <LearnDisclaimer />
