@@ -273,7 +273,7 @@ def _row(**kwargs) -> ResearchRow:
     return ResearchRow(**base)
 
 
-def test_aggregate_expectancy_and_ready_gate():
+def test_aggregate_expected_r_and_ready_gate():
     spec = parse_research_filters(
         {
             "minSampleSize": "5",
@@ -282,7 +282,9 @@ def test_aggregate_expectancy_and_ready_gate():
         },
         max_range_days=180,
     )
-    # 3 wins, 2 fails — not ready for min 5? sample=5 ready
+    # 3 wins, 2 fails — sample=5 ready
+    # rails: entry 100, stop 99, target 102, atr 1 → plan RR = 2
+    # Expected R = 0.6 * 2 - 0.4 = 0.8
     rows = [
         _row(final_outcome="succeeded", move_r=2.0, status="succeeded"),
         _row(final_outcome="succeeded", move_r=1.0, status="succeeded"),
@@ -295,20 +297,20 @@ def test_aggregate_expectancy_and_ready_gate():
     assert body["summary"]["ready"] is True
     assert body["summary"]["successCount"] == 3
     assert body["summary"]["failCount"] == 2
-    # expectancy = mean move = (2+1+3-1-1)/5 = 0.8 (ATR units)
-    assert body["summary"]["expectancyR"] == pytest.approx(0.8)
+    assert body["summary"]["avgMoveR"] == pytest.approx(0.8)
     item = body["items"][0]
-    assert item["expectancyR"] == pytest.approx(0.8)
     assert item["avgWinMoveR"] == pytest.approx(2.0)
     assert item["avgLossMoveR"] == pytest.approx(-1.0)
-    # True stop-R: risk_r = |100-99|/1 = 1 → true_r == move_r for these rows
-    assert body["summary"]["expectancyTrueR"] == pytest.approx(0.8)
-    assert item["expectancyTrueR"] == pytest.approx(0.8)
-    assert item["trueRrSampleSize"] == 5
+    assert item["avgPlannedRr"] == pytest.approx(2.0)
+    assert item["resolvedSuccessRate"] == pytest.approx(0.6)
+    assert body["summary"]["expectedR"] == pytest.approx(0.8)
+    assert item["expectedR"] == pytest.approx(0.8)
+    assert "expectancyR" not in item
+    assert "expectancyTrueR" not in item
 
 
-def test_expectancy_true_r_divides_by_stop_distance():
-    """true R = move_r / risk_r; wide stop shrinks true R vs ATR move."""
+def test_expected_r_uses_plan_rr_not_path_move():
+    """All wins: Expected R equals planned R:R (WR=1), not ATR move."""
     spec = parse_research_filters(
         {
             "minSampleSize": "5",
@@ -317,7 +319,7 @@ def test_expectancy_true_r_divides_by_stop_distance():
         },
         max_range_days=180,
     )
-    # entry=100, stop=98, atr=1 → risk_r=2; move_r=1 → true_r=0.5 each
+    # entry=100, stop=98, target=103, atr=1 → risk=2, reward=3, plan RR=1.5
     rows = [
         _row(
             final_outcome="succeeded",
@@ -331,8 +333,9 @@ def test_expectancy_true_r_divides_by_stop_distance():
         for _ in range(5)
     ]
     body = aggregate_research(rows, spec)
-    assert body["summary"]["expectancyR"] == pytest.approx(1.0)
-    assert body["summary"]["expectancyTrueR"] == pytest.approx(0.5)
+    assert body["summary"]["avgMoveR"] == pytest.approx(1.0)
+    assert body["summary"]["avgPlannedRr"] == pytest.approx(1.5)
+    assert body["summary"]["expectedR"] == pytest.approx(1.5)
 
 
 def test_startup_recovery_skipped_from_path_and_rails():
@@ -375,3 +378,59 @@ def test_empty_research_response():
     assert body["totalMatched"] == 0
     assert body["count"] == 0
     assert body["summary"]["ready"] is False
+    assert body["summary"]["expectedR"] is None
+
+
+def test_parse_min_expected_r():
+    spec = parse_research_filters({"minExpectedR": "0.2"})
+    assert spec.min_expected_r == pytest.approx(0.2)
+    assert spec.echo_filters()["minExpectedR"] == pytest.approx(0.2)
+
+    spec_neg = parse_research_filters({"minExpectedR": "-0.5"})
+    assert spec_neg.min_expected_r == pytest.approx(-0.5)
+
+    with pytest.raises(ResearchFilterError):
+        parse_research_filters({"minExpectedR": "nan"})
+    with pytest.raises(ResearchFilterError):
+        parse_research_filters({"minExpectedR": "inf"})
+
+
+def test_min_expected_r_filters_groups():
+    spec = parse_research_filters(
+        {
+            "minSampleSize": "5",
+            "groupBy": "patternType",
+            "minExpectedR": "0.5",
+            "detectedFrom": today_ist().isoformat(),
+            "detectedTo": today_ist().isoformat(),
+        },
+        max_range_days=180,
+    )
+    # breakout: 5/5 wins, plan RR=2 → Expected R = 2.0
+    wins = [
+        _row(
+            pattern_type="breakout",
+            final_outcome="succeeded",
+            status="succeeded",
+            move_r=2.0,
+        )
+        for _ in range(5)
+    ]
+    # breakdown: 1/5 wins, plan RR=2 → Expected R = 0.2*2 - 0.8 = -0.4
+    mixed = [
+        _row(
+            pattern_type="breakdown",
+            final_outcome="succeeded" if i == 0 else "failed",
+            status="succeeded" if i == 0 else "failed",
+            move_r=2.0 if i == 0 else -1.0,
+        )
+        for i in range(5)
+    ]
+    body = aggregate_research(wins + mixed, spec)
+    assert body["totalMatched"] == 5
+    assert body["totalGroups"] == 1
+    assert body["items"][0]["patternType"] == "breakout"
+    assert body["items"][0]["expectedR"] == pytest.approx(2.0)
+    assert body["summary"]["successCount"] == 5
+    assert body["summary"]["failCount"] == 0
+    assert body["summary"]["expectedR"] == pytest.approx(2.0)

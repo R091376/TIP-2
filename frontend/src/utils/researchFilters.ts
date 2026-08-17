@@ -32,6 +32,8 @@ export type ResearchFilterParams = {
   minRiskR?: number
   /** Max planned stop distance in ATR (risk_r). Implies requireValidRails. */
   maxRiskR?: number
+  /** Keep groups whose Expected R (WR × plan R:R − (1−WR)) is at least this. */
+  minExpectedR?: number
   requireValidRails?: boolean
   detectorVersion?: string[]
   groupBy?: GroupBy
@@ -138,12 +140,20 @@ export function parseResearchFiltersFromSearch(search: string | URLSearchParams)
     if (!Number.isFinite(n) || n < 0) return undefined
     return n
   }
+  const parseFinite = (raw: string | null): number | undefined => {
+    if (raw == null || raw === '') return undefined
+    const n = Number(raw)
+    if (!Number.isFinite(n)) return undefined
+    return n
+  }
   const minRr = parseFiniteNonNeg(sp.get('minPlannedRr'))
   if (minRr !== undefined) out.minPlannedRr = minRr
   const minRisk = parseFiniteNonNeg(sp.get('minRiskR'))
   if (minRisk !== undefined) out.minRiskR = minRisk
   const maxRisk = parseFiniteNonNeg(sp.get('maxRiskR'))
   if (maxRisk !== undefined) out.maxRiskR = maxRisk
+  const minEdge = parseFinite(sp.get('minExpectedR'))
+  if (minEdge !== undefined) out.minExpectedR = minEdge
 
   const gb = sp.get('groupBy')
   if (gb && GROUP_BY_ALLOWED.has(gb)) out.groupBy = gb as GroupBy
@@ -194,6 +204,7 @@ export function serializeResearchFilters(params: ResearchFilterParams): string {
   if (params.minPlannedRr !== undefined) sp.set('minPlannedRr', String(params.minPlannedRr))
   if (params.minRiskR !== undefined) sp.set('minRiskR', String(params.minRiskR))
   if (params.maxRiskR !== undefined) sp.set('maxRiskR', String(params.maxRiskR))
+  if (params.minExpectedR !== undefined) sp.set('minExpectedR', String(params.minExpectedR))
   if (params.groupBy) sp.set('groupBy', params.groupBy)
   if (params.minSampleSize !== undefined) sp.set('minSampleSize', String(params.minSampleSize))
   if (params.limitGroups !== undefined) sp.set('limitGroups', String(params.limitGroups))
@@ -211,7 +222,7 @@ export const DEFAULT_MAX_RISK_R = 1.5
 
 /**
  * Baseline Research filters applied on empty / Clear.
- * maxRiskR caps stop size so wide stops cannot inflate true stop-R.
+ * maxRiskR is a product stop-size cap (wide stops shrink plan R:R / Expected R).
  */
 export const DEFAULT_RESEARCH_FILTERS: ResearchFilterParams = {
   maxRiskR: DEFAULT_MAX_RISK_R,
@@ -222,26 +233,7 @@ export function withResearchDefaults(params: ResearchFilterParams = {}): Researc
   return { ...DEFAULT_RESEARCH_FILTERS, ...params }
 }
 
-/**
- * Built-in stack presets — all include maxRiskR ≤ 1.5 (product default).
- * Ordered by expectancyTrueR on prod (tip2-api Neon, risk≤1.5, 2026-08-07):
- *
- * Rank | trueR  | n    | preset
- *   1  | +2.91  |   86 | short-breakdown-quality
- *   2  | +2.75  |  140 | retest-volume-session
- *   3  | +2.50  |   54 | long-breakout-quality
- *   4  | +2.23  |  209 | full-lifecycle
- *   5  | +0.76  | 1509 | true-r-confirmed (most robust n)
- *   6  | +0.68  |   72 | true-r-hh-confirmed
- *   7  | +0.45  |  467 | true-r-confirmed-risk-1
- *   8  | +0.36  |  679 | true-r-confirmed-plan-rr-risk-floor
- *   9  | +0.05  | 3726 | exclude-recovery
- *  10  | +0.03  | 3106 | resolved-only
- *  11  | −0.13  |  955 | pin-engulf-intraday
- *  12  | −0.31  |  349 | plan-rr-breakouts
- *
- * Re-rank: `cd backend; python scripts/scan_preset_expectancy.py`
- */
+/** Built-in stacks. Every preset includes maxRiskR ≤ 1.5. */
 export const BUILTIN_STACK_PRESETS: StackPreset[] = [
   {
     id: 'short-breakdown-quality',
@@ -296,7 +288,7 @@ export const BUILTIN_STACK_PRESETS: StackPreset[] = [
   },
   {
     id: 'true-r-confirmed',
-    name: 'True-R · Confirmed (robust)',
+    name: 'Confirmed (robust)',
     filters: {
       flagConfirmed: true,
       resolvedOnly: true,
@@ -306,7 +298,7 @@ export const BUILTIN_STACK_PRESETS: StackPreset[] = [
   },
   {
     id: 'true-r-hh-confirmed',
-    name: 'True-R · Higher high · Confirmed',
+    name: 'Higher high · Confirmed',
     filters: {
       patternType: ['higher_high'],
       flagConfirmed: true,
@@ -317,7 +309,7 @@ export const BUILTIN_STACK_PRESETS: StackPreset[] = [
   },
   {
     id: 'true-r-confirmed-risk-1',
-    name: 'True-R · Confirmed · Risk 1.0–1.5',
+    name: 'Confirmed · Risk 1.0–1.5',
     filters: {
       flagConfirmed: true,
       minRiskR: 1.0,
@@ -329,7 +321,7 @@ export const BUILTIN_STACK_PRESETS: StackPreset[] = [
   },
   {
     id: 'true-r-confirmed-plan-rr-risk-floor',
-    name: 'True-R · Confirmed · Plan RR ≥ 1.5 · Risk 0.5–1.5',
+    name: 'Confirmed · Plan RR ≥ 1.5 · Risk 0.5–1.5',
     filters: {
       flagConfirmed: true,
       minPlannedRr: 1.5,
@@ -440,6 +432,8 @@ export function researchFilterChips(params: ResearchFilterParams): { key: string
     chips.push({ key: 'minRiskR', label: `risk R ≥ ${params.minRiskR}` })
   if (params.maxRiskR != null)
     chips.push({ key: 'maxRiskR', label: `risk R ≤ ${params.maxRiskR}` })
+  if (params.minExpectedR != null)
+    chips.push({ key: 'minExpectedR', label: `Expected R ≥ ${params.minExpectedR}` })
   if (params.requireValidRails)
     chips.push({ key: 'requireValidRails', label: 'valid rails' })
   if (params.groupBy && params.groupBy !== 'symbol,patternType,timeframe')

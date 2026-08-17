@@ -50,6 +50,7 @@ def research_statistics(
     minPlannedRr: str | None = None,
     minRiskR: str | None = None,
     maxRiskR: str | None = None,
+    minExpectedR: str | None = None,
     requireValidRails: str | None = None,
     detectorVersion: str | None = None,
     groupBy: str | None = None,
@@ -62,6 +63,8 @@ def research_statistics(
 
     Rails geometry filters (ATR units from planned entry/stop/target):
     ``minPlannedRr``, ``minRiskR``, ``maxRiskR`` each imply valid rails.
+    ``minExpectedR`` keeps groups whose Expected R (WR × plan R:R − (1−WR))
+    is at least that value.
     """
     c = request.app.state.container
     if not c.settings.pattern_enabled:
@@ -90,6 +93,7 @@ def research_statistics(
         "minPlannedRr": minPlannedRr,
         "minRiskR": minRiskR,
         "maxRiskR": maxRiskR,
+        "minExpectedR": minExpectedR,
         "requireValidRails": requireValidRails,
         "detectorVersion": detectorVersion,
         "groupBy": groupBy,

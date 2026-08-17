@@ -42,21 +42,15 @@ const RESEARCH_TYPES = [
 const BASE_PATTERN_TYPES = ['all', 'breakout', 'breakdown']
 
 const SORT_OPTIONS = [
-  { value: 'expectancyTrueR', label: 'True stop-R (move ÷ stop)' },
-  { value: 'avgMoveR', label: 'Avg move (ATR R)' },
-  { value: 'expectancyR', label: 'Expectancy ATR (R)' },
+  { value: 'expectedR', label: 'Expected R (WR × plan R:R − loss)' },
   { value: 'resolvedSuccessRate', label: 'Resolved success %' },
-  { value: 'avgMfeR', label: 'Avg MFE (R)' },
-  { value: 'avgMaeR', label: 'Avg MAE (R)' },
   { value: 'avgPlannedRr', label: 'Plan R:R (avg reward ÷ avg risk)' },
+  { value: 'avgMoveR', label: 'Avg move (ATR)' },
   { value: 'avgRiskR', label: 'Avg risk (R)' },
   { value: 'avgRewardR', label: 'Avg reward (R)' },
   { value: 'sampleSize', label: 'Sample size' },
   { value: 'symbol', label: 'Symbol' },
 ]
-
-/** Dashboard bulk API has no true-R / research-only expectancy columns. */
-const DASHBOARD_SORT_EXCLUDE = new Set(['expectancyTrueR', 'expectancyR'])
 
 /** Client-side page size for Dashboard + Research tables. */
 const PAGE_SIZE = 100
@@ -69,6 +63,13 @@ function pct(value) {
 function num(value, digits = 2) {
   if (value == null || Number.isNaN(Number(value))) return '—'
   return Number(value).toFixed(digits)
+}
+
+function numSigned(value, digits = 2) {
+  if (value == null || Number.isNaN(Number(value))) return '—'
+  const n = Number(value)
+  const body = n.toFixed(digits)
+  return n > 0 ? `+${body}` : body
 }
 
 function formatCacheStamp(iso) {
@@ -102,28 +103,24 @@ function computeHighlightKeys(rows, sortKey, minSampleSize) {
   if (ready.length === 0) return new Set()
 
   const metric = (r) => {
-    if (sortKey === 'expectancyTrueR') return r.expectancyTrueR
+    if (sortKey === 'expectedR') return r.expectedR
     if (sortKey === 'avgMoveR') return r.avgMoveR
-    if (sortKey === 'expectancyR') return r.expectancyR ?? r.avgMoveR
-    if (sortKey === 'avgMfeR') return r.avgMfeR
-    if (sortKey === 'avgMaeR') return r.avgMaeR
     if (sortKey === 'avgPlannedRr') return r.avgPlannedRr
     if (sortKey === 'avgRiskR') return r.avgRiskR
     if (sortKey === 'avgRewardR') return r.avgRewardR
     if (sortKey === 'sampleSize') return r.sampleSize
     if (sortKey === 'symbol') return null
     if (sortKey === 'resolvedSuccessRate') return r.resolvedSuccessRate
-    return r.avgMoveR
+    return r.expectedR
   }
 
-  const ascending = sortKey === 'avgMaeR'
   const scored = ready
     .map((r) => ({ key: rowKey(r), v: metric(r) }))
     .filter((x) => x.v != null && !Number.isNaN(Number(x.v)))
 
   if (scored.length === 0) return new Set()
 
-  scored.sort((a, b) => (ascending ? a.v - b.v : b.v - a.v))
+  scored.sort((a, b) => b.v - a.v)
   const topN = Math.max(1, Math.ceil(scored.length * 0.25))
   return new Set(scored.slice(0, topN).map((x) => x.key))
 }
@@ -137,31 +134,22 @@ function sortRows(rows, sortKey, minSampleSize) {
       return aReady ? -1 : 1
     }
 
-    const cmpNum = (av, bv, asc = false) => {
+    const cmpNum = (av, bv) => {
       const aNull = av == null || Number.isNaN(Number(av))
       const bNull = bv == null || Number.isNaN(Number(bv))
       if (aNull && bNull) return 0
       if (aNull) return 1
       if (bNull) return -1
-      return asc ? Number(av) - Number(bv) : Number(bv) - Number(av)
+      return Number(bv) - Number(av)
     }
 
     let primary = 0
     switch (sortKey) {
-      case 'expectancyTrueR':
-        primary = cmpNum(a.expectancyTrueR, b.expectancyTrueR)
+      case 'expectedR':
+        primary = cmpNum(a.expectedR, b.expectedR)
         break
       case 'avgMoveR':
         primary = cmpNum(a.avgMoveR, b.avgMoveR)
-        break
-      case 'expectancyR':
-        primary = cmpNum(a.expectancyR ?? a.avgMoveR, b.expectancyR ?? b.avgMoveR)
-        break
-      case 'avgMfeR':
-        primary = cmpNum(a.avgMfeR, b.avgMfeR)
-        break
-      case 'avgMaeR':
-        primary = cmpNum(a.avgMaeR, b.avgMaeR, true)
         break
       case 'avgPlannedRr':
         primary = cmpNum(a.avgPlannedRr, b.avgPlannedRr)
@@ -182,15 +170,15 @@ function sortRows(rows, sortKey, minSampleSize) {
         primary = cmpNum(a.resolvedSuccessRate, b.resolvedSuccessRate)
         break
       default:
-        primary = cmpNum(a.avgMoveR, b.avgMoveR)
+        primary = cmpNum(a.expectedR, b.expectedR)
         break
     }
     if (primary !== 0) return primary
 
+    const edge = cmpNum(a.expectedR, b.expectedR)
+    if (edge !== 0) return edge
     const move = cmpNum(a.avgMoveR, b.avgMoveR)
     if (move !== 0) return move
-    const mfe = cmpNum(a.avgMfeR, b.avgMfeR)
-    if (mfe !== 0) return mfe
     const n = cmpNum(a.sampleSize, b.sampleSize)
     if (n !== 0) return n
     return symbolLabel(a).localeCompare(symbolLabel(b))
@@ -217,9 +205,15 @@ export default function PatternStatsPage() {
   const [timeframe, setTimeframe] = useState('all')
   const [readyOnly, setReadyOnly] = useState(false)
   const [symbolQuery, setSymbolQuery] = useState('')
-  const [sortKey, setSortKey] = useState(() =>
-    modeFromUrl === 'research' ? 'expectancyTrueR' : 'avgMoveR',
+  const [minExpectedRFilter, setMinExpectedRFilter] = useState('')
+  const [minExpectedRText, setMinExpectedRText] = useState(() =>
+    researchEnabled && modeFromUrl === 'research'
+      ? String(
+          withResearchDefaults(parseResearchFiltersFromSearch(searchParams)).minExpectedR ?? '',
+        )
+      : '',
   )
+  const [sortKey, setSortKey] = useState('expectedR')
   const [expanded, setExpanded] = useState(() => new Set())
 
   // Research — default maxRiskR ≤ 1.5 unless URL/preset overrides
@@ -245,15 +239,8 @@ export default function PatternStatsPage() {
       // merge research params
       const r = new URLSearchParams(qs)
       for (const [k, v] of r.entries()) sp.set(k, v)
-      // Prefer true stop-R when entering Research (presets ranked on this metric)
-      setSortKey((prev) =>
-        prev === 'avgMoveR' || DASHBOARD_SORT_EXCLUDE.has(prev) ? 'expectancyTrueR' : prev,
-      )
     } else {
       sp.delete('mode')
-      if (sortKey === 'expectancyTrueR' || sortKey === 'expectancyR') {
-        setSortKey('avgMoveR')
-      }
       // strip research-only keys
       ;[
         'flagConfirmed',
@@ -269,6 +256,7 @@ export default function PatternStatsPage() {
         'minPlannedRr',
         'minRiskR',
         'maxRiskR',
+        'minExpectedR',
         'requireValidRails',
         'groupBy',
         'direction',
@@ -378,13 +366,27 @@ export default function PatternStatsPage() {
         return label.includes(q) || id.includes(q)
       })
     }
+    const minEdge = Number(minExpectedRFilter)
+    if (mode === 'dashboard' && minExpectedRFilter !== '' && Number.isFinite(minEdge)) {
+      rows = rows.filter((r) => r.expectedR != null && Number(r.expectedR) >= minEdge)
+    }
     return sortRows(rows, sortKey, minSampleSize)
-  }, [items, readyOnly, symbolQuery, sortKey, minSampleSize])
+  }, [items, readyOnly, symbolQuery, minExpectedRFilter, sortKey, minSampleSize, mode])
 
   // Reset to page 1 when the visible set or mode changes
   useEffect(() => {
     setPage(1)
-  }, [mode, patternType, timeframe, readyOnly, symbolQuery, sortKey, researchApplied, items])
+  }, [
+    mode,
+    patternType,
+    timeframe,
+    readyOnly,
+    symbolQuery,
+    minExpectedRFilter,
+    sortKey,
+    researchApplied,
+    items,
+  ])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
@@ -427,6 +429,7 @@ export default function PatternStatsPage() {
     const next = withResearchDefaults(filters)
     setResearchDraft({ ...next })
     setResearchApplied({ ...next })
+    setMinExpectedRText(next.minExpectedR == null ? '' : String(next.minExpectedR))
     const sp = new URLSearchParams()
     sp.set('mode', 'research')
     const qs = serializeResearchFilters(next)
@@ -439,6 +442,7 @@ export default function PatternStatsPage() {
     const next = { ...DEFAULT_RESEARCH_FILTERS }
     setResearchDraft(next)
     setResearchApplied(next)
+    setMinExpectedRText('')
     const sp = new URLSearchParams({ mode: 'research' })
     const r = new URLSearchParams(serializeResearchFilters(next))
     for (const [k, v] of r.entries()) sp.set(k, v)
@@ -454,9 +458,8 @@ export default function PatternStatsPage() {
   }
 
   const showResearchCols = mode === 'research'
-  // expand + core cols (+ research extras); Chart column removed
-  // expand + symbol + type + tf + sfe + n + resolved% + [trueR + expATR] + move + mfe + mae + [win + loss] + plan + risk + reward + status
-  const colSpan = showResearchCols ? 18 : 14
+  // expand + symbol + type + tf + sfe + n + expectedR + resolved% + plan + move + risk + reward + status
+  const colSpan = 13
   const pageFrom = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1
   const pageTo = Math.min(safePage * PAGE_SIZE, filtered.length)
 
@@ -523,7 +526,7 @@ export default function PatternStatsPage() {
             <label>
               Sort by
               <select value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
-                {SORT_OPTIONS.filter((o) => !DASHBOARD_SORT_EXCLUDE.has(o.value)).map((o) => (
+                {SORT_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
@@ -537,6 +540,17 @@ export default function PatternStatsPage() {
                 placeholder="Filter symbol…"
                 value={symbolQuery}
                 onChange={(e) => setSymbolQuery(e.target.value)}
+              />
+            </label>
+            <label>
+              Min Expected R
+              <input
+                type="number"
+                step="0.1"
+                placeholder="e.g. 0.2"
+                title="Keep rows whose Expected R (WR × plan R:R − loss rate) is at least this"
+                value={minExpectedRFilter}
+                onChange={(e) => setMinExpectedRFilter(e.target.value)}
               />
             </label>
             <label className="stats-check">
@@ -560,8 +574,9 @@ export default function PatternStatsPage() {
           </div>
           <p className="stats-legend">
             Highlight = top quartile among <strong>Ready</strong> rows for current sort. S / F / E =
-            success / fail / expired. Plan R:R = avg reward (R) ÷ avg risk (R). Consolidation
-            excluded from planned rails.
+            success / fail / expired. <strong>Expected R</strong> = Resolved % × Plan R:R − (1 −
+            Resolved %). Assumes a win collects the plan and a loss costs 1R. MFE / MAE are in the
+            row detail.
           </p>
         </section>
       )}
@@ -714,6 +729,32 @@ export default function PatternStatsPage() {
             </div>
 
             <div className="rf-row">
+              <div className="rf-key">Expected R</div>
+              <div className="rf-val rf-val--3">
+                <input
+                  className="rf-control"
+                  type="number"
+                  step="0.1"
+                  placeholder="Min Expected R"
+                  title="Keep groups whose Expected R (Resolved % × Plan R:R − loss rate) is at least this. Applied after grouping."
+                  value={minExpectedRText}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    const n = Number(v)
+                    setMinExpectedRText(v)
+                    setResearchDraft((d) => ({
+                      ...d,
+                      minExpectedR: v.trim() === '' || !Number.isFinite(n) ? undefined : n,
+                    }))
+                  }}
+                />
+                <span className="rf-hint rf-hint--inline">
+                  WR × plan R:R − (1 − WR) · empty = no floor
+                </span>
+              </div>
+            </div>
+
+            <div className="rf-row">
               <div className="rf-key">Rails (ATR)</div>
               <div className="rf-val rf-val--3">
                 <input
@@ -764,8 +805,8 @@ export default function PatternStatsPage() {
               </div>
             </div>
             <p className="rf-hint">
-              Risk R = |entry−stop|÷ATR. Plan R:R = reward÷risk. High min risk can raise ATR avgMove without
-              improving true stop-R (move÷stop). Prefer plan RR + risk floor for offer quality.
+              Risk R = |entry−stop|÷ATR. Plan R:R = reward÷risk. Expected R uses those two with
+              Resolved % — it is the ranking number, not ATR move.
             </p>
 
             <div className="rf-row">
@@ -1003,10 +1044,9 @@ export default function PatternStatsPage() {
               </div>
             </div>
             <p className="rf-hint">
-              <strong>True stop-R</strong> = mean(move ÷ planned stop) — profit if 1R equals your stop.
-              <strong> Move / Exp (ATR R)</strong> = mean(move ÷ ATR) and can look strong with wide stops even
-              when planned R:R is poor. Default and all presets cap risk at ≤ {DEFAULT_MAX_RISK_R} ATR.
-              Built-in presets are ordered by true stop-R expectancy (highest profit first).
+              <strong>Expected R</strong> = Resolved % × Plan R:R − (1 − Resolved %). A win is assumed
+              to collect the plan; a loss costs 1R. Default and all presets cap risk at ≤{' '}
+              {DEFAULT_MAX_RISK_R} ATR. MFE / MAE / win-loss path live in the row detail.
             </p>
 
             {chips.length > 0 && (
@@ -1048,17 +1088,11 @@ export default function PatternStatsPage() {
             <div>
               <span
                 className="stats-detail__label"
-                title="mean(move_r / risk_r) — true stop-R expectancy"
+                title="Resolved % × Plan R:R − (1 − Resolved %)"
               >
-                True stop-R
+                Expected R
               </span>
-              <strong className="admin-mono">{num(researchSummary.expectancyTrueR)}</strong>
-            </div>
-            <div>
-              <span className="stats-detail__label" title="mean move in ATR units (not stop-R)">
-                Exp ATR (R)
-              </span>
-              <strong className="admin-mono">{num(researchSummary.expectancyR)}</strong>
+              <strong className="admin-mono">{numSigned(researchSummary.expectedR)}</strong>
             </div>
             <div>
               <span className="stats-detail__label">Plan R:R</span>
@@ -1127,23 +1161,10 @@ export default function PatternStatsPage() {
                     <th>TF</th>
                     <th>S / F / E</th>
                     <th>n</th>
+                    <th title="Resolved % × Plan R:R − (1 − Resolved %)">Expected R</th>
                     <th>Resolved %</th>
-                    {showResearchCols && (
-                      <th title="mean(move_r ÷ risk_r) — true stop-R expectancy (1R = planned stop)">
-                        True stop-R
-                      </th>
-                    )}
-                    {showResearchCols && (
-                      <th title="Avg terminal move in ATR units (same as Exp ATR; not stop-R)">
-                        Exp ATR
-                      </th>
-                    )}
-                    <th title="Average terminal move vs entry, in ATR units">Move (ATR)</th>
-                    <th>MFE (R)</th>
-                    <th>MAE (R)</th>
-                    {showResearchCols && <th>Win (R)</th>}
-                    {showResearchCols && <th>Loss (R)</th>}
                     <th title="avg(reward in R) ÷ avg(risk in R)">Plan R:R</th>
+                    <th title="Average terminal move vs entry, in ATR units">Move (ATR)</th>
                     <th>Risk (R)</th>
                     <th>Reward (R)</th>
                     <th>Status</th>
@@ -1251,27 +1272,14 @@ function FragmentRow({
           {item.successCount ?? 0} / {item.failCount ?? 0} / {item.expiredCount ?? 0}
         </td>
         <td className="admin-mono">{item.sampleSize ?? 0}</td>
+        <td className="admin-mono">
+          {ready ? numSigned(item.expectedR) : '—'}
+        </td>
         <td className="admin-mono">{ready ? pct(item.resolvedSuccessRate) : '—'}</td>
-        {showResearchCols && (
-          <td className="admin-mono" title={ready ? `n_true=${item.trueRrSampleSize ?? '—'}` : undefined}>
-            {ready ? num(item.expectancyTrueR) : '—'}
-          </td>
-        )}
-        {showResearchCols && (
-          <td className="admin-mono">{ready ? num(item.expectancyR ?? item.avgMoveR) : '—'}</td>
-        )}
-        <td className="admin-mono">{ready ? num(item.avgMoveR) : '—'}</td>
-        <td className="admin-mono">{ready ? num(item.avgMfeR) : '—'}</td>
-        <td className="admin-mono">{ready ? num(item.avgMaeR) : '—'}</td>
-        {showResearchCols && (
-          <td className="admin-mono">{ready ? num(item.avgWinMoveR) : '—'}</td>
-        )}
-        {showResearchCols && (
-          <td className="admin-mono">{ready ? num(item.avgLossMoveR) : '—'}</td>
-        )}
         <td className="admin-mono">
           {ready && item.avgPlannedRr != null ? `${num(item.avgPlannedRr)}×` : '—'}
         </td>
+        <td className="admin-mono">{ready ? num(item.avgMoveR) : '—'}</td>
         <td className="admin-mono">{ready ? num(item.avgRiskR) : '—'}</td>
         <td className="admin-mono">{ready ? num(item.avgRewardR) : '—'}</td>
         <td>
@@ -1311,6 +1319,14 @@ function FragmentRow({
                 </span>
               </div>
               <div>
+                <span className="stats-detail__label">MFE (R)</span>
+                <span className="admin-mono">{ready ? num(item.avgMfeR) : '—'}</span>
+              </div>
+              <div>
+                <span className="stats-detail__label">MAE (R)</span>
+                <span className="admin-mono">{ready ? num(item.avgMaeR) : '—'}</span>
+              </div>
+              <div>
                 <span className="stats-detail__label">MFE samples</span>
                 <span className="admin-mono">{item.mfeSampleSize ?? '—'}</span>
               </div>
@@ -1318,6 +1334,18 @@ function FragmentRow({
                 <span className="stats-detail__label">MAE samples</span>
                 <span className="admin-mono">{item.maeSampleSize ?? '—'}</span>
               </div>
+              {showResearchCols && (
+                <div>
+                  <span className="stats-detail__label">Win (R)</span>
+                  <span className="admin-mono">{ready ? num(item.avgWinMoveR) : '—'}</span>
+                </div>
+              )}
+              {showResearchCols && (
+                <div>
+                  <span className="stats-detail__label">Loss (R)</span>
+                  <span className="admin-mono">{ready ? num(item.avgLossMoveR) : '—'}</span>
+                </div>
+              )}
               <div>
                 <span className="stats-detail__label">Planned R:R samples</span>
                 <span className="admin-mono">{item.plannedRrSampleSize ?? '—'}</span>

@@ -60,6 +60,17 @@ describe('researchFilters codec', () => {
     expect(parsed.minPlannedRr).toBeUndefined()
   })
 
+  it('round-trips minExpectedR including negatives', () => {
+    const qs = serializeResearchFilters({ minExpectedR: -0.25, maxRiskR: 1.5 })
+    const parsed = parseResearchFiltersFromSearch(qs)
+    expect(parsed.minExpectedR).toBe(-0.25)
+    const chips = researchFilterChips(parsed)
+    expect(chips.some((c) => c.key === 'minExpectedR' && c.label.includes('-0.25'))).toBe(
+      true,
+    )
+    expect(parseResearchFiltersFromSearch('minExpectedR=nan').minExpectedR).toBeUndefined()
+  })
+
   it('earliest detect date is maxRange-1 days before today IST', () => {
     const now = new Date('2026-08-17T10:00:00+05:30')
     expect(todayIstYmd(now)).toBe('2026-08-17')

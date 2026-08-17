@@ -63,6 +63,9 @@ class ResearchFilterSpec:
     # Any of min/max risk or min planned RR implies require_valid_rails.
     min_risk_r: float | None = None
     max_risk_r: float | None = None
+    # Post-aggregation group filter: keep buckets with Expected R >= this.
+    # Expected R = resolved WR × plan R:R − (1 − WR). May be negative.
+    min_expected_r: float | None = None
     require_valid_rails: bool = False
     detector_versions: list[str] | None = None
     group_by: str = "symbol,patternType,timeframe"
@@ -118,6 +121,8 @@ class ResearchFilterSpec:
             out["minRiskR"] = self.min_risk_r
         if self.max_risk_r is not None:
             out["maxRiskR"] = self.max_risk_r
+        if self.min_expected_r is not None:
+            out["minExpectedR"] = self.min_expected_r
         if self.detector_versions is not None:
             out["detectorVersion"] = list(self.detector_versions)
         return out
@@ -211,6 +216,19 @@ def parse_nonneg_float(raw: Any, param_name: str) -> float | None:
         raise ResearchFilterError(f"invalid {param_name}: {raw!r}") from exc
     if not math.isfinite(value) or value < 0:
         raise ResearchFilterError(f"{param_name} must be a finite number >= 0")
+    return value
+
+
+def parse_finite_float(raw: Any, param_name: str) -> float | None:
+    """Parse optional finite float (negatives allowed); empty → None."""
+    if raw is None or str(raw).strip() == "":
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ResearchFilterError(f"invalid {param_name}: {raw!r}") from exc
+    if not math.isfinite(value):
+        raise ResearchFilterError(f"{param_name} must be a finite number")
     return value
 
 
@@ -344,6 +362,7 @@ def parse_research_filters(
     min_planned_rr = parse_nonneg_float(g("minPlannedRr"), "minPlannedRr")
     min_risk_r = parse_nonneg_float(g("minRiskR"), "minRiskR")
     max_risk_r = parse_nonneg_float(g("maxRiskR"), "maxRiskR")
+    min_expected_r = parse_finite_float(g("minExpectedR"), "minExpectedR")
     if (
         min_risk_r is not None
         and max_risk_r is not None
@@ -401,6 +420,7 @@ def parse_research_filters(
         min_planned_rr=min_planned_rr,
         min_risk_r=min_risk_r,
         max_risk_r=max_risk_r,
+        min_expected_r=min_expected_r,
         require_valid_rails=require_valid_rails,
         detector_versions=detector_versions,
         group_by=group_by,
@@ -456,8 +476,7 @@ def row_matches_filters(
     """Return True if a closed instance+outcome row matches the research filter.
 
     ``risk_r`` / ``planned_rr`` come from ``compute_planned_rails`` (ATR units).
-    True stop-R expectancy is research-side: move_r / risk_r; filters here only
-    subset the instance set by planned rails geometry.
+    ``minExpectedR`` is applied after aggregation on the group Expected R, not here.
     """
     if symbol_id not in allowed_symbol_ids:
         return False

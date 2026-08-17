@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
+from app.patterns.expected_r import expected_r
 from app.patterns.outcome_reasons import SKIP_EXCURSION_REASONS
 from app.patterns.planned_rails import compute_planned_rails, median_planned_rr
 from app.patterns.research_filters import DISCLAIMER, ResearchFilterSpec
@@ -82,9 +83,6 @@ class _Bucket:
     win_move_n: int = 0
     loss_move_sum: float = 0.0
     loss_move_n: int = 0
-    # True stop-R: mean(move_r / risk_r) when 1R = planned stop distance
-    true_r_sum: float = 0.0
-    true_r_n: int = 0
 
     @property
     def sample_size(self) -> int:
@@ -124,10 +122,27 @@ class _Bucket:
                 self.reward_sum += rails.reward_r
                 self.rails_n += 1
                 self.planned_rrs.append(rails.planned_rr)
-                # True stop-R only when path move and stop distance both defined
-                if row.move_r is not None and rails.risk_r > 0:
-                    self.true_r_sum += float(row.move_r) / float(rails.risk_r)
-                    self.true_r_n += 1
+
+    def absorb(self, other: "_Bucket") -> None:
+        self.success += other.success
+        self.fail += other.fail
+        self.expired += other.expired
+        self.duration_sum += other.duration_sum
+        self.duration_n += other.duration_n
+        self.move_sum += other.move_sum
+        self.move_n += other.move_n
+        self.mfe_sum += other.mfe_sum
+        self.mfe_n += other.mfe_n
+        self.mae_sum += other.mae_sum
+        self.mae_n += other.mae_n
+        self.risk_sum += other.risk_sum
+        self.reward_sum += other.reward_sum
+        self.rails_n += other.rails_n
+        self.planned_rrs.extend(other.planned_rrs)
+        self.win_move_sum += other.win_move_sum
+        self.win_move_n += other.win_move_n
+        self.loss_move_sum += other.loss_move_sum
+        self.loss_move_n += other.loss_move_n
 
 
 def group_key(row: ResearchRow, group_by: str) -> tuple[str, str, str]:
@@ -201,12 +216,11 @@ def bucket_to_item(
         "minPlannedRr": (min(b.planned_rrs) if b.planned_rrs and ready else None),
         "maxPlannedRr": (max(b.planned_rrs) if b.planned_rrs and ready else None),
         "medianPlannedRr": med if ready and b.rails_n > 0 else None,
-        "expectancyR": avg_move if ready else None,
-        # True stop-R expectancy: mean(move_r / risk_r); null when not ready or no samples
-        "expectancyTrueR": (
-            _avg(b.true_r_sum, b.true_r_n) if ready and b.true_r_n > 0 else None
+        "expectedR": (
+            expected_r(resolved_rate, avg_planned)
+            if ready
+            else None
         ),
-        "trueRrSampleSize": b.true_r_n,
         "avgWinMoveR": (
             _avg(b.win_move_sum, b.win_move_n) if ready and b.win_move_n > 0 else None
         ),
@@ -218,22 +232,32 @@ def bucket_to_item(
 
 
 def research_sort_key(item: dict[str, Any]) -> tuple:
-    """Ready first → true stop-R desc → resolvedSuccessRate desc → sampleSize → keys."""
+    """Ready first → Expected R desc → resolvedSuccessRate desc → sampleSize → keys."""
     ready = 0 if item.get("status") == "ok" else 1
-    true_r = item.get("expectancyTrueR")
-    true_key = -(true_r if true_r is not None else -1.0e9)
+    edge = item.get("expectedR")
+    edge_key = -(edge if edge is not None else -1.0e9)
     rate = item.get("resolvedSuccessRate")
     rate_key = -(rate if rate is not None else -1.0)
     n = -int(item.get("sampleSize") or 0)
     return (
         ready,
-        true_key,
+        edge_key,
         rate_key,
         n,
         str(item.get("symbolId") or ""),
         str(item.get("patternType") or ""),
         str(item.get("timeframe") or ""),
     )
+
+
+def _passes_min_expected_r(item: dict[str, Any], floor: float) -> bool:
+    edge = item.get("expectedR")
+    if edge is None:
+        return False
+    try:
+        return float(edge) >= floor
+    except (TypeError, ValueError):
+        return False
 
 
 def aggregate_research(
@@ -249,12 +273,8 @@ def aggregate_research(
     """
     labels = symbol_labels or {}
     buckets: dict[tuple[str, str, str], _Bucket] = {}
-    summary_bucket = _Bucket("*", "*", "*")
-    total = 0
 
     for row in rows:
-        total += 1
-        summary_bucket.add(row)
         key = group_key(row, spec.group_by)
         b = buckets.get(key)
         if b is None:
@@ -263,16 +283,19 @@ def aggregate_research(
         b.add(row)
 
     min_n = spec.min_sample_size
-    items_all = []
-    ready_group_count = 0
+    kept: list[tuple[tuple[str, str, str], dict[str, Any]]] = []
     for key, b in buckets.items():
         ts, dn = (None, None)
         if b.symbol_id != "*":
             ts, dn = labels.get(b.symbol_id, (None, None))
         item = bucket_to_item(b, min_n=min_n, trading_symbol=ts, display_name=dn)
-        if item["status"] == "ok":
-            ready_group_count += 1
-        items_all.append(item)
+        if spec.min_expected_r is None or _passes_min_expected_r(
+            item, spec.min_expected_r
+        ):
+            kept.append((key, item))
+
+    items_all = [it for _, it in kept]
+    ready_group_count = sum(1 for it in items_all if it["status"] == "ok")
 
     items_all.sort(key=research_sort_key)
     total_groups = len(items_all)
@@ -280,6 +303,11 @@ def aggregate_research(
     items = items_all[:limit]
     truncated = total_groups > len(items)
 
+    # Summary matches surviving groups when minExpectedR dropped any.
+    summary_bucket = _Bucket("*", "*", "*")
+    for key, _ in kept:
+        summary_bucket.absorb(buckets[key])
+    total = summary_bucket.sample_size
     summary_item = bucket_to_item(summary_bucket, min_n=min_n)
     summary = {
         "sampleSize": summary_item["sampleSize"],
@@ -291,11 +319,9 @@ def aggregate_research(
         "readyGroupCount": ready_group_count,
         "successRate": summary_item["successRate"],
         "resolvedSuccessRate": summary_item["resolvedSuccessRate"],
-        "expectancyR": summary_item["expectancyR"],
-        "expectancyTrueR": summary_item["expectancyTrueR"],
+        "expectedR": summary_item["expectedR"],
         "avgMoveR": summary_item["avgMoveR"],
         "avgPlannedRr": summary_item["avgPlannedRr"],
-        "trueRrSampleSize": summary_item["trueRrSampleSize"],
         "scannedFrom": (
             spec.detected_from.isoformat() if spec.detected_from else None
         ),
@@ -335,11 +361,9 @@ def empty_research_response(spec: ResearchFilterSpec) -> dict[str, Any]:
             "readyGroupCount": 0,
             "successRate": None,
             "resolvedSuccessRate": None,
-            "expectancyR": None,
-            "expectancyTrueR": None,
+            "expectedR": None,
             "avgMoveR": None,
             "avgPlannedRr": None,
-            "trueRrSampleSize": 0,
             "scannedFrom": (
                 spec.detected_from.isoformat() if spec.detected_from else None
             ),

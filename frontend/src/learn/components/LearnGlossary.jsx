@@ -26,7 +26,7 @@ const PATTERN_TERMS = [
   {
     term: 'R-unit (R)',
     gloss:
-      'One unit of risk for a setup, usually ATR at detect. Moves, targets, MFE, and MAE are often measured in R so different symbols are comparable. “True stop-R” instead uses the planned stop distance as 1R.',
+      'One unit of risk for a setup, usually ATR at detect. Moves, targets, MFE, and MAE are often measured in R so different symbols are comparable. Expected R treats 1R as the planned stop on a loss.',
   },
   {
     term: 'Confirmation modes',
@@ -89,12 +89,12 @@ const STATS_TERMS = [
   {
     term: 'MAE (Maximum Adverse Excursion)',
     gloss:
-      'Worst move against the virtual trade before it ended — “how much pain before exit?” Also updated every open bar and kept on success and fail. Lower average MAE (R) is usually better. Stats sorts MAE ascending when you pick that sort.',
+      'Worst move against the virtual trade before it ended — “how much pain before exit?” Also updated every open bar and kept on success and fail. Lower average MAE (R) is usually better. Shown in the row detail.',
   },
   {
     term: 'MFE (R) / MAE (R)',
     gloss:
-      'MFE or MAE divided by the setup’s R-unit (typically ATR at detect). Using R makes a ₹2 stock comparable to a ₹2000 stock. Not the same as target/stop — those end the trade; MFE/MAE score the path.',
+      'MFE or MAE divided by the setup’s R-unit (typically ATR at detect). Using R makes a ₹2 stock comparable to a ₹2000 stock. Shown in the Stats row detail, not the main table. Not the same as target/stop — those end the trade; MFE/MAE score the path.',
   },
   {
     term: 'Target vs stop vs MFE/MAE',
@@ -104,22 +104,17 @@ const STATS_TERMS = [
   {
     term: 'Move (ATR) / Avg move (R)',
     gloss:
-      'Average signed terminal move in ATR units: (end − entry) ÷ ATR at detect (short sign flipped). This is what Dashboard “Move (ATR)” and Research “Exp ATR” use. It is not the same as profit if you size risk to the stop.',
+      'Average signed terminal move in ATR units: (end − entry) ÷ ATR at detect (short sign flipped). Path distance, not profit if you size risk to the stop. Expected R is the profit-ranking column.',
   },
   {
-    term: 'Expectancy ATR (Exp ATR / expectancyR)',
+    term: 'Expected R (expectedR)',
     gloss:
-      'Research label for the same idea as avg move in ATR: mean of terminal move_r over eligible samples. Ready-gated like other means. Do not confuse with True stop-R.',
-  },
-  {
-    term: 'True stop-R (expectancyTrueR)',
-    gloss:
-      'Mean of (terminal move ÷ planned stop distance) = mean(move_r / risk_r). This is expectancy if 1R equals your planned stop. Wide stops can make ATR move look great while true stop-R is modest. Research default sort and the built-in preset list order use this metric.',
+      'Main ranking number: Resolved % × Plan R:R − (1 − Resolved %). Assumes a win collects the planned target and a loss costs 1R. Example: 40% wins at 2.5× plan = +0.40R per trade. Filter with Min Expected R on Dashboard and Research. Null when the bucket is Building or has no resolved rate / planned rails.',
   },
   {
     term: 'Win (R) / Loss (R)',
     gloss:
-      'Research-only: average ATR move on succeeded outcomes vs failed outcomes (diagnostic split of the move sample). Not the same as true stop-R win/loss.',
+      'Research-only: average ATR move on succeeded outcomes vs failed outcomes. Diagnostic split in the row detail, not the ranking metric.',
   },
   {
     term: 'Planned rails',
@@ -129,7 +124,7 @@ const STATS_TERMS = [
   {
     term: 'Risk (R) / avgRiskR',
     gloss:
-      'Planned stop distance in ATR: |entry − stop| ÷ ATR at detect. “Min risk R” / “Max risk R” filters select setups by this size. Research defaults to max risk ≤ 1.5 ATR (and every built-in preset includes that cap). Very small risk_r can inflate true stop-R when a full ATR target is hit.',
+      'Planned stop distance in ATR: |entry − stop| ÷ ATR at detect. “Min risk R” / “Max risk R” filters select setups by this size. Research defaults to max risk ≤ 1.5 ATR (and every built-in preset includes that cap).',
   },
   {
     term: 'Reward (R) / avgRewardR',
@@ -158,7 +153,7 @@ const STATS_TERMS = [
   {
     term: 'Ready vs Building',
     gloss:
-      'Ready means the bucket has enough history (sample size ≥ minimum, default 20) so rates and averages are shown. Building means too few samples — you still see S/F/E and n, but Resolved %, Move, MFE, MAE, rails, and True stop-R show as “—”.',
+      'Ready means the bucket has enough history (sample size ≥ minimum, default 20) so rates and averages are shown. Building means too few samples — you still see S/F/E and n, but Resolved %, Expected R, Move, rails, and path detail show as “—”.',
   },
   {
     term: 'Minimum sample size',
@@ -172,7 +167,7 @@ const STATS_TERMS = [
   {
     term: 'Highlight (top quartile)',
     gloss:
-      'On Stats, among Ready rows on the current page, the top 25% by the active sort metric are highlighted. For MAE, “top” means lowest adverse excursion.',
+      'On Stats, among Ready rows on the current page, the top 25% by the active sort metric are highlighted. Default sort is Expected R.',
   },
   {
     term: 'Virtual journal',
@@ -185,7 +180,7 @@ const RESEARCH_TERMS = [
   {
     term: 'Research mode',
     gloss:
-      'Admin-only Stats mode. Applies composable stack filters to closed instance+outcome rows and recomputes S/F/E, rates, path metrics, rails, and true stop-R on the matching set. Needs Postgres journal.',
+      'Admin-only Stats mode. Applies composable stack filters to closed instance+outcome rows and recomputes S/F/E, rates, Expected R, rails, and path metrics on the matching set. Needs Postgres journal.',
   },
   {
     term: 'Stack filters',
@@ -195,17 +190,17 @@ const RESEARCH_TERMS = [
   {
     term: 'Stack preset',
     gloss:
-      'Saved filter pack. Built-in list is ordered by true stop-R expectancy on production journal research (highest profit first). You can also save your own in the browser.',
+      'Saved filter pack. Table ranking uses Expected R. You can also save your own in the browser.',
   },
   {
-    term: 'True-R presets',
+    term: 'Min Expected R',
     gloss:
-      'Built-in Research stacks ordered by true stop-R expectancy (highest profit first) from production research. Prefer higher ranks for stop-sized risk; check sample size (n) — thin stacks can rank high by chance.',
+      'Keep only groups whose Expected R is at least this value. Research applies it after grouping (URL minExpectedR) and rebuilds the summary strip from the surviving groups. Dashboard has a matching client filter. Groups without a computable Expected R are dropped when the floor is set.',
   },
   {
     term: 'Matched n',
     gloss:
-      'How many closed outcomes matched the current Research filters (summary strip). Can be larger than the table row count when results are grouped.',
+      'How many closed outcomes are in the current Research result (summary strip). After a Min Expected R floor this is only the surviving groups. Can be larger than the table row count when results are grouped.',
   },
   {
     term: 'Ready groups',
@@ -225,7 +220,7 @@ const RESEARCH_TERMS = [
   {
     term: 'Confirmed (flag)',
     gloss:
-      'Lifecycle flag: setup reached confirmation after detect (volume and/or later close still valid, per pattern). Strong quality filter in True-R stacks.',
+      'Lifecycle flag: setup reached confirmation after detect (volume and/or later close still valid, per pattern). Common quality filter in built-in stacks.',
   },
   {
     term: 'Retested (flag)',
@@ -260,7 +255,7 @@ const RESEARCH_TERMS = [
   {
     term: 'Min plan R:R',
     gloss:
-      'Require planned_rr ≥ this value (reward/risk on rails). Implies valid rails. Pairs well with a minimum risk floor so tiny stops do not dominate true stop-R.',
+      'Require planned_rr ≥ this value (reward/risk on rails). Implies valid rails. Pairs with Expected R: a fatter plan helps only if Resolved % stays high enough.',
   },
   {
     term: 'Min / Max risk R',
@@ -305,18 +300,17 @@ export default function LearnGlossary() {
       <h3 className="learn-glossary__section">Pattern basics</h3>
       <TermList terms={PATTERN_TERMS} />
 
-      <h3 className="learn-glossary__section">Stats dashboard (S/F/E, Move, MFE, MAE, rails)</h3>
+      <h3 className="learn-glossary__section">Stats dashboard (Expected R, S/F/E, rails)</h3>
       <p className="learn-glossary__hint">
         Labels on Stats (/patterns/stats) Dashboard. Virtual journal results after each setup ends —
         research metrics, not live P&amp;L or paper OMS fills.
       </p>
       <TermList terms={STATS_TERMS} />
 
-      <h3 className="learn-glossary__section">Research mode (stack filters, True stop-R)</h3>
+      <h3 className="learn-glossary__section">Research mode (stack filters, Expected R)</h3>
       <p className="learn-glossary__hint">
         ADMIN Research mode on the same Stats page. Stack filters recompute metrics on the matching
-        closed-outcome set. Prefer True stop-R when judging offer quality; ATR move can flatter wide
-        stops.
+        closed-outcome set. Rank and filter by Expected R (Resolved % combined with Plan R:R).
       </p>
       <TermList terms={RESEARCH_TERMS} />
     </details>

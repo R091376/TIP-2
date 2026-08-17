@@ -10,6 +10,7 @@ from app.patterns.breakout import evaluate_breakout_bar
 from app.patterns.breakdown import evaluate_breakdown_bar
 from app.patterns.consolidation import evaluate_consolidation_bar
 from app.patterns.engulfing import evaluate_engulfing_bar
+from app.patterns.expected_r import expected_r
 from app.patterns.inside_bar import evaluate_inside_bar
 from app.patterns.journal import PatternJournal
 from app.patterns.lifecycle_support import expire
@@ -177,6 +178,10 @@ class PatternEvaluator:
             body["minPlannedRr"] = None
             body["maxPlannedRr"] = None
             body["medianPlannedRr"] = None
+        body["expectedR"] = expected_r(
+            body.get("resolvedSuccessRate"),
+            body.get("avgPlannedRr"),
+        )
         return body
 
     def bulk_statistics(
@@ -523,15 +528,19 @@ def _snapshot_to_bulk_item(s, entry, min_n: int) -> dict:
         ),
         "plannedRrSampleSize": s.planned_rr_sample_size,
     }
+    item["expectedR"] = expected_r(
+        item.get("resolvedSuccessRate"),
+        item.get("avgPlannedRr"),
+    )
     return item
 
 
 def _bulk_stats_sort_key(r: dict):
-    """Ready rows first, then success rate desc, then sample size desc."""
-    rate = r.get("successRate")
+    """Ready first, then Expected R desc, then sample size desc."""
+    edge = r.get("expectedR")
     return (
         0 if r.get("status") == "ok" else 1,
-        -(rate if rate is not None else -1.0),
+        -(edge if edge is not None else -1.0e9),
         -int(r.get("sampleSize") or 0),
     )
 

@@ -21,6 +21,8 @@ export type PatternStatisticsItem = {
   avgDurationCandles: number | null
   avgMfeR: number | null
   avgMaeR: number | null
+  /** Expected R = resolved WR × plan R:R − (1 − WR) */
+  expectedR?: number | null
   /** Planned R:R = avgRewardR / avgRiskR (ratio of averages from final rails) */
   avgPlannedRr: number | null
   /** Average |entry−stop| / ATR at detect */
@@ -36,11 +38,6 @@ export type PatternStatisticsItem = {
   maeSampleSize?: number | null
   plannedRrSampleSize?: number | null
   updatedAt?: string | null
-  /** Research-only */
-  expectancyR?: number | null
-  /** Research-only: mean(move_r / risk_r) — true stop-R expectancy */
-  expectancyTrueR?: number | null
-  trueRrSampleSize?: number | null
   avgWinMoveR?: number | null
   avgLossMoveR?: number | null
 }
@@ -66,12 +63,9 @@ export type ResearchSummary = {
   readyGroupCount: number
   successRate: number | null
   resolvedSuccessRate: number | null
-  expectancyR: number | null
-  /** mean(move_r / risk_r) when 1R = planned stop */
-  expectancyTrueR: number | null
+  expectedR: number | null
   avgMoveR: number | null
   avgPlannedRr: number | null
-  trueRrSampleSize?: number | null
   scannedFrom: string | null
   scannedTo: string | null
 }
@@ -143,7 +137,7 @@ export async function fetchResearchStatistics(
       readyGroupCount: 0,
       successRate: null,
       resolvedSuccessRate: null,
-      expectancyR: null,
+      expectedR: null,
       avgMoveR: null,
       avgPlannedRr: null,
       scannedFrom: null,
