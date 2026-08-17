@@ -72,6 +72,33 @@ def test_parse_range_exceeds_max():
         )
 
 
+def test_parse_clamps_from_to_max_lookback_start():
+    from app.patterns.research_filters import lookback_start
+
+    today = today_ist()
+    earliest = lookback_start(today, max_range_days=180)
+    # Legal 180-day span that starts before the trailing window.
+    to = today - timedelta(days=30)
+    frm = to - timedelta(days=179)
+    spec = parse_research_filters(
+        {"detectedFrom": frm.isoformat(), "detectedTo": to.isoformat()},
+        max_range_days=180,
+    )
+    assert spec.detected_from == earliest
+    assert spec.detected_to == to
+
+
+def test_parse_rejects_range_entirely_before_lookback():
+    today = today_ist()
+    to = today - timedelta(days=200)
+    frm = to - timedelta(days=30)
+    with pytest.raises(ResearchFilterError, match="cannot be before"):
+        parse_research_filters(
+            {"detectedFrom": frm.isoformat(), "detectedTo": to.isoformat()},
+            max_range_days=180,
+        )
+
+
 def test_min_sample_size_clamp():
     spec = parse_research_filters({"minSampleSize": "1"}, default_min_sample_size=20)
     assert spec.min_sample_size == 5
@@ -248,7 +275,11 @@ def _row(**kwargs) -> ResearchRow:
 
 def test_aggregate_expectancy_and_ready_gate():
     spec = parse_research_filters(
-        {"minSampleSize": "5", "detectedFrom": "2020-01-01", "detectedTo": "2020-01-10"},
+        {
+            "minSampleSize": "5",
+            "detectedFrom": today_ist().isoformat(),
+            "detectedTo": today_ist().isoformat(),
+        },
         max_range_days=180,
     )
     # 3 wins, 2 fails — not ready for min 5? sample=5 ready
@@ -279,7 +310,11 @@ def test_aggregate_expectancy_and_ready_gate():
 def test_expectancy_true_r_divides_by_stop_distance():
     """true R = move_r / risk_r; wide stop shrinks true R vs ATR move."""
     spec = parse_research_filters(
-        {"minSampleSize": "5", "detectedFrom": "2020-01-01", "detectedTo": "2020-01-10"},
+        {
+            "minSampleSize": "5",
+            "detectedFrom": today_ist().isoformat(),
+            "detectedTo": today_ist().isoformat(),
+        },
         max_range_days=180,
     )
     # entry=100, stop=98, atr=1 → risk_r=2; move_r=1 → true_r=0.5 each
@@ -303,7 +338,11 @@ def test_expectancy_true_r_divides_by_stop_distance():
 def test_startup_recovery_skipped_from_path_and_rails():
     # minSampleSize clamps to >=5 — seed 5 rows so rates unlock
     spec = parse_research_filters(
-        {"minSampleSize": "5", "detectedFrom": "2020-01-01", "detectedTo": "2020-01-10"},
+        {
+            "minSampleSize": "5",
+            "detectedFrom": today_ist().isoformat(),
+            "detectedTo": today_ist().isoformat(),
+        },
         max_range_days=180,
     )
     rows = [

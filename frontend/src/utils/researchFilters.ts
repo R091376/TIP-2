@@ -39,6 +39,25 @@ export type ResearchFilterParams = {
   limitGroups?: number
 }
 
+/** Matches backend TIP_RESEARCH_STATS_MAX_RANGE_DAYS default. */
+export const RESEARCH_MAX_RANGE_DAYS = 180
+
+export function todayIstYmd(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(now)
+}
+
+/** Earliest detect date the UI should offer (today IST − (maxDays − 1)). */
+export function researchEarliestDetectYmd(
+  maxDays: number = RESEARCH_MAX_RANGE_DAYS,
+  now: Date = new Date(),
+): string {
+  const today = todayIstYmd(now)
+  const [y, m, d] = today.split('-').map(Number)
+  const utc = new Date(Date.UTC(y, (m || 1) - 1, d || 1))
+  utc.setUTCDate(utc.getUTCDate() - (Math.max(1, maxDays) - 1))
+  return utc.toISOString().slice(0, 10)
+}
+
 const GROUP_BY_ALLOWED = new Set<string>([
   'symbol,patternType,timeframe',
   'patternType,timeframe',

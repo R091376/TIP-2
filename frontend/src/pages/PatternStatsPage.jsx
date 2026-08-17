@@ -13,9 +13,11 @@ import {
   deleteUserPreset,
   loadUserPresets,
   parseResearchFiltersFromSearch,
+  researchEarliestDetectYmd,
   researchFilterChips,
   saveUserPreset,
   serializeResearchFilters,
+  todayIstYmd,
   withResearchDefaults,
 } from '../utils/researchFilters'
 import './authPages.css'
@@ -67,6 +69,20 @@ function pct(value) {
 function num(value, digits = 2) {
   if (value == null || Number.isNaN(Number(value))) return '—'
   return Number(value).toFixed(digits)
+}
+
+function formatCacheStamp(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }) + ' IST'
 }
 
 function rowKey(item) {
@@ -308,6 +324,7 @@ export default function PatternStatsPage() {
         truncated: data.truncated,
         disclaimer: data.disclaimer,
         filters: data.filters,
+        cache: data.cache || null,
       })
       // Hydrate dates from server echo when client omitted them
       const f = data.filters || {}
@@ -759,6 +776,8 @@ export default function PatternStatsPage() {
                   type="date"
                   title="From (IST)"
                   aria-label="Detect from IST"
+                  min={researchEarliestDetectYmd()}
+                  max={todayIstYmd()}
                   value={researchDraft.detectedFrom || ''}
                   onChange={(e) =>
                     setResearchDraft((d) => ({
@@ -772,6 +791,8 @@ export default function PatternStatsPage() {
                   type="date"
                   title="To (IST)"
                   aria-label="Detect to IST"
+                  min={researchEarliestDetectYmd()}
+                  max={todayIstYmd()}
                   value={researchDraft.detectedTo || ''}
                   onChange={(e) =>
                     setResearchDraft((d) => ({
@@ -811,8 +832,8 @@ export default function PatternStatsPage() {
             <div className="rf-row rf-row--hint">
               <div className="rf-key" />
               <div className="rf-val rf-hint">
-                Dates · session times (IST candle). Empty dates → last 180 days. Session filter
-                excludes 1d.
+                Dates · session times (IST candle). Empty dates → last 180 days. Oldest
+                allowed date is 180 days back. Session filter excludes 1d.
               </div>
             </div>
 
@@ -1064,6 +1085,13 @@ export default function PatternStatsPage() {
               </div>
             )}
           </div>
+          {researchMeta?.cache && (
+            <p className="stats-summary__cache" title="Closed journal rows loaded once per day; filter changes run in memory">
+              {researchMeta.cache.hit
+                ? `Snapshot ${formatCacheStamp(researchMeta.cache.loadedAt)} · ${(researchMeta.cache.rowCount ?? 0).toLocaleString()} rows · filters in memory`
+                : 'Live database query (snapshot unavailable)'}
+            </p>
+          )}
         </section>
       )}
 

@@ -160,6 +160,32 @@ class AppContainer:
         self._bg_thread = threading.Thread(target=_reconcile, name="reconciler", daemon=True)
         self._bg_thread.start()
 
+        def _research_cache_loop() -> None:
+            journal = self.pattern_journal
+            warm = getattr(journal, "warm_research_cache", None)
+            refresh = getattr(journal, "refresh_research_cache_if_stale", None)
+            if callable(warm):
+                try:
+                    warm()
+                except Exception:
+                    logger.exception("Research cache initial load failed")
+            while self._bg_stop and not self._bg_stop.is_set():
+                self._bg_stop.wait(60.0)
+                if self._bg_stop.is_set():
+                    break
+                if callable(refresh):
+                    try:
+                        refresh()
+                    except Exception:
+                        logger.exception("Research cache refresh failed")
+
+        if getattr(self.settings, "research_stats_cache_enabled", True) and getattr(
+            self.pattern_journal, "supports_research_aggregation", lambda: False
+        )():
+            threading.Thread(
+                target=_research_cache_loop, name="research-cache", daemon=True
+            ).start()
+
         if self.paper_service is not None:
             try:
                 self.paper_service.start()
@@ -222,7 +248,21 @@ def build_container(settings: Settings | None = None) -> AppContainer:
             mig_dir = Path(__file__).resolve().parent.parent / "db" / "migration"
             apply_flyway_sql(engine, mig_dir)
             watchlist_repo = PostgresWatchlistRepository(session_factory)
-            pattern_journal = PostgresPatternJournal(session_factory)
+            pattern_journal = PostgresPatternJournal(
+                session_factory,
+                research_cache_enabled=bool(
+                    getattr(settings, "research_stats_cache_enabled", True)
+                ),
+                research_cache_ttl_seconds=int(
+                    getattr(settings, "research_stats_cache_ttl_seconds", 86_400)
+                ),
+                research_max_range_days=int(
+                    getattr(settings, "research_stats_max_range_days", 180)
+                ),
+                research_cache_load_timeout_ms=int(
+                    getattr(settings, "research_stats_cache_load_timeout_ms", 30_000)
+                ),
+            )
             logger.info(
                 "Using Postgres watchlist + journal + users (%s)",
                 db_url.split("@")[-1] if "@" in db_url else db_url,

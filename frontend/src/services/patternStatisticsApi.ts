@@ -76,6 +76,15 @@ export type ResearchSummary = {
   scannedTo: string | null
 }
 
+export type ResearchCacheInfo = {
+  hit: boolean
+  source?: 'memory' | 'db' | string
+  loadedAt?: string | null
+  rowCount?: number
+  windowFrom?: string | null
+  windowTo?: string | null
+}
+
 export type ResearchStatisticsResponse = {
   minSampleSize: number
   groupBy: string
@@ -87,6 +96,7 @@ export type ResearchStatisticsResponse = {
   summary: ResearchSummary
   disclaimer: string
   items: PatternStatisticsItem[]
+  cache?: ResearchCacheInfo | null
 }
 
 /** GET /api/pattern-statistics — bulk ranking over active watchlist. */
@@ -143,5 +153,6 @@ export async function fetchResearchStatistics(
       data?.disclaimer ||
       'Research over virtual pattern-journal outcomes; not brokerage advice.',
     items: Array.isArray(data?.items) ? data.items : [],
+    cache: data?.cache && typeof data.cache === 'object' ? data.cache : null,
   }
 }

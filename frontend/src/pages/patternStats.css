@@ -443,6 +443,12 @@
   color: #e2e8f0;
 }
 
+.stats-summary__cache {
+  margin: 10px 0 0;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
 /* ── Table ─────────────────────────────────────────────────────────── */
 
 .stats-table th:first-child,

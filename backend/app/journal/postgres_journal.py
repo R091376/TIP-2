@@ -57,8 +57,33 @@ logger = logging.getLogger(__name__)
 class PostgresPatternJournal:
     """Durable pattern journal backed by Postgres (Flyway V2–V4 tables)."""
 
-    def __init__(self, session_factory: sessionmaker[Session]) -> None:
+    def __init__(
+        self,
+        session_factory: sessionmaker[Session],
+        *,
+        research_cache_enabled: bool = True,
+        research_cache_ttl_seconds: int = 86_400,
+        research_max_range_days: int = 180,
+        research_cache_load_timeout_ms: int = 30_000,
+        research_cache=None,
+    ) -> None:
         self._sf = session_factory
+        self._research_max_range_days = max(1, int(research_max_range_days or 180))
+        self._research_cache_load_timeout_ms = max(
+            1000, int(research_cache_load_timeout_ms or 30_000)
+        )
+        if research_cache is not None:
+            self._research_cache = research_cache
+        elif research_cache_enabled:
+            from app.patterns.research_cache import ResearchSnapshotCache
+
+            self._research_cache = ResearchSnapshotCache(
+                self._load_research_snapshot,
+                ttl_seconds=research_cache_ttl_seconds,
+                enabled=True,
+            )
+        else:
+            self._research_cache = None
 
     def is_active(self) -> bool:
         return True
@@ -988,6 +1013,19 @@ class PostgresPatternJournal:
     def supports_research_aggregation(self) -> bool:
         return True
 
+    def warm_research_cache(self) -> None:
+        """Blocking initial load (startup / first research request)."""
+        cache = self._research_cache
+        if cache is None or not getattr(cache, "enabled", False):
+            return
+        cache.ensure()
+
+    def refresh_research_cache_if_stale(self) -> None:
+        cache = self._research_cache
+        if cache is None or not getattr(cache, "enabled", False):
+            return
+        cache.refresh_if_stale()
+
     def aggregate_filtered(
         self,
         spec,
@@ -997,19 +1035,14 @@ class PostgresPatternJournal:
         statement_timeout_ms: int = 5000,
     ) -> dict:
         """
-        Query-time research aggregation over closed instances ⨝ outcomes.
+        Research aggregation over closed instances ⨝ outcomes.
 
-        Fetches candidate rows (watchlist + closed + coarse date bounds), filters
-        in Python for TOD / flags / rails (parity with compute_planned_rails), then
-        aggregates via research_metrics.
+        Prefer the daily in-memory snapshot (all closed rows in the max lookback
+        window). Filter / groupBy / rails math then run in process. Falls back
+        to a live Postgres scan if the cache is disabled or the first load fails.
         """
-        from app.patterns.planned_rails import compute_planned_rails
-        from app.patterns.research_filters import (
-            as_epoch_seconds,
-            row_matches_filters,
-        )
+        from app.patterns.research_cache import filter_snapshot_rows
         from app.patterns.research_metrics import (
-            ResearchRow,
             aggregate_research,
             empty_research_response,
         )
@@ -1017,25 +1050,113 @@ class PostgresPatternJournal:
         if not allowed_symbol_ids:
             return empty_research_response(spec)
 
-        # Coarse epoch bounds for detect_candle_time (IST day start/end)
         from_d = spec.detected_from
         to_d = spec.detected_to
         if from_d is None or to_d is None:
             return empty_research_response(spec)
 
+        snap = None
+        cache = self._research_cache
+        if cache is not None and getattr(cache, "enabled", False):
+            try:
+                snap = cache.ensure()
+            except Exception:
+                logger.exception(
+                    "Research snapshot unavailable; falling back to live query"
+                )
+                snap = None
+
+        if snap is not None:
+            matched = filter_snapshot_rows(snap.rows, spec, allowed_symbol_ids)
+            resp = aggregate_research(matched, spec, symbol_labels=symbol_labels)
+            resp["cache"] = snap.meta(hit=True)
+            return resp
+
+        matched = self._live_filter_rows(
+            spec,
+            allowed_symbol_ids=allowed_symbol_ids,
+            statement_timeout_ms=statement_timeout_ms,
+        )
+        resp = aggregate_research(matched, spec, symbol_labels=symbol_labels)
+        resp["cache"] = {"hit": False, "source": "db"}
+        return resp
+
+    def _load_research_snapshot(self):
+        from app.patterns.research_cache import ResearchSnapshot
+        from app.patterns.research_filters import today_ist
+
+        today = today_ist()
+        from_d, _to_d = self._clamp_research_dates(
+            today - timedelta(days=self._research_max_range_days - 1), today
+        )
+        rows = tuple(
+            self._fetch_closed_rows(
+                from_d,
+                today,
+                timeout_ms=self._research_cache_load_timeout_ms,
+            )
+        )
+        return ResearchSnapshot(
+            rows=rows,
+            loaded_at=datetime.now(timezone.utc),
+            window_from=from_d,
+            window_to=today,
+        )
+
+    def _live_filter_rows(
+        self,
+        spec,
+        *,
+        allowed_symbol_ids: list[str],
+        statement_timeout_ms: int,
+    ) -> list:
+        from app.patterns.research_cache import match_research_row
+
+        from_d, to_d = self._clamp_research_dates(spec.detected_from, spec.detected_to)
+        rows = self._fetch_closed_rows(
+            from_d,
+            to_d,
+            timeout_ms=max(500, int(statement_timeout_ms or 5000)),
+            symbol_ids=allowed_symbol_ids,
+            pattern_types=spec.pattern_types,
+            timeframes=spec.timeframes,
+            direction=spec.direction,
+        )
+        allowed = set(allowed_symbol_ids)
+        return [row for row in rows if match_research_row(row, spec, allowed)]
+
+    def _clamp_research_dates(self, from_d: date, to_d: date) -> tuple[date, date]:
+        from app.patterns.research_filters import lookback_start, today_ist
+
+        today = today_ist()
+        earliest = lookback_start(today, max_range_days=self._research_max_range_days)
+        if to_d > today:
+            to_d = today
+        if from_d < earliest:
+            from_d = earliest
+        if to_d < from_d:
+            to_d = from_d
+        return from_d, to_d
+
+    def _fetch_closed_rows(
+        self,
+        from_d: date,
+        to_d: date,
+        *,
+        timeout_ms: int,
+        symbol_ids: list[str] | None = None,
+        pattern_types: list[str] | None = None,
+        timeframes: list[str] | None = None,
+        direction: str | None = None,
+    ) -> list:
         start_ist = datetime.combine(from_d, time(0, 0), tzinfo=_IST)
         end_ist_excl = datetime.combine(to_d + timedelta(days=1), time(0, 0), tzinfo=_IST)
         start_epoch = int(start_ist.timestamp())
         end_epoch = int(end_ist_excl.timestamp()) - 1
-        # Also include ms-stored candle times
         start_epoch_ms = start_epoch * 1000
         end_epoch_ms = end_epoch * 1000 + 999
 
-        allowed_set = set(allowed_symbol_ids)
-        timeout_ms = max(500, int(statement_timeout_ms or 5000))
-
         with self._sf() as s:
-            # Bound scan cost on Postgres
             try:
                 s.execute(text(f"SET LOCAL statement_timeout = '{int(timeout_ms)}'"))
             except Exception:
@@ -1048,7 +1169,6 @@ class PostgresPatternJournal:
                     PatternOutcomeRow.pattern_instance_id == PatternInstanceRow.id,
                 )
                 .where(
-                    PatternInstanceRow.symbol_id.in_(list(allowed_symbol_ids)),
                     PatternInstanceRow.status.in_(tuple(CLOSED_STATUSES)),
                     or_(
                         (
@@ -1062,85 +1182,55 @@ class PostgresPatternJournal:
                     ),
                 )
             )
-            if spec.pattern_types:
-                q = q.where(PatternInstanceRow.pattern_type.in_(list(spec.pattern_types)))
-            if spec.timeframes:
-                q = q.where(PatternInstanceRow.timeframe.in_(list(spec.timeframes)))
-            if spec.direction:
-                q = q.where(PatternInstanceRow.direction == spec.direction)
+            if symbol_ids:
+                q = q.where(PatternInstanceRow.symbol_id.in_(list(symbol_ids)))
+            if pattern_types:
+                q = q.where(PatternInstanceRow.pattern_type.in_(list(pattern_types)))
+            if timeframes:
+                q = q.where(PatternInstanceRow.timeframe.in_(list(timeframes)))
+            if direction:
+                q = q.where(PatternInstanceRow.direction == direction)
 
             try:
-                pairs = s.execute(q).all()
+                result = s.execute(q.execution_options(yield_per=2000))
+                return [self._to_research_row(inst, outcome) for inst, outcome in result]
             except Exception as exc:
-                # statement_timeout surfaces as DBAPI error
                 msg = str(exc).lower()
                 if "timeout" in msg or "canceling statement" in msg:
                     raise TimeoutError("Research query timed out") from exc
                 raise
 
-        matched: list = []
-        for inst, outcome in pairs:
-            rails = compute_planned_rails(
-                pattern_type=inst.pattern_type,
-                direction=inst.direction,
-                entry=inst.entry_price,
-                stop=inst.stop_level,
-                target=inst.target_level,
-                atr=inst.atr_at_detect,
-            )
-            planned_rr = rails.planned_rr if rails is not None else None
-            risk_r = rails.risk_r if rails is not None else None
-            rails_valid = rails is not None
-            if not row_matches_filters(
-                symbol_id=inst.symbol_id,
-                pattern_type=inst.pattern_type,
-                timeframe=inst.timeframe,
-                direction=inst.direction,
-                status=inst.status,
-                flag_confirmed=bool(inst.flag_confirmed),
-                flag_retested=bool(inst.flag_retested),
-                flag_strengthened=bool(inst.flag_strengthened),
-                volume_ok_at_detect=bool(inst.volume_ok_at_detect),
-                confirmation_mode_used=inst.confirmation_mode_used,
-                detector_version=inst.detector_version or "",
-                detect_candle_time=int(inst.detect_candle_time or 0),
-                final_outcome=outcome.final_outcome,
-                reason=outcome.reason,
-                planned_rr=planned_rr,
-                rails_valid=rails_valid,
-                spec=spec,
-                allowed_symbol_ids=allowed_set,
-                risk_r=risk_r,
-            ):
-                continue
-            matched.append(
-                ResearchRow(
-                    symbol_id=inst.symbol_id,
-                    pattern_type=inst.pattern_type,
-                    timeframe=inst.timeframe,
-                    direction=inst.direction,
-                    status=inst.status,
-                    flag_confirmed=bool(inst.flag_confirmed),
-                    flag_retested=bool(inst.flag_retested),
-                    flag_strengthened=bool(inst.flag_strengthened),
-                    volume_ok_at_detect=bool(inst.volume_ok_at_detect),
-                    confirmation_mode_used=inst.confirmation_mode_used,
-                    detector_version=inst.detector_version or "",
-                    detect_candle_time=as_epoch_seconds(inst.detect_candle_time),
-                    entry_price=float(inst.entry_price),
-                    stop_level=float(inst.stop_level),
-                    target_level=inst.target_level,
-                    atr_at_detect=float(inst.atr_at_detect or 0),
-                    final_outcome=outcome.final_outcome,
-                    reason=outcome.reason,
-                    duration_candles=int(outcome.duration_candles or 0),
-                    max_favorable_r=outcome.max_favorable_r,
-                    max_adverse_r=outcome.max_adverse_r,
-                    move_r=outcome.move_r,
-                )
-            )
+    @staticmethod
+    def _to_research_row(inst: PatternInstanceRow, outcome: PatternOutcomeRow):
+        from app.patterns.research_filters import as_epoch_seconds
+        from app.patterns.research_metrics import ResearchRow
 
-        return aggregate_research(matched, spec, symbol_labels=symbol_labels)
+        row = ResearchRow(
+            symbol_id=inst.symbol_id,
+            pattern_type=inst.pattern_type,
+            timeframe=inst.timeframe,
+            direction=inst.direction,
+            status=inst.status,
+            flag_confirmed=bool(inst.flag_confirmed),
+            flag_retested=bool(inst.flag_retested),
+            flag_strengthened=bool(inst.flag_strengthened),
+            volume_ok_at_detect=bool(inst.volume_ok_at_detect),
+            confirmation_mode_used=inst.confirmation_mode_used,
+            detector_version=inst.detector_version or "",
+            detect_candle_time=as_epoch_seconds(inst.detect_candle_time),
+            entry_price=float(inst.entry_price),
+            stop_level=float(inst.stop_level),
+            target_level=inst.target_level,
+            atr_at_detect=float(inst.atr_at_detect or 0),
+            final_outcome=outcome.final_outcome,
+            reason=outcome.reason,
+            duration_candles=int(outcome.duration_candles or 0),
+            max_favorable_r=outcome.max_favorable_r,
+            max_adverse_r=outcome.max_adverse_r,
+            move_r=outcome.move_r,
+        )
+        row.rails()
+        return row
 
     @staticmethod
     def _to_snapshot(s: PatternStatisticsRow) -> PatternStatisticsSnapshot:

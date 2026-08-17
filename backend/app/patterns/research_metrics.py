@@ -36,19 +36,26 @@ class ResearchRow:
     max_favorable_r: float | None
     max_adverse_r: float | None
     move_r: float | None
+    # Filled on first rails() call (or at snapshot load) so filter + aggregate
+    # do not recompute planned rails per query.
+    _rails: Any = field(default=None, repr=False, compare=False)
+    _rails_ready: bool = field(default=False, repr=False, compare=False)
 
     def skip_excursions(self) -> bool:
         return (self.reason or "") in SKIP_EXCURSION_REASONS
 
     def rails(self):
-        return compute_planned_rails(
-            pattern_type=self.pattern_type,
-            direction=self.direction,
-            entry=self.entry_price,
-            stop=self.stop_level,
-            target=self.target_level,
-            atr=self.atr_at_detect,
-        )
+        if not self._rails_ready:
+            self._rails = compute_planned_rails(
+                pattern_type=self.pattern_type,
+                direction=self.direction,
+                entry=self.entry_price,
+                stop=self.stop_level,
+                target=self.target_level,
+                atr=self.atr_at_detect,
+            )
+            self._rails_ready = True
+        return self._rails
 
 
 @dataclass

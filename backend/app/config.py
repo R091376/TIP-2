@@ -95,6 +95,7 @@ class Settings(BaseSettings):
     pattern_research_stats_enabled: bool = Field(
         default=True, alias="TIP_PATTERN_RESEARCH_STATS_ENABLED"
     )
+    # Hard cap for research detect dates (parse, live SQL, and snapshot).
     research_stats_max_range_days: int = Field(
         default=180, alias="TIP_RESEARCH_STATS_MAX_RANGE_DAYS"
     )
@@ -103,6 +104,16 @@ class Settings(BaseSettings):
     )
     research_stats_statement_timeout_ms: int = Field(
         default=5000, alias="TIP_RESEARCH_STATS_STATEMENT_TIMEOUT_MS"
+    )
+    # Daily in-memory snapshot for research filters (Postgres journal only).
+    research_stats_cache_enabled: bool = Field(
+        default=True, alias="TIP_RESEARCH_STATS_CACHE_ENABLED"
+    )
+    research_stats_cache_ttl_seconds: int = Field(
+        default=86_400, alias="TIP_RESEARCH_STATS_CACHE_TTL_SECONDS"
+    )
+    research_stats_cache_load_timeout_ms: int = Field(
+        default=30_000, alias="TIP_RESEARCH_STATS_CACHE_LOAD_TIMEOUT_MS"
     )
 
     # Pattern detector knobs (mirror Java defaults)

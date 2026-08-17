@@ -410,6 +410,88 @@ def test_startup_reconcile_purges_session_tf(journal):
         assert n_ev == []
 
 
+def _close_pattern(j, **kwargs):
+    now = datetime.now(timezone.utc)
+    p = _pattern(**kwargs)
+    j.persist_lifecycle(
+        p,
+        [PatternStageEvent(p.id, PatternStage.DETECTED, p.detect_candle_time, 101.0, now)],
+    )
+    p.mark_terminal(FinalOutcome.SUCCEEDED, PatternStage.SUCCEEDED, "price_target", 105.5)
+    j.apply_events(
+        p,
+        [PatternStageEvent(p.id, PatternStage.SUCCEEDED, p.detect_candle_time + 300, 105.5, now)],
+    )
+    return p
+
+
+def test_research_aggregate_uses_cache_across_filters(journal):
+    from app.patterns.research_filters import parse_research_filters
+
+    j, _ = journal
+    t = int(datetime.now(timezone.utc).timestamp())
+    _close_pattern(j, symbol_id="NSE_EQ|R", pattern_type=PatternType.BREAKOUT, detect_candle_time=t)
+    _close_pattern(
+        j,
+        symbol_id="NSE_EQ|R",
+        pattern_type=PatternType.BREAKDOWN,
+        detect_candle_time=t + 60,
+        direction=PatternDirection.SHORT,
+        entry_price=99.0,
+        stop_level=100.0,
+        target_level=95.0,
+    )
+
+    fetches = {"n": 0}
+    orig = j._fetch_closed_rows
+
+    def wrapped(*args, **kwargs):
+        fetches["n"] += 1
+        return orig(*args, **kwargs)
+
+    j._fetch_closed_rows = wrapped
+
+    spec_all = parse_research_filters({"minSampleSize": "5"})
+    spec_bo = parse_research_filters({"patternType": "breakout", "minSampleSize": "5"})
+    all_resp = j.aggregate_filtered(spec_all, allowed_symbol_ids=["NSE_EQ|R"])
+    bo_resp = j.aggregate_filtered(spec_bo, allowed_symbol_ids=["NSE_EQ|R"])
+
+    assert fetches["n"] == 1
+    assert all_resp["cache"]["hit"] is True
+    assert bo_resp["cache"]["hit"] is True
+    assert all_resp["totalMatched"] == 2
+    assert bo_resp["totalMatched"] == 1
+
+
+def test_research_aggregate_live_fallback_when_cache_disabled(journal):
+    from app.journal.postgres_journal import PostgresPatternJournal
+    from app.patterns.research_filters import parse_research_filters
+
+    _, sf = journal
+    live = PostgresPatternJournal(sf, research_cache_enabled=False)
+    t = int(datetime.now(timezone.utc).timestamp())
+    _close_pattern(
+        live, symbol_id="NSE_EQ|L", pattern_type=PatternType.BREAKOUT, detect_candle_time=t
+    )
+
+    fetches = {"n": 0}
+    orig = live._fetch_closed_rows
+
+    def wrapped(*args, **kwargs):
+        fetches["n"] += 1
+        return orig(*args, **kwargs)
+
+    live._fetch_closed_rows = wrapped
+
+    spec = parse_research_filters({"minSampleSize": "5"})
+    a = live.aggregate_filtered(spec, allowed_symbol_ids=["NSE_EQ|L"])
+    b = live.aggregate_filtered(spec, allowed_symbol_ids=["NSE_EQ|L"])
+    assert fetches["n"] == 2
+    assert a["cache"]["hit"] is False
+    assert a["totalMatched"] == 1
+    assert b["totalMatched"] == 1
+
+
 def test_startup_purges_historical_startup_recovery(journal):
     j, sf = journal
     now = datetime.now(timezone.utc)

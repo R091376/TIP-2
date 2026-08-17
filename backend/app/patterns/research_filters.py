@@ -127,6 +127,12 @@ def today_ist() -> date:
     return datetime.now(IST).date()
 
 
+def lookback_start(today: date | None = None, *, max_range_days: int = 180) -> date:
+    """Earliest IST detect date allowed: today − (max_range_days − 1)."""
+    d = today if today is not None else today_ist()
+    return d - timedelta(days=max(1, int(max_range_days)) - 1)
+
+
 def parse_csv_list(raw: str | None) -> list[str] | None:
     if raw is None or str(raw).strip() == "":
         return None
@@ -290,6 +296,18 @@ def parse_research_filters(
         raise ResearchFilterError(
             f"date range exceeds max {max_range_days} days (got {span})"
         )
+
+    # Hard cap: no research window may start before today − (max_range_days − 1).
+    # Older `detectedFrom` is clamped; a range entirely before the cap is rejected.
+    earliest = lookback_start(today, max_range_days=max_range_days)
+    if detected_to < earliest:
+        raise ResearchFilterError(
+            f"detectedFrom/detectedTo cannot be before {earliest.isoformat()} "
+            f"(max {int(max_range_days)} days)"
+        )
+    if detected_from < earliest:
+        detected_from = earliest
+        date_defaulted = True
 
     resolved_only = parse_bool(g("resolvedOnly"))
     if resolved_only is None:

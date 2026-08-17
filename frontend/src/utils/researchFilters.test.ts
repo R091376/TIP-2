@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   parseResearchFiltersFromSearch,
   serializeResearchFilters,
+  researchEarliestDetectYmd,
   researchFilterChips,
+  todayIstYmd,
 } from './researchFilters'
 
 describe('researchFilters codec', () => {
@@ -56,5 +58,11 @@ describe('researchFilters codec', () => {
     expect(parsed.minRiskR).toBeUndefined()
     expect(parsed.maxRiskR).toBeUndefined()
     expect(parsed.minPlannedRr).toBeUndefined()
+  })
+
+  it('earliest detect date is maxRange-1 days before today IST', () => {
+    const now = new Date('2026-08-17T10:00:00+05:30')
+    expect(todayIstYmd(now)).toBe('2026-08-17')
+    expect(researchEarliestDetectYmd(180, now)).toBe('2026-02-19')
   })
 })
