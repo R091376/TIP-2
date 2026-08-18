@@ -63,11 +63,16 @@ class AppContainer:
     session_factory: object | None = None
     postgres_init_error: str | None = None
     paper_service: object | None = None
+    daily_sr_service: object | None = None
     _bg_stop: threading.Event | None = None
     _bg_thread: threading.Thread | None = None
 
     def wire_events(self) -> None:
         self.event_bus.subscribe(CandleUpdatedEvent, self.broadcaster.on_candle_updated)
+        if self.daily_sr_service is not None:
+            self.event_bus.subscribe(
+                CandleUpdatedEvent, self.daily_sr_service.on_candle_updated
+            )
         self.event_bus.subscribe(CandleClosedEvent, self.broadcaster.on_candle_closed)
         self.event_bus.subscribe(CandleClosedEvent, self.pattern_service.on_candle_closed)
         self.event_bus.subscribe(PatternStageEvent, self.broadcaster.on_pattern_stage)
@@ -123,6 +128,25 @@ class AppContainer:
                 self.bootstrap.recover_all_active()
             except Exception:
                 logger.exception("Bootstrap recovery failed")
+                return
+            sr = getattr(self, "daily_sr_service", None)
+            if sr is not None:
+                try:
+                    sr.ensure_all_active()
+                    for entry in self.watchlist_repo.find_all_active():
+                        sr.ensure_today(entry.symbol_id)
+                except Exception:
+                    logger.exception("Daily SR ensure_all_active failed")
+            if getattr(self.settings, "pattern_sr_backfill_on_startup", False):
+                try:
+                    from app.sr.backfill import run_backfill
+
+                    run_backfill(self)
+                    reload = getattr(self.pattern_journal, "reload_research_cache", None)
+                    if callable(reload):
+                        reload()
+                except Exception:
+                    logger.exception("Woodie SR backfill failed")
 
         threading.Thread(target=_boot, name="bootstrap", daemon=True).start()
 
@@ -352,6 +376,16 @@ def build_container(settings: Settings | None = None) -> AppContainer:
         on_tick_extra=_paper_enqueue if paper_service is not None else None,
     )
 
+    from app.sr.service import DailySrService
+    from app.sr.store import InMemoryDailySrStore, PostgresDailySrStore
+
+    if session_factory is not None:
+        daily_sr_store = PostgresDailySrStore(session_factory)
+    else:
+        daily_sr_store = InMemoryDailySrStore()
+    daily_sr_service = DailySrService(settings, candle_engine, daily_sr_store)
+    bootstrap.set_daily_sr_service(daily_sr_service)
+
     active_store = ActiveInstanceStore()
     pattern_service = PatternEvaluator(
         settings,
@@ -360,6 +394,7 @@ def build_container(settings: Settings | None = None) -> AppContainer:
         active_store,
         pattern_journal,
         event_bus,
+        daily_sr_service=daily_sr_service,
     )
     session_expiry = SessionExpiryReconciler(
         settings, active_store, pattern_journal, candle_engine, event_bus
@@ -399,6 +434,7 @@ def build_container(settings: Settings | None = None) -> AppContainer:
         session_factory=session_factory,
         postgres_init_error=postgres_init_error,
         paper_service=paper_service,
+        daily_sr_service=daily_sr_service,
     )
     container.wire_events()
     return container

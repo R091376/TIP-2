@@ -13,8 +13,11 @@ import { bearishEngulfing } from './content/patterns/bearish_engulfing'
 import { insideBar } from './content/patterns/inside_bar'
 import { higherHigh } from './content/patterns/higher_high'
 import { lowerLow } from './content/patterns/lower_low'
+import { woodieSr } from './content/concepts/woodie-sr'
 
 export const INDICATOR_TOPICS: LearnTopic[] = [atr14, donchian20, volumeSma20]
+
+export const CONCEPT_TOPICS: LearnTopic[] = [woodieSr]
 
 export const PATTERN_TOPICS: LearnTopic[] = [
   breakout,
@@ -30,15 +33,25 @@ export const PATTERN_TOPICS: LearnTopic[] = [
   lowerLow,
 ]
 
-export const ALL_TOPICS: LearnTopic[] = [...INDICATOR_TOPICS, ...PATTERN_TOPICS]
+export const ALL_TOPICS: LearnTopic[] = [
+  ...INDICATOR_TOPICS,
+  ...CONCEPT_TOPICS,
+  ...PATTERN_TOPICS,
+]
 
 export function getTopic(kind: LearnKind, slug: string): LearnTopic | undefined {
-  const list = kind === 'indicator' ? INDICATOR_TOPICS : PATTERN_TOPICS
+  const list =
+    kind === 'indicator'
+      ? INDICATOR_TOPICS
+      : kind === 'concept'
+        ? CONCEPT_TOPICS
+        : PATTERN_TOPICS
   return list.find((t) => t.slug === slug)
 }
 
 export function listTopics(kind?: LearnKind): LearnTopic[] {
   if (kind === 'indicator') return INDICATOR_TOPICS
+  if (kind === 'concept') return CONCEPT_TOPICS
   if (kind === 'pattern') return PATTERN_TOPICS
   return ALL_TOPICS
 }

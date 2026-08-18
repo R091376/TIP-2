@@ -32,6 +32,7 @@ class PatternEvaluator:
         active_store: ActiveInstanceStore,
         journal: PatternJournal,
         event_bus: EventBus | None = None,
+        daily_sr_service=None,
     ) -> None:
         self._settings = settings
         self._engine = candle_engine
@@ -39,6 +40,7 @@ class PatternEvaluator:
         self._store = active_store
         self._journal = journal
         self._events = event_bus
+        self._daily_sr = daily_sr_service
 
     def on_candle_closed(self, event: CandleClosedEvent) -> None:
         if not self._settings.pattern_enabled:
@@ -230,6 +232,7 @@ class PatternEvaluator:
         """
         from app.patterns.research_filters import (
             ResearchFilterError,
+            has_sr_filters,
             parse_research_filters,
         )
         from app.patterns.research_metrics import empty_research_response
@@ -238,6 +241,10 @@ class PatternEvaluator:
             raise RuntimeError("Pattern feature disabled")
         if not getattr(self._settings, "pattern_research_stats_enabled", True):
             raise RuntimeError("Research stats disabled")
+        if has_sr_filters(raw_params) and not getattr(
+            self._settings, "pattern_sr_research_enabled", True
+        ):
+            raise ValueError("Woodie SR research disabled")
 
         supports = getattr(self._journal, "supports_research_aggregation", None)
         if not callable(supports) or not supports():
@@ -364,10 +371,49 @@ class PatternEvaluator:
             advanced, newly, events, still_open = self._gate_min_risk(
                 ev.advanced, ev.newly_detected, ev.events, ev.still_open
             )
+            if newly and self._sr_stamp_enabled():
+                self._stamp_sr(symbol_id, timeframe, closed, newly)
             self._persist_eval(advanced, newly, events)
             still.extend(still_open)
 
         self._store.replace_series(symbol_id, timeframe, still)
+
+    def _sr_stamp_enabled(self) -> bool:
+        return bool(getattr(self._settings, "pattern_sr_enabled", True)) and bool(
+            getattr(self._settings, "pattern_sr_stamp_enabled", True)
+        )
+
+    def _stamp_sr(
+        self,
+        symbol_id: str,
+        timeframe: str,
+        closed: list,
+        newly: list[ActivePattern],
+    ) -> None:
+        if not newly or not closed or self._daily_sr is None:
+            return
+        from app.patterns.research_filters import as_epoch_seconds, detect_candle_ist
+        from app.sr.stamp import stamp_woodie_sr
+
+        signal = closed[-1]
+        det_dt = detect_candle_ist(as_epoch_seconds(signal.time))
+        if det_dt is None:
+            return
+        session_date = det_dt.date()
+        levels = self._daily_sr.ensure_levels(symbol_id, session_date)
+        if levels is None:
+            logger.info(
+                "Woodie SR stamp skipped missing_levels symbol=%s session_date=%s n=%s",
+                symbol_id,
+                session_date,
+                len(newly),
+            )
+            return
+        near = float(getattr(self._settings, "pattern_sr_near_atr", 0.5) or 0.5)
+        for p in newly:
+            stamp_woodie_sr(
+                p, signal, levels, session_date=session_date, near_atr=near
+            )
 
     def _gate_min_risk(
         self,

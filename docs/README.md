@@ -9,6 +9,8 @@ Authoritative math and lifecycle docs for indicators, patterns, and the pattern 
 | Modules (journal, …) | [`modules/`](modules/) |
 | Planned: classical patterns + stack roadmap | [`design-patterns-stack-and-filtered-stats.md`](design-patterns-stack-and-filtered-stats.md) (not implemented) |
 | **Design: composable stack filters (P0 research stats)** | [`design-composable-stack-filters.md`](design-composable-stack-filters.md) — implement when ready |
+| **Design: Woodie daily S/R** | [`design-woodie-sr.md`](design-woodie-sr.md) |
+| Learn (operator education) | `/learn` in the app; Woodie topic at `/learn/concepts/woodie-sr` |
 
 ## Standards
 

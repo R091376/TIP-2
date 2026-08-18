@@ -115,6 +115,17 @@ class Settings(BaseSettings):
     research_stats_cache_load_timeout_ms: int = Field(
         default=30_000, alias="TIP_RESEARCH_STATS_CACHE_LOAD_TIMEOUT_MS"
     )
+    # Woodie daily S/R (woodie_open_v1)
+    pattern_sr_enabled: bool = Field(default=True, alias="TIP_PATTERN_SR_ENABLED")
+    pattern_sr_stamp_enabled: bool = Field(default=True, alias="TIP_PATTERN_SR_STAMP_ENABLED")
+    pattern_sr_research_enabled: bool = Field(
+        default=True, alias="TIP_PATTERN_SR_RESEARCH_ENABLED"
+    )
+    pattern_sr_backfill_on_startup: bool = Field(
+        default=True, alias="TIP_PATTERN_SR_BACKFILL_ON_STARTUP"
+    )
+    pattern_sr_near_atr: float = Field(default=0.5, alias="TIP_PATTERN_SR_NEAR_ATR")
+    pattern_sr_method: str = Field(default="woodie_open_v1", alias="TIP_PATTERN_SR_METHOD")
 
     # Pattern detector knobs (mirror Java defaults)
     breakout: dict[str, Any] = Field(

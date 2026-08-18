@@ -72,5 +72,11 @@
     "success_atr_mult": 1.5,
     "max_candles_after_detect": 20,
     "detector_version": "volume-breakout-v1"
-  }
+  },
+  "pattern_sr_enabled": true,
+  "pattern_sr_stamp_enabled": true,
+  "pattern_sr_research_enabled": true,
+  "pattern_sr_backfill_on_startup": true,
+  "pattern_sr_near_atr": 0.5,
+  "pattern_sr_method": "woodie_open_v1"
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
-import { isPatternResearchStatsEnabled } from '../config/featureFlags'
+import { isPatternResearchStatsEnabled, isPatternSrResearchEnabled } from '../config/featureFlags'
 import {
   fetchPatternStatistics,
   fetchResearchStatistics,
@@ -87,7 +87,7 @@ function formatCacheStamp(iso) {
 }
 
 function rowKey(item) {
-  return `${item.symbolId}|${item.patternType}|${item.timeframe}`
+  return `${item.symbolId}|${item.patternType}|${item.timeframe}|${item.srNearest ?? ''}`
 }
 
 function symbolLabel(item) {
@@ -458,8 +458,12 @@ export default function PatternStatsPage() {
   }
 
   const showResearchCols = mode === 'research'
-  // expand + symbol + type + tf + sfe + n + expectedR + resolved% + plan + move + risk + reward + status
-  const colSpan = 13
+  const srEnabled = isPatternSrResearchEnabled()
+  const showSrNearest =
+    srEnabled &&
+    String(researchApplied.groupBy || '').includes('srNearest')
+  // expand + symbol + type + tf [+ nearest] + sfe + n + expectedR + resolved% + plan + move + risk + reward + status
+  const colSpan = showSrNearest ? 14 : 13
   const pageFrom = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1
   const pageTo = Math.min(safePage * PAGE_SIZE, filtered.length)
 
@@ -708,6 +712,12 @@ export default function PatternStatsPage() {
                   <option value="patternType,timeframe">Group: Type · TF</option>
                   <option value="patternType">Group: Type only</option>
                   <option value="none">Group: Global</option>
+                  {srEnabled && (
+                    <>
+                      <option value="srNearest">Group: Nearest S/R</option>
+                      <option value="patternType,srNearest">Group: Type · nearest</option>
+                    </>
+                  )}
                 </select>
                 <input
                   className="rf-control"
@@ -923,6 +933,40 @@ export default function PatternStatsPage() {
                           volumeOkAtDetect: d.volumeOkAtDetect ? undefined : true,
                         })),
                     },
+                    ...(srEnabled
+                      ? [
+                          {
+                            key: 'srn',
+                            label: 'Near S/R',
+                            on: researchDraft.srNear === true,
+                            toggle: () =>
+                              setResearchDraft((d) => ({
+                                ...d,
+                                srNear: d.srNear ? undefined : true,
+                              })),
+                          },
+                          {
+                            key: 'src',
+                            label: 'SR confluence',
+                            on: researchDraft.srConfluence === true,
+                            toggle: () =>
+                              setResearchDraft((d) => ({
+                                ...d,
+                                srConfluence: d.srConfluence ? undefined : true,
+                              })),
+                          },
+                          {
+                            key: 'srb',
+                            label: 'SR break',
+                            on: researchDraft.srBreak === true,
+                            toggle: () =>
+                              setResearchDraft((d) => ({
+                                ...d,
+                                srBreak: d.srBreak ? undefined : true,
+                              })),
+                          },
+                        ]
+                      : []),
                     {
                       key: 'o',
                       label: 'Resolved',
@@ -960,6 +1004,96 @@ export default function PatternStatsPage() {
                 </div>
               </div>
             </div>
+
+            {srEnabled && (
+              <div className="rf-row rf-row--top">
+                <div className="rf-key">Woodie S/R</div>
+                <div className="rf-val rf-val--2">
+                  <select
+                    className="rf-control"
+                    value={(researchDraft.srNearest || [])[0] || ''}
+                    onChange={(e) =>
+                      setResearchDraft((d) => ({
+                        ...d,
+                        srNearest: e.target.value ? [e.target.value] : undefined,
+                      }))
+                    }
+                    aria-label="Nearest Woodie level"
+                  >
+                    <option value="">Nearest: any</option>
+                    {['s3', 's2', 's1', 'pp', 'r1', 'r2', 'r3'].map((lv) => (
+                      <option key={lv} value={lv}>
+                        {lv.toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="rf-control"
+                    value={(researchDraft.srCross || [])[0] || ''}
+                    onChange={(e) =>
+                      setResearchDraft((d) => ({
+                        ...d,
+                        srCross: e.target.value ? [e.target.value] : undefined,
+                      }))
+                    }
+                    aria-label="Signal-bar cross"
+                  >
+                    <option value="">Cross: any</option>
+                    <option value="none">none</option>
+                    {['s3', 's2', 's1', 'pp', 'r1', 'r2', 'r3'].flatMap((lv) => [
+                      <option key={`${lv}_up`} value={`${lv}_up`}>
+                        {lv} up
+                      </option>,
+                      <option key={`${lv}_down`} value={`${lv}_down`}>
+                        {lv} down
+                      </option>,
+                    ])}
+                  </select>
+                  <select
+                    className="rf-control"
+                    value={(researchDraft.srOpenThrough || [])[0] || ''}
+                    onChange={(e) =>
+                      setResearchDraft((d) => ({
+                        ...d,
+                        srOpenThrough: e.target.value ? [e.target.value] : undefined,
+                      }))
+                    }
+                    aria-label="Open through level"
+                  >
+                    <option value="">Open through: any</option>
+                    <option value="s3_down">through S3</option>
+                    <option value="s2_down">through S2</option>
+                    <option value="s1_down">through S1</option>
+                    <option value="pp_down">below PP</option>
+                    <option value="pp_up">above PP</option>
+                    <option value="r1_up">through R1</option>
+                    <option value="r2_up">through R2</option>
+                    <option value="r3_up">through R3</option>
+                  </select>
+                  <select
+                    className="rf-control"
+                    value={researchDraft.srGapDir || ''}
+                    onChange={(e) =>
+                      setResearchDraft((d) => ({
+                        ...d,
+                        srGapDir: e.target.value || undefined,
+                      }))
+                    }
+                    aria-label="Gap direction"
+                  >
+                    <option value="">Gap: any</option>
+                    <option value="up">Gap up</option>
+                    <option value="down">Gap down</option>
+                    <option value="flat">Gap flat</option>
+                  </select>
+                  <span className="rf-hint">
+                    Near uses the pattern timeframe ATR at detect, not daily ATR. Cross/break
+                    exclude older 5m (~60d) and 15m (~90d) backfill rows. Historical open is
+                    that day’s 1d open except the last ~10d when a 1m 09:15 bar was seeded.
+                  </span>
+                </div>
+              </div>
+            )}
 
             <div className="rf-row rf-row--top">
               <div className="rf-key">Universe</div>
@@ -1159,6 +1293,7 @@ export default function PatternStatsPage() {
                     <th>Symbol</th>
                     <th>Pattern</th>
                     <th>TF</th>
+                    {showSrNearest && <th>Nearest</th>}
                     <th>S / F / E</th>
                     <th>n</th>
                     <th title="Resolved % × Plan R:R − (1 − Resolved %)">Expected R</th>
@@ -1185,6 +1320,7 @@ export default function PatternStatsPage() {
                         highlight={hi}
                         minSampleSize={minSampleSize}
                         showResearchCols={showResearchCols}
+                        showSrNearest={showSrNearest}
                         colSpan={colSpan}
                         onToggle={() => toggleExpand(key)}
                       />
@@ -1231,6 +1367,7 @@ function FragmentRow({
   highlight,
   minSampleSize,
   showResearchCols,
+  showSrNearest,
   colSpan,
   onToggle,
 }) {
@@ -1268,6 +1405,7 @@ function FragmentRow({
         </td>
         <td>{item.patternType}</td>
         <td className="admin-mono">{item.timeframe}</td>
+        {showSrNearest && <td className="admin-mono">{item.srNearest || '—'}</td>}
         <td className="admin-mono">
           {item.successCount ?? 0} / {item.failCount ?? 0} / {item.expiredCount ?? 0}
         </td>

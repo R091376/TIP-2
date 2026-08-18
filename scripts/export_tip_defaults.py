@@ -61,6 +61,12 @@ def settings_projection() -> dict:
         },
         # FE chart constant must match backend volume SMA default
         "VOLUME_SMA_PERIOD": VolumeSmaIndicator.DEFAULT_PERIOD,
+        "pattern_sr_enabled": bool(s.pattern_sr_enabled),
+        "pattern_sr_stamp_enabled": bool(s.pattern_sr_stamp_enabled),
+        "pattern_sr_research_enabled": bool(s.pattern_sr_research_enabled),
+        "pattern_sr_backfill_on_startup": bool(s.pattern_sr_backfill_on_startup),
+        "pattern_sr_near_atr": float(s.pattern_sr_near_atr),
+        "pattern_sr_method": str(s.pattern_sr_method),
         # Sanity: atr indicator period tracked via atr_period above; keep AtrIndicator in lockstep
         "_atr_indicator_default": AtrIndicator.DEFAULT_PERIOD,
     }

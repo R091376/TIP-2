@@ -9,6 +9,7 @@ import './adminLearn.css'
 const GROUP_CHIPS = [
   { id: 'all', label: 'All' },
   { id: 'indicator', label: 'Indicators' },
+  { id: 'context', label: 'Context' },
   { id: 'range', label: 'Range' },
   { id: 'candlestick', label: 'Candlestick' },
   { id: 'structure', label: 'Structure' },
@@ -34,6 +35,7 @@ export default function LearnIndexPage() {
   }, [topics, q, group])
 
   const indicators = filtered.filter((t) => t.kind === 'indicator')
+  const concepts = filtered.filter((t) => t.kind === 'concept')
   const patterns = filtered.filter((t) => t.kind === 'pattern')
 
   return (
@@ -41,7 +43,9 @@ export default function LearnIndexPage() {
       <header className="admin-header">
         <div>
           <h1 className="admin-header__title">Learn</h1>
-          <p className="admin-header__sub">How TIP calculates indicators and patterns</p>
+          <p className="admin-header__sub">
+            How TIP calculates indicators, daily context (Woodie S/R), and patterns
+          </p>
         </div>
       </header>
 
@@ -74,8 +78,8 @@ export default function LearnIndexPage() {
       <section className="admin-card">
         <h2>Topics</h2>
         <p className="admin-header__sub" style={{ marginBottom: '0.75rem' }}>
-          Beginner-friendly explanations of every indicator and pattern TIP uses. Pick a topic to
-          see plain English, steps, a formula, a worked example, and live defaults.
+          Beginner-friendly explanations of every indicator, context idea, and pattern TIP uses.
+          Pick a topic to see plain English, steps, a formula, a worked example, and live defaults.
         </p>
 
         <div className="learn-toolbar">
@@ -106,6 +110,17 @@ export default function LearnIndexPage() {
             <h3 className="learn-section-title">Indicators ({indicators.length})</h3>
             <div className="learn-grid">
               {indicators.map((t) => (
+                <LearnTopicCard key={t.slug} topic={t} />
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        {concepts.length > 0 ? (
+          <>
+            <h3 className="learn-section-title">Context ({concepts.length})</h3>
+            <div className="learn-grid">
+              {concepts.map((t) => (
                 <LearnTopicCard key={t.slug} topic={t} />
               ))}
             </div>

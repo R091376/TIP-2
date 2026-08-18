@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
@@ -96,6 +96,17 @@ class ActivePattern:
     duration_candles: int = 1
     sessions_seen: int = 0
     detector_version: str = "v1"
+    sr_method: str | None = None
+    sr_session_date: date | None = None
+    sr_nearest: str | None = None
+    sr_near: bool | None = None
+    sr_distance_atr: float | None = None
+    sr_cross: str | None = None
+    sr_confluence: bool | None = None
+    sr_break: bool | None = None
+    sr_open_through: str | None = None
+    sr_gap_dir: str | None = None
+    sr_ladder_json: dict | None = None
     terminal: bool = False
     final_outcome: FinalOutcome | None = None
     terminal_reason: str | None = None
@@ -187,6 +198,17 @@ class ActivePattern:
             "maePrice": self.mae_price,
             "durationCandles": self.duration_candles,
             "detectorVersion": self.detector_version,
+            "srMethod": self.sr_method,
+            "srSessionDate": self.sr_session_date.isoformat() if self.sr_session_date else None,
+            "srNearest": self.sr_nearest,
+            "srNear": self.sr_near,
+            "srDistanceAtr": self.sr_distance_atr,
+            "srCross": self.sr_cross,
+            "srConfluence": self.sr_confluence,
+            "srBreak": self.sr_break,
+            "srOpenThrough": self.sr_open_through,
+            "srGapDir": self.sr_gap_dir,
+            "srLadder": self.sr_ladder_json,
             "terminal": self.terminal,
             "finalOutcome": self.final_outcome.value if self.final_outcome else None,
             "terminalReason": self.terminal_reason,
@@ -224,6 +246,17 @@ def new_pattern(**kwargs) -> ActivePattern:
         duration_candles=int(kwargs.get("duration_candles", 1)),
         sessions_seen=int(kwargs.get("sessions_seen", 0)),
         detector_version=str(kwargs.get("detector_version", "v1")),
+        sr_method=kwargs.get("sr_method"),
+        sr_session_date=kwargs.get("sr_session_date"),
+        sr_nearest=kwargs.get("sr_nearest"),
+        sr_near=kwargs.get("sr_near"),
+        sr_distance_atr=kwargs.get("sr_distance_atr"),
+        sr_cross=kwargs.get("sr_cross"),
+        sr_confluence=kwargs.get("sr_confluence"),
+        sr_break=kwargs.get("sr_break"),
+        sr_open_through=kwargs.get("sr_open_through"),
+        sr_gap_dir=kwargs.get("sr_gap_dir"),
+        sr_ladder_json=kwargs.get("sr_ladder_json"),
     )
 
 

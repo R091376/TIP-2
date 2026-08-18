@@ -175,6 +175,7 @@ export const hammer: LearnTopic = {
     { kind: 'pattern', slug: 'shooting_star', label: 'Shooting star' },
     { kind: 'pattern', slug: 'bullish_engulfing', label: 'Bullish engulfing' },
     { kind: 'indicator', slug: 'atr-14', label: 'ATR (14)' },
+    { kind: 'concept', slug: 'woodie-sr', label: 'Woodie S/R' },
   ],
   patternTypeId: 'hammer',
   sourceDocs: ['docs/patterns/hammer-shooting-star.md'],

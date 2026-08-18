@@ -17,6 +17,14 @@ export const TOPIC_DEFAULTS_BUCKET: Record<string, string[]> = {
   bearish_engulfing: ['engulfing', 'atr_period'],
   higher_high: ['structure', 'atr_period'],
   lower_low: ['structure', 'atr_period'],
+  'woodie-sr': [
+    'pattern_sr_enabled',
+    'pattern_sr_stamp_enabled',
+    'pattern_sr_research_enabled',
+    'pattern_sr_backfill_on_startup',
+    'pattern_sr_near_atr',
+    'pattern_sr_method',
+  ],
 }
 
 /** Expected PatternType value strings (backend enum). */
@@ -40,3 +48,6 @@ export const EXPECTED_INDICATOR_SLUGS = [
   'donchian-20',
   'volume-sma-20',
 ] as const
+
+/** Expected Learn concept slugs (not PatternType / indicator). */
+export const EXPECTED_CONCEPT_SLUGS = ['woodie-sr'] as const

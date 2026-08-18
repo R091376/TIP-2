@@ -40,6 +40,7 @@ export type PatternStatisticsItem = {
   updatedAt?: string | null
   avgWinMoveR?: number | null
   avgLossMoveR?: number | null
+  srNearest?: string | null
 }
 
 export type PatternStatisticsResponse = {

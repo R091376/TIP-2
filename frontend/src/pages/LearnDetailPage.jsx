@@ -23,7 +23,7 @@ export default function LearnDetailPage() {
         </header>
         <section className="admin-card">
           <h2>Topic not found</h2>
-          <p>That indicator or pattern page does not exist.</p>
+          <p>That Learn topic does not exist.</p>
           <p>
             <Link className="admin-link" to={LEARN_INDEX_PATH}>
               ← Back to Learn
@@ -85,6 +85,28 @@ export default function LearnDetailPage() {
           </p>
         ) : null}
       </section>
+
+      {topic.questionsItSolves?.length ? (
+        <section className="admin-card learn-detail__section">
+          <h2>Questions this answers</h2>
+          <ul>
+            {topic.questionsItSolves.map((q, i) => (
+              <li key={i}>{q}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {topic.howToUse?.length ? (
+        <section className="admin-card learn-detail__section">
+          <h2>How to use it in TIP</h2>
+          <ol>
+            {topic.howToUse.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
 
       <section className="admin-card learn-detail__section">
         <h2>How we calculate it</h2>

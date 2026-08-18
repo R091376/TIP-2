@@ -24,6 +24,21 @@ const PATTERN_TERMS = [
       'Average True Range — “how big is a normal bar move?” Used for retest bands, targets, and sizing risk.',
   },
   {
+    term: 'Woodie S/R',
+    gloss:
+      'Daily support/resistance ladder from yesterday’s high/low and today’s 09:15 open. Stamped on each detect so Research can ask “at S2?” or “through R1?”. Not a pattern detector. Full walk-through on Learn → Woodie support & resistance.',
+  },
+  {
+    term: 'Pivot (PP)',
+    gloss:
+      'Center of the Woodie ladder. TIP uses PP = (prev high + prev low + 2 × today’s open) / 4 so a gap moves the map.',
+  },
+  {
+    term: 'S1 / S2 / S3 and R1 / R2 / R3',
+    gloss:
+      'Named supports below the pivot and resistances above it (prices can invert on a large gap). Research filters use the names; “through S2” is the numeric test open or close vs that price.',
+  },
+  {
     term: 'R-unit (R)',
     gloss:
       'One unit of risk for a setup, usually ATR at detect. Moves, targets, MFE, and MAE are often measured in R so different symbols are comparable. Expected R treats 1R as the planned stop on a loss.',
@@ -210,7 +225,7 @@ const RESEARCH_TERMS = [
   {
     term: 'Group by',
     gloss:
-      'How Research buckets rows: Symbol · type · TF (default), Type · TF, Type only, or Global (one summary line).',
+      'How Research buckets rows: Symbol · type · TF (default), Type · TF, Type only, Global, Nearest S/R, or Type · nearest.',
   },
   {
     term: 'Resolved only',
@@ -236,6 +251,26 @@ const RESEARCH_TERMS = [
     term: 'Volume OK (at detect)',
     gloss:
       'Detect-bar volume met the volume confirmation rule (e.g. ≥ multiplier × volume SMA). Toggle “Volume OK” in Research quality stack.',
+  },
+  {
+    term: 'Nearest (srNearest)',
+    gloss:
+      'Closest Woodie named level (S3…R3) to the detect entry. “Hammer at S2” = nearest S2 and Near. See Learn → Woodie S/R.',
+  },
+  {
+    term: 'Cross (srCross)',
+    gloss:
+      'The detect candle closed through a named level after trading it (s2_down, r1_up, …). A gap that never traded the level is Open through, not Cross.',
+  },
+  {
+    term: 'SR confluence / SR break',
+    gloss:
+      'Confluence = long near S* or short near R* (bounce/reject). Break = long closed through R* or short closed through S*. Opposite research questions — do not mix them.',
+  },
+  {
+    term: 'Open through / gap dir',
+    gloss:
+      'Where today’s open sits vs the frozen ladder (gapped through S2?) and whether the open was up, down, or flat vs yesterday’s close.',
   },
   {
     term: '− Recovery / exclude startup_recovery',

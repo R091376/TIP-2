@@ -65,6 +65,10 @@ class MarketBootstrapService:
         self._status = market_status
         self._watchlist = watchlist_repository
         self._on_tick_extra = on_tick_extra
+        self._daily_sr = None
+
+    def set_daily_sr_service(self, svc) -> None:
+        self._daily_sr = svc
 
 
     def recover_all_active(self) -> None:
@@ -125,7 +129,10 @@ class MarketBootstrapService:
 
     def bootstrap_symbol(self, entry: WatchlistEntry) -> BootstrapSymbolResult:
         symbol_id = entry.symbol_id
-        timeframes = self._settings.supported_timeframes
+        timeframes = list(self._settings.supported_timeframes)
+        if getattr(self._settings, "pattern_sr_enabled", False):
+            rest = [tf for tf in timeframes if tf not in ("1d", "1m")]
+            timeframes = [tf for tf in ("1d", "1m") if tf in self._settings.supported_timeframes] + rest
         seeded_tf = 0
         candle_count = 0
         errors: list[str] = []
@@ -177,6 +184,11 @@ class MarketBootstrapService:
                 seeded_tf,
                 candle_count,
             )
+            if self._daily_sr is not None:
+                try:
+                    self._daily_sr.ensure_today(symbol_id)
+                except Exception:
+                    logger.exception("Daily SR ensure_today failed for %s", symbol_id)
             return BootstrapSymbolResult.ready(symbol_id, seeded_tf, candle_count)
 
         err = "; ".join(errors) if errors else "No timeframes seeded"

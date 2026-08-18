@@ -37,6 +37,15 @@ class ResearchRow:
     max_favorable_r: float | None
     max_adverse_r: float | None
     move_r: float | None
+    sr_method: str | None = None
+    sr_nearest: str | None = None
+    sr_near: bool | None = None
+    sr_cross: str | None = None
+    sr_confluence: bool | None = None
+    sr_break: bool | None = None
+    sr_open_through: tuple[str, ...] | None = None
+    sr_gap_dir: str | None = None
+    sr_ladder: dict | None = None
     # Filled on first rails() call (or at snapshot load) so filter + aggregate
     # do not recompute planned rails per query.
     _rails: Any = field(default=None, repr=False, compare=False)
@@ -64,6 +73,7 @@ class _Bucket:
     symbol_id: str
     pattern_type: str
     timeframe: str
+    sr_nearest: str = ""
     success: int = 0
     fail: int = 0
     expired: int = 0
@@ -145,15 +155,19 @@ class _Bucket:
         self.loss_move_n += other.loss_move_n
 
 
-def group_key(row: ResearchRow, group_by: str) -> tuple[str, str, str]:
+def group_key(row: ResearchRow, group_by: str) -> tuple[str, str, str, str]:
+    nearest = row.sr_nearest if row.sr_nearest else "unset"
     if group_by == "none":
-        return ("*", "*", "*")
+        return ("*", "*", "*", "")
     if group_by == "patternType":
-        return ("*", row.pattern_type, "*")
+        return ("*", row.pattern_type, "*", "")
     if group_by == "patternType,timeframe":
-        return ("*", row.pattern_type, row.timeframe)
-    # default symbol,patternType,timeframe
-    return (row.symbol_id, row.pattern_type, row.timeframe)
+        return ("*", row.pattern_type, row.timeframe, "")
+    if group_by == "srNearest":
+        return ("*", "*", "*", nearest)
+    if group_by == "patternType,srNearest":
+        return ("*", row.pattern_type, "*", nearest)
+    return (row.symbol_id, row.pattern_type, row.timeframe, "")
 
 
 def _avg(sum_v: float, n: int) -> float | None:
@@ -227,6 +241,7 @@ def bucket_to_item(
         "avgLossMoveR": (
             _avg(b.loss_move_sum, b.loss_move_n) if ready and b.loss_move_n > 0 else None
         ),
+        "srNearest": b.sr_nearest or None,
     }
     return item
 
@@ -272,13 +287,13 @@ def aggregate_research(
     symbol_labels: symbol_id → (tradingSymbol, displayName)
     """
     labels = symbol_labels or {}
-    buckets: dict[tuple[str, str, str], _Bucket] = {}
+    buckets: dict[tuple[str, str, str, str], _Bucket] = {}
 
     for row in rows:
         key = group_key(row, spec.group_by)
         b = buckets.get(key)
         if b is None:
-            b = _Bucket(key[0], key[1], key[2])
+            b = _Bucket(key[0], key[1], key[2], key[3])
             buckets[key] = b
         b.add(row)
 
@@ -304,7 +319,7 @@ def aggregate_research(
     truncated = total_groups > len(items)
 
     # Summary matches surviving groups when minExpectedR dropped any.
-    summary_bucket = _Bucket("*", "*", "*")
+    summary_bucket = _Bucket("*", "*", "*", "")
     for key, _ in kept:
         summary_bucket.absorb(buckets[key])
     total = summary_bucket.sample_size

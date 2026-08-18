@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from sqlalchemy import (
@@ -87,6 +87,48 @@ class PatternInstanceRow(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     detect_candle_time: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sessions_seen: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sr_method: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sr_session_date: Mapped[date | None] = mapped_column(nullable=True)
+    sr_nearest: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sr_near: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    sr_distance_atr: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sr_cross: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sr_confluence: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    sr_break: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    sr_open_through: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sr_gap_dir: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sr_ladder_json: Mapped[dict | None] = mapped_column(JSONType(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DailySrLevelRow(Base):
+    __tablename__ = "daily_sr_levels"
+
+    symbol_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    session_date: Mapped[date] = mapped_column(primary_key=True)
+    method: Mapped[str] = mapped_column(Text, primary_key=True)
+    prev_high: Mapped[float] = mapped_column(Float, nullable=False)
+    prev_low: Mapped[float] = mapped_column(Float, nullable=False)
+    prev_close: Mapped[float] = mapped_column(Float, nullable=False)
+    prev_open: Mapped[float | None] = mapped_column(Float, nullable=True)
+    today_open: Mapped[float] = mapped_column(Float, nullable=False)
+    range: Mapped[float] = mapped_column(Float, nullable=False)
+    prev_candle_time: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    today_open_candle_time: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    pp: Mapped[float] = mapped_column(Float, nullable=False)
+    r1: Mapped[float] = mapped_column(Float, nullable=False)
+    s1: Mapped[float] = mapped_column(Float, nullable=False)
+    r2: Mapped[float] = mapped_column(Float, nullable=False)
+    s2: Mapped[float] = mapped_column(Float, nullable=False)
+    r3: Mapped[float] = mapped_column(Float, nullable=False)
+    s3: Mapped[float] = mapped_column(Float, nullable=False)
+    r4: Mapped[float] = mapped_column(Float, nullable=False)
+    s4: Mapped[float] = mapped_column(Float, nullable=False)
+    gap: Mapped[float] = mapped_column(Float, nullable=False)
+    gap_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    frozen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    freeze_source: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

@@ -8,6 +8,8 @@ export type GroupBy =
   | 'patternType,timeframe'
   | 'patternType'
   | 'none'
+  | 'srNearest'
+  | 'patternType,srNearest'
 
 export type ResearchFilterParams = {
   symbolId?: string[]
@@ -36,6 +38,15 @@ export type ResearchFilterParams = {
   minExpectedR?: number
   requireValidRails?: boolean
   detectorVersion?: string[]
+  srNearest?: string[]
+  srCross?: string[]
+  srNear?: boolean
+  srConfluence?: boolean
+  srBreak?: boolean
+  srOpenThrough?: string[]
+  srGapDir?: 'up' | 'down' | 'flat'
+  srMethod?: string[]
+  srStamped?: boolean
   groupBy?: GroupBy
   minSampleSize?: number
   limitGroups?: number
@@ -65,6 +76,8 @@ const GROUP_BY_ALLOWED = new Set<string>([
   'patternType,timeframe',
   'patternType',
   'none',
+  'srNearest',
+  'patternType,srNearest',
 ])
 
 const CSV_KEYS = [
@@ -76,6 +89,10 @@ const CSV_KEYS = [
   'excludeReasons',
   'includeReasons',
   'detectorVersion',
+  'srNearest',
+  'srCross',
+  'srOpenThrough',
+  'srMethod',
 ] as const
 
 function splitCsv(raw: string | null): string[] | undefined {
@@ -116,6 +133,16 @@ export function parseResearchFiltersFromSearch(search: string | URLSearchParams)
   if (fs !== undefined) out.flagStrengthened = fs
   const vo = parseBool(sp.get('volumeOkAtDetect'))
   if (vo !== undefined) out.volumeOkAtDetect = vo
+  const srNear = parseBool(sp.get('srNear'))
+  if (srNear !== undefined) out.srNear = srNear
+  const srConf = parseBool(sp.get('srConfluence'))
+  if (srConf !== undefined) out.srConfluence = srConf
+  const srBr = parseBool(sp.get('srBreak'))
+  if (srBr !== undefined) out.srBreak = srBr
+  const srSt = parseBool(sp.get('srStamped'))
+  if (srSt !== undefined) out.srStamped = srSt
+  const gap = sp.get('srGapDir')
+  if (gap === 'up' || gap === 'down' || gap === 'flat') out.srGapDir = gap
 
   const t0 = sp.get('detectTimeIstStart')
   const t1 = sp.get('detectTimeIstEnd')
@@ -186,6 +213,10 @@ export function serializeResearchFilters(params: ResearchFilterParams): string {
   setCsv('excludeReasons', params.excludeReasons)
   setCsv('includeReasons', params.includeReasons)
   setCsv('detectorVersion', params.detectorVersion)
+  setCsv('srNearest', params.srNearest)
+  setCsv('srCross', params.srCross)
+  setCsv('srOpenThrough', params.srOpenThrough)
+  setCsv('srMethod', params.srMethod)
 
   if (params.direction) sp.set('direction', params.direction)
   if (params.flagConfirmed !== undefined) sp.set('flagConfirmed', String(params.flagConfirmed))
@@ -194,6 +225,11 @@ export function serializeResearchFilters(params: ResearchFilterParams): string {
     sp.set('flagStrengthened', String(params.flagStrengthened))
   if (params.volumeOkAtDetect !== undefined)
     sp.set('volumeOkAtDetect', String(params.volumeOkAtDetect))
+  if (params.srNear !== undefined) sp.set('srNear', String(params.srNear))
+  if (params.srConfluence !== undefined) sp.set('srConfluence', String(params.srConfluence))
+  if (params.srBreak !== undefined) sp.set('srBreak', String(params.srBreak))
+  if (params.srStamped !== undefined) sp.set('srStamped', String(params.srStamped))
+  if (params.srGapDir) sp.set('srGapDir', params.srGapDir)
   if (params.detectTimeIstStart) sp.set('detectTimeIstStart', params.detectTimeIstStart)
   if (params.detectTimeIstEnd) sp.set('detectTimeIstEnd', params.detectTimeIstEnd)
   if (params.detectedFrom) sp.set('detectedFrom', params.detectedFrom)
@@ -283,6 +319,35 @@ export const BUILTIN_STACK_PRESETS: StackPreset[] = [
       flagConfirmed: true,
       flagRetested: true,
       excludeReasons: ['startup_recovery'],
+      maxRiskR: DEFAULT_MAX_RISK_R,
+    },
+  },
+  {
+    id: 'sr-hammer-s2',
+    name: 'Hammer at S2',
+    filters: {
+      patternType: ['hammer'],
+      srNearest: ['s2'],
+      srNear: true,
+      srConfluence: true,
+      maxRiskR: DEFAULT_MAX_RISK_R,
+    },
+  },
+  {
+    id: 'sr-breakout-clear-r1',
+    name: 'Breakout cleared R1',
+    filters: {
+      patternType: ['breakout'],
+      srCross: ['r1_up'],
+      maxRiskR: DEFAULT_MAX_RISK_R,
+    },
+  },
+  {
+    id: 'sr-gap-down-s2',
+    name: 'Gap through S2',
+    filters: {
+      srOpenThrough: ['s2_down'],
+      srGapDir: 'down',
       maxRiskR: DEFAULT_MAX_RISK_R,
     },
   },
@@ -411,6 +476,14 @@ export function researchFilterChips(params: ResearchFilterParams): { key: string
   if (params.flagRetested === true) chips.push({ key: 'flagRetested', label: 'retested' })
   if (params.flagStrengthened === true) chips.push({ key: 'flagStrengthened', label: 'strengthened' })
   if (params.volumeOkAtDetect === true) chips.push({ key: 'volumeOkAtDetect', label: 'volume OK' })
+  if (params.srNearest?.length) chips.push({ key: 'srNearest', label: `SR: ${params.srNearest.join(',')}` })
+  if (params.srCross?.length) chips.push({ key: 'srCross', label: `cross: ${params.srCross.join(',')}` })
+  if (params.srNear === true) chips.push({ key: 'srNear', label: 'near S/R' })
+  if (params.srConfluence === true) chips.push({ key: 'srConfluence', label: 'SR confluence' })
+  if (params.srBreak === true) chips.push({ key: 'srBreak', label: 'SR break' })
+  if (params.srOpenThrough?.length)
+    chips.push({ key: 'srOpenThrough', label: `open thru: ${params.srOpenThrough.join(',')}` })
+  if (params.srGapDir) chips.push({ key: 'srGapDir', label: `gap ${params.srGapDir}` })
   if (params.detectTimeIstStart && params.detectTimeIstEnd) {
     chips.push({
       key: 'tod',

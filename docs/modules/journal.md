@@ -65,6 +65,7 @@ Statistics are keyed by `(symbol_id, pattern_type, timeframe)` — Breakout and 
 
 - Bulk: authenticated (all roles). 503 when patterns disabled.
 - Research query: **ADMIN only**; requires Postgres journal + `TIP_PATTERN_RESEARCH_STATS_ENABLED`. Design: `docs/design-composable-stack-filters.md`.
+- Woodie daily S/R stamps (`sr_*` on instances, `daily_sr_levels`): design `docs/design-woodie-sr.md`. Query-time research filters only; dashboard cube unchanged.
 - Always returns S/F/E counts; rates/means only when `sample_size >= minSampleSize`.
 - Frontend: `/patterns/stats` (Dashboard + ADMIN Research mode).
 

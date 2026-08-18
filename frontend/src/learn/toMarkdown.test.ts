@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ALL_TOPICS } from './catalog'
+import { learnKindToPath } from './routing'
 import {
   buildLearnExportAll,
   buildLearnExportIndex,
@@ -15,9 +16,7 @@ describe('toMarkdown', () => {
       expect(md).toContain(`# ${t.title}`)
       expect(md).toContain('## Plain English')
       expect(md).toContain(t.plainEnglish[0])
-      expect(topicExportRelPath(t)).toBe(
-        `${t.kind === 'indicator' ? 'indicators' : 'patterns'}/${t.slug}.md`,
-      )
+      expect(topicExportRelPath(t)).toBe(`${learnKindToPath(t.kind)}/${t.slug}.md`)
     }
   })
 
@@ -25,6 +24,12 @@ describe('toMarkdown', () => {
     const index = buildLearnExportIndex(ALL_TOPICS)
     expect(index).toContain('# TIP Learn — Markdown export')
     expect(index).toContain('breakout')
+    expect(index).toContain('Woodie support')
+    const woodie = ALL_TOPICS.find((t) => t.slug === 'woodie-sr')
+    expect(woodie).toBeTruthy()
+    const md = topicToMarkdown(woodie!)
+    expect(md).toContain('## Questions this answers')
+    expect(md).toContain('## How to use it in TIP')
     const all = buildLearnExportAll(ALL_TOPICS)
     expect(all.split('# ').length).toBeGreaterThan(ALL_TOPICS.length)
   })

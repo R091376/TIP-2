@@ -21,6 +21,7 @@ describe('navConfig learn / admin active split', () => {
     expect(isNavItemActive('admin', { pathname: '/learn' })).toBe(false)
     expect(isNavItemActive('learn', { pathname: '/learn' })).toBe(true)
     expect(isNavItemActive('learn', { pathname: '/learn/patterns/breakout' })).toBe(true)
+    expect(isNavItemActive('learn', { pathname: '/learn/concepts/woodie-sr' })).toBe(true)
     expect(isNavItemActive('learn', { pathname: '/admin/users' })).toBe(false)
   })
 

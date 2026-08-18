@@ -1,14 +1,17 @@
 import type { LearnKind } from './types'
 
-/** URL segment → internal kind. Only indicators | patterns are valid. */
+/** URL segment → internal kind. Only indicators | patterns | concepts are valid. */
 export function parseLearnKind(param: string): LearnKind | null {
   if (param === 'indicators') return 'indicator'
   if (param === 'patterns') return 'pattern'
+  if (param === 'concepts') return 'concept'
   return null
 }
 
-export function learnKindToPath(kind: LearnKind): 'indicators' | 'patterns' {
-  return kind === 'indicator' ? 'indicators' : 'patterns'
+export function learnKindToPath(kind: LearnKind): 'indicators' | 'patterns' | 'concepts' {
+  if (kind === 'indicator') return 'indicators'
+  if (kind === 'concept') return 'concepts'
+  return 'patterns'
 }
 
 export function learnTopicPath(kind: LearnKind, slug: string): string {

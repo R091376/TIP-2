@@ -172,6 +172,7 @@ After detect, a closed bar finishes under the pin low → Failed. MFE may still 
 - [Shooting star](./shooting_star.md) (`pattern/shooting_star`)
 - [Bullish engulfing](./bullish_engulfing.md) (`pattern/bullish_engulfing`)
 - [ATR (14)](./../indicators/atr-14.md) (`indicator/atr-14`)
+- [Woodie S/R](./../concepts/woodie-sr.md) (`concept/woodie-sr`)
 
 ## Sources
 

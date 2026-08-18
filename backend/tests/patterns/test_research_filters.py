@@ -434,3 +434,131 @@ def test_min_expected_r_filters_groups():
     assert body["summary"]["successCount"] == 5
     assert body["summary"]["failCount"] == 0
     assert body["summary"]["expectedR"] == pytest.approx(2.0)
+
+
+def test_parse_sr_nearest_unknown():
+    with pytest.raises(ResearchFilterError):
+        parse_research_filters({"srNearest": "s9"})
+
+
+def test_parse_sr_group_by():
+    spec = parse_research_filters({"groupBy": "patternType,srNearest"})
+    assert spec.group_by == "patternType,srNearest"
+
+
+def test_sr_tri_state_null_near():
+    spec = parse_research_filters({"srNear": "true"})
+    base = dict(
+        symbol_id="s",
+        pattern_type="hammer",
+        timeframe="5m",
+        direction="long",
+        status="succeeded",
+        flag_confirmed=False,
+        flag_retested=False,
+        flag_strengthened=False,
+        volume_ok_at_detect=False,
+        confirmation_mode_used=None,
+        detector_version="v1",
+        detect_candle_time=int(datetime(2026, 8, 17, 10, 0, tzinfo=IST).timestamp()),
+        final_outcome="succeeded",
+        reason=None,
+        planned_rr=2.0,
+        rails_valid=True,
+        spec=spec,
+        allowed_symbol_ids={"s"},
+    )
+    assert row_matches_filters(**base, sr_near=True) is True
+    assert row_matches_filters(**base, sr_near=False) is False
+    assert row_matches_filters(**base, sr_near=None) is False
+    spec_any = parse_research_filters({})
+    base["spec"] = spec_any
+    assert row_matches_filters(**base, sr_near=None) is True
+
+
+def test_sr_cross_none_excludes_null():
+    spec = parse_research_filters({"srCross": "none"})
+    base = dict(
+        symbol_id="s",
+        pattern_type="hammer",
+        timeframe="5m",
+        direction="long",
+        status="succeeded",
+        flag_confirmed=False,
+        flag_retested=False,
+        flag_strengthened=False,
+        volume_ok_at_detect=False,
+        confirmation_mode_used=None,
+        detector_version="v1",
+        detect_candle_time=int(datetime(2026, 8, 17, 10, 0, tzinfo=IST).timestamp()),
+        final_outcome="succeeded",
+        reason=None,
+        planned_rr=2.0,
+        rails_valid=True,
+        spec=spec,
+        allowed_symbol_ids={"s"},
+    )
+    assert row_matches_filters(**base, sr_cross="none") is True
+    assert row_matches_filters(**base, sr_cross=None) is False
+
+
+def test_aggregate_sr_nearest_unset_bucket():
+    spec = parse_research_filters(
+        {"groupBy": "srNearest", "minSampleSize": "1"},
+        default_min_sample_size=1,
+    )
+    rows = [
+        ResearchRow(
+            symbol_id="s",
+            pattern_type="hammer",
+            timeframe="5m",
+            direction="long",
+            status="succeeded",
+            flag_confirmed=False,
+            flag_retested=False,
+            flag_strengthened=False,
+            volume_ok_at_detect=False,
+            confirmation_mode_used=None,
+            detector_version="v1",
+            detect_candle_time=1,
+            entry_price=1,
+            stop_level=0.5,
+            target_level=2,
+            atr_at_detect=1,
+            final_outcome="succeeded",
+            reason=None,
+            duration_candles=1,
+            max_favorable_r=1,
+            max_adverse_r=0.2,
+            move_r=1,
+            sr_nearest="s2",
+            sr_method="woodie_open_v1",
+        ),
+        ResearchRow(
+            symbol_id="s",
+            pattern_type="hammer",
+            timeframe="5m",
+            direction="long",
+            status="succeeded",
+            flag_confirmed=False,
+            flag_retested=False,
+            flag_strengthened=False,
+            volume_ok_at_detect=False,
+            confirmation_mode_used=None,
+            detector_version="v1",
+            detect_candle_time=2,
+            entry_price=1,
+            stop_level=0.5,
+            target_level=2,
+            atr_at_detect=1,
+            final_outcome="succeeded",
+            reason=None,
+            duration_candles=1,
+            max_favorable_r=1,
+            max_adverse_r=0.2,
+            move_r=1,
+        ),
+    ]
+    body = aggregate_research(rows, spec)
+    nearests = {it["srNearest"] for it in body["items"]}
+    assert nearests == {"s2", "unset"}

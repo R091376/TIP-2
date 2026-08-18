@@ -111,6 +111,16 @@ export function topicToMarkdown(topic: LearnTopic, opts?: { baseUrl?: string }):
     '',
     bullets(topic.plainEnglish),
     '',
+  ]
+
+  if (topic.questionsItSolves?.length) {
+    parts.push('## Questions this answers', '', bullets(topic.questionsItSolves), '')
+  }
+  if (topic.howToUse?.length) {
+    parts.push('## How to use it in TIP', '', bullets(topic.howToUse), '')
+  }
+
+  parts.push(
     '## How TIP calculates it',
     '',
     bullets(topic.howWeCalculate),
@@ -125,7 +135,7 @@ export function topicToMarkdown(topic: LearnTopic, opts?: { baseUrl?: string }):
     topic.formulaFormal,
     '```',
     '',
-  ]
+  )
 
   if (topic.lifecycle?.length) {
     parts.push('## Lifecycle', '', bullets(topic.lifecycle), '')
@@ -201,6 +211,7 @@ export function topicToMarkdown(topic: LearnTopic, opts?: { baseUrl?: string }):
 export function buildLearnExportIndex(topics: LearnTopic[], opts?: { baseUrl?: string }): string {
   const base = (opts?.baseUrl || '').replace(/\/$/, '')
   const indicators = topics.filter((t) => t.kind === 'indicator')
+  const concepts = topics.filter((t) => t.kind === 'concept')
   const patterns = topics.filter((t) => t.kind === 'pattern')
 
   const link = (t: LearnTopic) => {
@@ -224,6 +235,10 @@ export function buildLearnExportIndex(topics: LearnTopic[], opts?: { baseUrl?: s
     '## Indicators',
     '',
     ...indicators.map(link),
+    '',
+    '## Context',
+    '',
+    ...concepts.map(link),
     '',
     '## Patterns',
     '',
@@ -257,6 +272,7 @@ export function buildLearnExportHtmlIndex(topics: LearnTopic[]): string {
   const li = (t: LearnTopic) =>
     `<li><a href="./${topicExportRelPath(t)}">${escapeHtml(t.title)}</a> — ${escapeHtml(t.shortDescription)}</li>`
   const indicators = topics.filter((t) => t.kind === 'indicator')
+  const concepts = topics.filter((t) => t.kind === 'concept')
   const patterns = topics.filter((t) => t.kind === 'pattern')
   return `<!DOCTYPE html>
 <html lang="en">
@@ -273,6 +289,10 @@ export function buildLearnExportHtmlIndex(topics: LearnTopic[]): string {
   <h2>Indicators</h2>
   <ul>
     ${indicators.map(li).join('\n    ')}
+  </ul>
+  <h2>Context</h2>
+  <ul>
+    ${concepts.map(li).join('\n    ')}
   </ul>
   <h2>Patterns</h2>
   <ul>

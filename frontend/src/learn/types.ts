@@ -1,4 +1,4 @@
-export type LearnKind = 'indicator' | 'pattern'
+export type LearnKind = 'indicator' | 'pattern' | 'concept'
 
 /** Index chips / filters */
 export type LearnGroup =
@@ -6,6 +6,7 @@ export type LearnGroup =
   | 'range'
   | 'candlestick'
   | 'structure'
+  | 'context'
 
 export type LearnDirection = 'long' | 'short' | 'both' | 'regime'
 
@@ -152,4 +153,8 @@ export type LearnTopic = {
   sourceCode: string[]
   lastReviewed: string
   detectorVersionHint?: string
+  /** Research / product questions this topic answers. */
+  questionsItSolves?: string[]
+  /** How to use the idea in TIP (Research filters, journal stamps, …). */
+  howToUse?: string[]
 }

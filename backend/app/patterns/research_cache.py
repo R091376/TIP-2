@@ -1,7 +1,14 @@
-"""Daily in-memory snapshot of closed journal rows for research stats.
+"""Daily in-memory snapshot of closed journal rows.
 
-Postgres is hit once to load the max lookback window. Filter / groupBy /
-rails calculations then run against the snapshot until the next daily refresh.
+Request-path contract
+---------------------
+Any API that reads closed instance+outcome (\"events\") data — Research
+and future analytics — MUST go through this snapshot
+(``PostgresPatternJournal.closed_event_snapshot``). Do not add per-request
+SQL over ``pattern_instances`` / ``pattern_outcomes``.
+
+Postgres is hit only by the daily loader (startup / IST-day refresh). Filter
+and aggregation then run in process until the next refresh.
 """
 
 from __future__ import annotations
@@ -76,6 +83,14 @@ def match_research_row(
         spec=spec,
         allowed_symbol_ids=allowed_symbol_ids,
         risk_r=rails.risk_r if rails is not None else None,
+        sr_nearest=row.sr_nearest,
+        sr_cross=row.sr_cross,
+        sr_near=row.sr_near,
+        sr_confluence=row.sr_confluence,
+        sr_break=row.sr_break,
+        sr_open_through=row.sr_open_through,
+        sr_gap_dir=row.sr_gap_dir,
+        sr_method=row.sr_method,
     )
 
 

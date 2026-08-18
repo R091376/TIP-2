@@ -52,6 +52,17 @@ def to_new_row(p: ActivePattern, now: datetime) -> PatternInstanceRow:
         ended_at=now if p.is_terminal() else None,
         detect_candle_time=p.detect_candle_time,
         sessions_seen=p.sessions_seen,
+        sr_method=p.sr_method,
+        sr_session_date=p.sr_session_date,
+        sr_nearest=p.sr_nearest,
+        sr_near=p.sr_near,
+        sr_distance_atr=p.sr_distance_atr,
+        sr_cross=p.sr_cross,
+        sr_confluence=p.sr_confluence,
+        sr_break=p.sr_break,
+        sr_open_through=p.sr_open_through,
+        sr_gap_dir=p.sr_gap_dir,
+        sr_ladder_json=p.sr_ladder_json,
         created_at=now,
         updated_at=now,
     )
@@ -69,6 +80,25 @@ def copy_mutable(p: ActivePattern, row: PatternInstanceRow, now: datetime) -> No
     row.updated_at = now
     if p.is_terminal():
         row.ended_at = now
+
+
+def fill_sr_if_null(p: ActivePattern, row: PatternInstanceRow) -> None:
+    """Write SR columns once when a reused fingerprint row is still unstamped."""
+    if row.sr_method is not None:
+        return
+    if p.sr_method is None:
+        return
+    row.sr_method = p.sr_method
+    row.sr_session_date = p.sr_session_date
+    row.sr_nearest = p.sr_nearest
+    row.sr_near = p.sr_near
+    row.sr_distance_atr = p.sr_distance_atr
+    row.sr_cross = p.sr_cross
+    row.sr_confluence = p.sr_confluence
+    row.sr_break = p.sr_break
+    row.sr_open_through = p.sr_open_through
+    row.sr_gap_dir = p.sr_gap_dir
+    row.sr_ladder_json = p.sr_ladder_json
 
 
 def parse_confirmation_mode(raw: str | None) -> ConfirmationMode:
@@ -113,6 +143,17 @@ def to_domain(row: PatternInstanceRow) -> ActivePattern:
         duration_candles=1,
         sessions_seen=row.sessions_seen,
         detector_version=row.detector_version,
+        sr_method=row.sr_method,
+        sr_session_date=row.sr_session_date,
+        sr_nearest=row.sr_nearest,
+        sr_near=row.sr_near,
+        sr_distance_atr=row.sr_distance_atr,
+        sr_cross=row.sr_cross,
+        sr_confluence=row.sr_confluence,
+        sr_break=row.sr_break,
+        sr_open_through=row.sr_open_through,
+        sr_gap_dir=row.sr_gap_dir,
+        sr_ladder_json=row.sr_ladder_json,
     )
     if status in (PatternStage.SUCCEEDED, PatternStage.FAILED, PatternStage.EXPIRED):
         outcome = {

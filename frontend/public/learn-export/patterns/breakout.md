@@ -230,6 +230,7 @@ After confirm, if price dips into the retest band near the reference without clo
 - [ATR (14)](./../indicators/atr-14.md) (`indicator/atr-14`)
 - [Volume SMA (20)](./../indicators/volume-sma-20.md) (`indicator/volume-sma-20`)
 - [Breakdown](./breakdown.md) (`pattern/breakdown`)
+- [Woodie S/R](./../concepts/woodie-sr.md) (`concept/woodie-sr`)
 
 ## Sources
 

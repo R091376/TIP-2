@@ -8,6 +8,28 @@ import {
 } from './researchFilters'
 
 describe('researchFilters codec', () => {
+  it('round-trips Woodie SR filters and groupBy', () => {
+    const qs = serializeResearchFilters({
+      srNearest: ['s2'],
+      srCross: ['r1_up'],
+      srNear: true,
+      srConfluence: true,
+      srOpenThrough: ['s2_down'],
+      srGapDir: 'down',
+      groupBy: 'patternType,srNearest',
+    })
+    const parsed = parseResearchFiltersFromSearch(qs)
+    expect(parsed.srNearest).toEqual(['s2'])
+    expect(parsed.srCross).toEqual(['r1_up'])
+    expect(parsed.srNear).toBe(true)
+    expect(parsed.srConfluence).toBe(true)
+    expect(parsed.srOpenThrough).toEqual(['s2_down'])
+    expect(parsed.srGapDir).toBe('down')
+    expect(parsed.groupBy).toBe('patternType,srNearest')
+    const chips = researchFilterChips(parsed)
+    expect(chips.some((c) => c.key === 'srNearest')).toBe(true)
+  })
+
   it('round-trips groupBy with commas without CSV-splitting', () => {
     const qs = serializeResearchFilters({
       groupBy: 'symbol,patternType,timeframe',

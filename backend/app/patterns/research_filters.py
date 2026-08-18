@@ -19,7 +19,55 @@ GROUP_BY_ALLOWED = frozenset(
         "patternType,timeframe",
         "patternType",
         "none",
+        "srNearest",
+        "patternType,srNearest",
     }
+)
+
+SR_NEAREST_ALLOWED = frozenset({"s3", "s2", "s1", "pp", "r1", "r2", "r3"})
+SR_CROSS_ALLOWED = frozenset(
+    {
+        "none",
+        "s3_up",
+        "s3_down",
+        "s2_up",
+        "s2_down",
+        "s1_up",
+        "s1_down",
+        "pp_up",
+        "pp_down",
+        "r1_up",
+        "r1_down",
+        "r2_up",
+        "r2_down",
+        "r3_up",
+        "r3_down",
+    }
+)
+SR_OPEN_THROUGH_ALLOWED = frozenset(
+    {
+        "s3_down",
+        "s2_down",
+        "s1_down",
+        "pp_down",
+        "pp_up",
+        "r1_up",
+        "r2_up",
+        "r3_up",
+    }
+)
+SR_GAP_DIR_ALLOWED = frozenset({"up", "down", "flat"})
+SR_METHOD_ALLOWED = frozenset({"woodie_open_v1"})
+SR_QUERY_KEYS = (
+    "srNearest",
+    "srCross",
+    "srNear",
+    "srConfluence",
+    "srBreak",
+    "srOpenThrough",
+    "srGapDir",
+    "srMethod",
+    "srStamped",
 )
 
 PATTERN_TYPES_ALLOWED = frozenset(p.value for p in PatternType)
@@ -68,6 +116,15 @@ class ResearchFilterSpec:
     min_expected_r: float | None = None
     require_valid_rails: bool = False
     detector_versions: list[str] | None = None
+    sr_nearest: list[str] | None = None
+    sr_cross: list[str] | None = None
+    sr_near: bool | None = None
+    sr_confluence: bool | None = None
+    sr_break: bool | None = None
+    sr_open_through: list[str] | None = None
+    sr_gap_dir: str | None = None
+    sr_method: list[str] | None = None
+    sr_stamped: bool | None = None
     group_by: str = "symbol,patternType,timeframe"
     min_sample_size: int = 20
     limit_groups: int = 500
@@ -125,6 +182,24 @@ class ResearchFilterSpec:
             out["minExpectedR"] = self.min_expected_r
         if self.detector_versions is not None:
             out["detectorVersion"] = list(self.detector_versions)
+        if self.sr_nearest is not None:
+            out["srNearest"] = list(self.sr_nearest)
+        if self.sr_cross is not None:
+            out["srCross"] = list(self.sr_cross)
+        if self.sr_near is not None:
+            out["srNear"] = self.sr_near
+        if self.sr_confluence is not None:
+            out["srConfluence"] = self.sr_confluence
+        if self.sr_break is not None:
+            out["srBreak"] = self.sr_break
+        if self.sr_open_through is not None:
+            out["srOpenThrough"] = list(self.sr_open_through)
+        if self.sr_gap_dir is not None:
+            out["srGapDir"] = self.sr_gap_dir
+        if self.sr_method is not None:
+            out["srMethod"] = list(self.sr_method)
+        if self.sr_stamped is not None:
+            out["srStamped"] = self.sr_stamped
         return out
 
 
@@ -383,6 +458,48 @@ def parse_research_filters(
 
     detector_versions = parse_csv_list(g("detectorVersion"))
 
+    sr_nearest = parse_csv_list(g("srNearest"))
+    if sr_nearest is not None:
+        sr_nearest = [x.lower() for x in sr_nearest]
+        bad = [x for x in sr_nearest if x not in SR_NEAREST_ALLOWED]
+        if bad:
+            raise ResearchFilterError(f"unknown srNearest: {bad}")
+
+    sr_cross = parse_csv_list(g("srCross"))
+    if sr_cross is not None:
+        sr_cross = [x.lower() for x in sr_cross]
+        bad = [x for x in sr_cross if x not in SR_CROSS_ALLOWED]
+        if bad:
+            raise ResearchFilterError(f"unknown srCross: {bad}")
+
+    sr_near = parse_bool(g("srNear"))
+    sr_confluence = parse_bool(g("srConfluence"))
+    sr_break = parse_bool(g("srBreak"))
+
+    sr_open_through = parse_csv_list(g("srOpenThrough"))
+    if sr_open_through is not None:
+        sr_open_through = [x.lower() for x in sr_open_through]
+        bad = [x for x in sr_open_through if x not in SR_OPEN_THROUGH_ALLOWED]
+        if bad:
+            raise ResearchFilterError(f"unknown srOpenThrough: {bad}")
+
+    sr_gap_dir = g("srGapDir")
+    if sr_gap_dir is not None and str(sr_gap_dir).strip() != "":
+        sr_gap_dir = str(sr_gap_dir).strip().lower()
+        if sr_gap_dir not in SR_GAP_DIR_ALLOWED:
+            raise ResearchFilterError(f"invalid srGapDir: {sr_gap_dir!r}")
+    else:
+        sr_gap_dir = None
+
+    sr_method = parse_csv_list(g("srMethod"))
+    if sr_method is not None:
+        sr_method = [x.lower() for x in sr_method]
+        bad = [x for x in sr_method if x not in SR_METHOD_ALLOWED]
+        if bad:
+            raise ResearchFilterError(f"unknown srMethod: {bad}")
+
+    sr_stamped = parse_bool(g("srStamped"))
+
     group_by = parse_group_by(g("groupBy"))
 
     raw_min_n = g("minSampleSize")
@@ -423,6 +540,15 @@ def parse_research_filters(
         min_expected_r=min_expected_r,
         require_valid_rails=require_valid_rails,
         detector_versions=detector_versions,
+        sr_nearest=sr_nearest,
+        sr_cross=sr_cross,
+        sr_near=sr_near,
+        sr_confluence=sr_confluence,
+        sr_break=sr_break,
+        sr_open_through=sr_open_through,
+        sr_gap_dir=sr_gap_dir,
+        sr_method=sr_method,
+        sr_stamped=sr_stamped,
         group_by=group_by,
         min_sample_size=min_sample_size,
         limit_groups=limit_groups,
@@ -472,6 +598,14 @@ def row_matches_filters(
     spec: ResearchFilterSpec,
     allowed_symbol_ids: set[str],
     risk_r: float | None = None,
+    sr_nearest: str | None = None,
+    sr_cross: str | None = None,
+    sr_near: bool | None = None,
+    sr_confluence: bool | None = None,
+    sr_break: bool | None = None,
+    sr_open_through: tuple[str, ...] | None = None,
+    sr_gap_dir: str | None = None,
+    sr_method: str | None = None,
 ) -> bool:
     """Return True if a closed instance+outcome row matches the research filter.
 
@@ -548,4 +682,41 @@ def row_matches_filters(
         if risk_r is None or risk_r > spec.max_risk_r:
             return False
 
+    if spec.sr_near is not None and (sr_near is None or sr_near != spec.sr_near):
+        return False
+    if spec.sr_confluence is not None and (
+        sr_confluence is None or sr_confluence != spec.sr_confluence
+    ):
+        return False
+    if spec.sr_break is not None and (sr_break is None or sr_break != spec.sr_break):
+        return False
+    if spec.sr_nearest is not None:
+        if sr_nearest is None or sr_nearest not in set(spec.sr_nearest):
+            return False
+    if spec.sr_cross is not None:
+        if sr_cross is None or sr_cross not in set(spec.sr_cross):
+            return False
+    if spec.sr_gap_dir is not None:
+        if sr_gap_dir is None or sr_gap_dir != spec.sr_gap_dir:
+            return False
+    if spec.sr_method is not None:
+        if sr_method is None or sr_method not in set(spec.sr_method):
+            return False
+    if spec.sr_open_through is not None:
+        tokens = sr_open_through or ()
+        if not any(t in tokens for t in spec.sr_open_through):
+            return False
+    if spec.sr_stamped is True and sr_method is None:
+        return False
+    if spec.sr_stamped is False and sr_method is not None:
+        return False
+
     return True
+
+
+def has_sr_filters(params: dict[str, Any]) -> bool:
+    for key in SR_QUERY_KEYS:
+        val = params.get(key)
+        if val is not None and str(val).strip() != "":
+            return True
+    return False

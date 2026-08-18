@@ -56,6 +56,15 @@ def research_statistics(
     groupBy: str | None = None,
     minSampleSize: str | None = None,
     limitGroups: str | None = None,
+    srNearest: str | None = None,
+    srCross: str | None = None,
+    srNear: str | None = None,
+    srConfluence: str | None = None,
+    srBreak: str | None = None,
+    srOpenThrough: str | None = None,
+    srGapDir: str | None = None,
+    srMethod: str | None = None,
+    srStamped: str | None = None,
 ):
     """
     Research / composable stack filters — query-time aggregation.
@@ -99,6 +108,15 @@ def research_statistics(
         "groupBy": groupBy,
         "minSampleSize": minSampleSize,
         "limitGroups": limitGroups,
+        "srNearest": srNearest,
+        "srCross": srCross,
+        "srNear": srNear,
+        "srConfluence": srConfluence,
+        "srBreak": srBreak,
+        "srOpenThrough": srOpenThrough,
+        "srGapDir": srGapDir,
+        "srMethod": srMethod,
+        "srStamped": srStamped,
     }
     try:
         return c.pattern_service.query_statistics(raw)

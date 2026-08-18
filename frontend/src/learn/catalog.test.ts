@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { ALL_TOPICS, getTopic, INDICATOR_TOPICS, PATTERN_TOPICS } from './catalog'
+import { ALL_TOPICS, CONCEPT_TOPICS, getTopic, INDICATOR_TOPICS, PATTERN_TOPICS } from './catalog'
 import { serializeTipDefault } from './serializeTipDefault'
 import { lookupTipDefault, tipDefaults } from './tipDefaults'
 import {
+  EXPECTED_CONCEPT_SLUGS,
   EXPECTED_INDICATOR_SLUGS,
   EXPECTED_PATTERN_TYPE_IDS,
   TOPIC_DEFAULTS_BUCKET,
@@ -29,6 +30,13 @@ describe('learn catalog completeness', () => {
     expect(INDICATOR_TOPICS.map((t) => t.slug).sort()).toEqual(
       [...EXPECTED_INDICATOR_SLUGS].sort(),
     )
+  })
+
+  it('has exactly the expected concept slugs', () => {
+    expect(CONCEPT_TOPICS.map((t) => t.slug).sort()).toEqual(
+      [...EXPECTED_CONCEPT_SLUGS].sort(),
+    )
+    expect(CONCEPT_TOPICS.every((t) => t.kind === 'concept')).toBe(true)
   })
 
   it('has exactly the expected pattern type ids', () => {

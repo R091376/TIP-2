@@ -262,6 +262,7 @@ export const breakout: LearnTopic = {
     { kind: 'indicator', slug: 'atr-14', label: 'ATR (14)' },
     { kind: 'indicator', slug: 'volume-sma-20', label: 'Volume SMA (20)' },
     { kind: 'pattern', slug: 'breakdown', label: 'Breakdown' },
+    { kind: 'concept', slug: 'woodie-sr', label: 'Woodie S/R' },
   ],
   patternTypeId: 'breakout',
   sourceDocs: ['docs/patterns/breakout.md'],

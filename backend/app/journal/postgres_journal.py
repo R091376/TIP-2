@@ -30,10 +30,18 @@ def _as_epoch_seconds(value: int | float | None) -> int:
     return v
 
 
+def _split_open_through(raw: str | None) -> tuple[str, ...] | None:
+    if raw is None:
+        return None
+    parts = [p.strip() for p in str(raw).split(",") if p.strip()]
+    return tuple(parts)
+
+
 from app.journal.mapper import (
     CLOSED_STATUSES,
     OPEN_STATUSES,
     copy_mutable,
+    fill_sr_if_null,
     to_domain,
     to_new_row,
 )
@@ -226,6 +234,31 @@ class PostgresPatternJournal:
             rows = s.scalars(q).all()
             return [to_domain(r) for r in rows]
 
+    def iter_instances_for_sr_backfill(self, start: date, end: date) -> list[ActivePattern]:
+        from datetime import datetime as dt
+
+        start_utc = dt(start.year, start.month, start.day, tzinfo=_IST).astimezone(timezone.utc)
+        end_excl = dt(end.year, end.month, end.day, tzinfo=_IST) + timedelta(days=1)
+        end_utc = end_excl.astimezone(timezone.utc)
+        with self._sf() as s:
+            rows = s.scalars(
+                select(PatternInstanceRow).where(
+                    PatternInstanceRow.detected_at >= start_utc,
+                    PatternInstanceRow.detected_at < end_utc,
+                )
+            ).all()
+            return [to_domain(r) for r in rows]
+
+    def update_sr_stamp(self, pattern: ActivePattern) -> None:
+        with self._sf() as s:
+            row = s.get(PatternInstanceRow, pattern.id)
+            if row is None:
+                row = self._find_row_by_fingerprint(s, pattern)
+            if row is None:
+                return
+            fill_sr_if_null(pattern, row)
+            s.commit()
+
     def find_statistics(
         self, symbol_id: str, pattern_type: str, timeframe: str
     ) -> PatternStatisticsSnapshot | None:
@@ -239,6 +272,17 @@ class PostgresPatternJournal:
                 },
             )
             return self._to_snapshot(row) if row else None
+
+    def closed_event_snapshot(self):
+        """Request-path source for closed instance+outcome analytics.
+
+        Future event-based APIs must use this (or the rows it returns).
+        Postgres is read only by the daily cache loader, not here.
+        """
+        cache = self._research_cache
+        if cache is None or not getattr(cache, "enabled", False):
+            raise RuntimeError("Closed-event snapshot cache is disabled")
+        return cache.ensure()
 
     def find_statistics_for_symbols(
         self,
@@ -438,6 +482,7 @@ class PostgresPatternJournal:
                 row = self._find_row_by_fingerprint(s, pattern)
             if row is not None:
                 copy_mutable(pattern, row, now)
+                fill_sr_if_null(pattern, row)
             return
 
         row = self._ensure_instance_row(s, pattern, now)
@@ -448,6 +493,7 @@ class PostgresPatternJournal:
             self._insert_event_if_absent(s, ev, now, instance_id=durable_id)
 
         copy_mutable(pattern, row, now)
+        fill_sr_if_null(pattern, row)
 
         if pattern.is_terminal() and pattern.final_outcome is not None:
             existing = s.get(PatternOutcomeRow, durable_id)
@@ -1026,6 +1072,13 @@ class PostgresPatternJournal:
             return
         cache.refresh_if_stale()
 
+    def reload_research_cache(self) -> None:
+        """Force-replace the warm snapshot (used after SR backfill)."""
+        cache = self._research_cache
+        if cache is None or not getattr(cache, "enabled", False):
+            return
+        cache.ensure(force=True)
+
     def aggregate_filtered(
         self,
         spec,
@@ -1037,9 +1090,8 @@ class PostgresPatternJournal:
         """
         Research aggregation over closed instances ⨝ outcomes.
 
-        Prefer the daily in-memory snapshot (all closed rows in the max lookback
-        window). Filter / groupBy / rails math then run in process. Falls back
-        to a live Postgres scan if the cache is disabled or the first load fails.
+        Always reads the daily in-memory snapshot. Filter / groupBy / rails
+        run in process. No per-request Postgres scan.
         """
         from app.patterns.research_cache import filter_snapshot_rows
         from app.patterns.research_metrics import (
@@ -1055,30 +1107,10 @@ class PostgresPatternJournal:
         if from_d is None or to_d is None:
             return empty_research_response(spec)
 
-        snap = None
-        cache = self._research_cache
-        if cache is not None and getattr(cache, "enabled", False):
-            try:
-                snap = cache.ensure()
-            except Exception:
-                logger.exception(
-                    "Research snapshot unavailable; falling back to live query"
-                )
-                snap = None
-
-        if snap is not None:
-            matched = filter_snapshot_rows(snap.rows, spec, allowed_symbol_ids)
-            resp = aggregate_research(matched, spec, symbol_labels=symbol_labels)
-            resp["cache"] = snap.meta(hit=True)
-            return resp
-
-        matched = self._live_filter_rows(
-            spec,
-            allowed_symbol_ids=allowed_symbol_ids,
-            statement_timeout_ms=statement_timeout_ms,
-        )
+        snap = self.closed_event_snapshot()
+        matched = filter_snapshot_rows(snap.rows, spec, allowed_symbol_ids)
         resp = aggregate_research(matched, spec, symbol_labels=symbol_labels)
-        resp["cache"] = {"hit": False, "source": "db"}
+        resp["cache"] = snap.meta(hit=True)
         return resp
 
     def _load_research_snapshot(self):
@@ -1110,6 +1142,7 @@ class PostgresPatternJournal:
         allowed_symbol_ids: list[str],
         statement_timeout_ms: int,
     ) -> list:
+        """Not for request handlers. Daily loader is ``_fetch_closed_rows``."""
         from app.patterns.research_cache import match_research_row
 
         from_d, to_d = self._clamp_research_dates(spec.detected_from, spec.detected_to)
@@ -1228,6 +1261,15 @@ class PostgresPatternJournal:
             max_favorable_r=outcome.max_favorable_r,
             max_adverse_r=outcome.max_adverse_r,
             move_r=outcome.move_r,
+            sr_method=getattr(inst, "sr_method", None),
+            sr_nearest=getattr(inst, "sr_nearest", None),
+            sr_near=getattr(inst, "sr_near", None),
+            sr_cross=getattr(inst, "sr_cross", None),
+            sr_confluence=getattr(inst, "sr_confluence", None),
+            sr_break=getattr(inst, "sr_break", None),
+            sr_open_through=_split_open_through(getattr(inst, "sr_open_through", None)),
+            sr_gap_dir=getattr(inst, "sr_gap_dir", None),
+            sr_ladder=getattr(inst, "sr_ladder_json", None),
         )
         row.rails()
         return row

@@ -10,6 +10,7 @@ describe('learn routing', () => {
   it('parseLearnKind accepts plural URL segments only', () => {
     expect(parseLearnKind('indicators')).toBe('indicator')
     expect(parseLearnKind('patterns')).toBe('pattern')
+    expect(parseLearnKind('concepts')).toBe('concept')
     expect(parseLearnKind('indicator')).toBeNull()
     expect(parseLearnKind('foo')).toBeNull()
   })
@@ -17,8 +18,10 @@ describe('learn routing', () => {
   it('learnKindToPath and learnTopicPath are stable', () => {
     expect(learnKindToPath('indicator')).toBe('indicators')
     expect(learnKindToPath('pattern')).toBe('patterns')
+    expect(learnKindToPath('concept')).toBe('concepts')
     expect(learnTopicPath('pattern', 'breakout')).toBe('/learn/patterns/breakout')
     expect(learnTopicPath('indicator', 'atr-14')).toBe('/learn/indicators/atr-14')
+    expect(learnTopicPath('concept', 'woodie-sr')).toBe('/learn/concepts/woodie-sr')
   })
 
   it('legacyAdminLearnToStandalone preserves topic paths', () => {

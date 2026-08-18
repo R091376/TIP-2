@@ -14,6 +14,10 @@ Static, no-JavaScript copies of every Learn topic for AI tools, search, and plai
 - [Donchian (20)](./indicators/donchian-20.md) — Highest high and lowest low over a lookback — the breakout ceiling/floor. *(SPA: /learn/indicators/donchian-20)*
 - [Volume SMA (20)](./indicators/volume-sma-20.md) — Average traded volume — the baseline for a “busy day” check. *(SPA: /learn/indicators/volume-sma-20)*
 
+## Context
+
+- [Woodie support & resistance](./concepts/woodie-sr.md) — Daily S/R ladder from yesterday’s range and today’s open — stamped on every pattern so Research can ask “at S2?” or “through R1?”. *(SPA: /learn/concepts/woodie-sr)*
+
 ## Patterns
 
 - [Breakout](./patterns/breakout.md) — Close above the prior 20-bar high, then track confirmation, retest, and targets. *(SPA: /learn/patterns/breakout)*

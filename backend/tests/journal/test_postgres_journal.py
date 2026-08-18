@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import pytest
 from sqlalchemy import create_engine, select
@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db.base import Base
 from app.journal.entities import (
+    DailySrLevelRow,
     PatternEventRow,
     PatternInstanceRow,
     PatternOutcomeRow,
@@ -34,6 +35,7 @@ def journal():
     engine = create_engine("sqlite+pysqlite:///:memory:")
     # Import side-effect: register models on Base
     assert PatternInstanceRow.__tablename__
+    assert DailySrLevelRow.__tablename__
     Base.metadata.create_all(engine)
     sf = sessionmaker(bind=engine, expire_on_commit=False)
     return PostgresPatternJournal(sf), sf
@@ -463,33 +465,15 @@ def test_research_aggregate_uses_cache_across_filters(journal):
     assert bo_resp["totalMatched"] == 1
 
 
-def test_research_aggregate_live_fallback_when_cache_disabled(journal):
+def test_research_aggregate_requires_cache(journal):
     from app.journal.postgres_journal import PostgresPatternJournal
     from app.patterns.research_filters import parse_research_filters
 
     _, sf = journal
     live = PostgresPatternJournal(sf, research_cache_enabled=False)
-    t = int(datetime.now(timezone.utc).timestamp())
-    _close_pattern(
-        live, symbol_id="NSE_EQ|L", pattern_type=PatternType.BREAKOUT, detect_candle_time=t
-    )
-
-    fetches = {"n": 0}
-    orig = live._fetch_closed_rows
-
-    def wrapped(*args, **kwargs):
-        fetches["n"] += 1
-        return orig(*args, **kwargs)
-
-    live._fetch_closed_rows = wrapped
-
     spec = parse_research_filters({"minSampleSize": "5"})
-    a = live.aggregate_filtered(spec, allowed_symbol_ids=["NSE_EQ|L"])
-    b = live.aggregate_filtered(spec, allowed_symbol_ids=["NSE_EQ|L"])
-    assert fetches["n"] == 2
-    assert a["cache"]["hit"] is False
-    assert a["totalMatched"] == 1
-    assert b["totalMatched"] == 1
+    with pytest.raises(RuntimeError, match="snapshot cache is disabled"):
+        live.aggregate_filtered(spec, allowed_symbol_ids=["NSE_EQ|L"])
 
 
 def test_startup_purges_historical_startup_recovery(journal):
@@ -539,3 +523,57 @@ def test_startup_hydrate_multi_day(journal):
     opens = store.get_open("NSE_EQ|H", "1h")
     assert len(opens) == 1
     assert opens[0].id == p.id
+
+
+def test_fill_sr_if_null_on_fingerprint_reuse(journal):
+    j, sf = journal
+    now = datetime.now(timezone.utc)
+    first = _pattern()
+    j.persist_lifecycle(
+        first,
+        [PatternStageEvent(first.id, PatternStage.DETECTED, first.detect_candle_time, 101.0, now)],
+    )
+    with sf() as s:
+        row = s.get(PatternInstanceRow, first.id)
+        assert row is not None
+        assert row.sr_method is None
+
+    stamped = _pattern()
+    stamped.sr_method = "woodie_open_v1"
+    stamped.sr_session_date = date(2026, 8, 18)
+    stamped.sr_nearest = "s2"
+    stamped.sr_near = True
+    stamped.sr_distance_atr = 0.2
+    stamped.sr_cross = "none"
+    stamped.sr_confluence = True
+    stamped.sr_break = False
+    stamped.sr_open_through = ""
+    stamped.sr_gap_dir = "flat"
+    stamped.sr_ladder_json = {"pp": 100.0, "s2": 98.0}
+    j.persist_lifecycle(
+        stamped,
+        [
+            PatternStageEvent(
+                stamped.id, PatternStage.DETECTED, stamped.detect_candle_time, 101.0, now
+            )
+        ],
+    )
+    with sf() as s:
+        row = s.get(PatternInstanceRow, first.id)
+        assert row is not None
+        assert row.sr_method == "woodie_open_v1"
+        assert row.sr_nearest == "s2"
+
+    stamped.sr_nearest = "r1"
+    j.persist_lifecycle(
+        stamped,
+        [
+            PatternStageEvent(
+                stamped.id, PatternStage.CONFIRMED, stamped.detect_candle_time, 101.0, now
+            )
+        ],
+    )
+    with sf() as s:
+        row = s.get(PatternInstanceRow, first.id)
+        assert row is not None
+        assert row.sr_nearest == "s2"
