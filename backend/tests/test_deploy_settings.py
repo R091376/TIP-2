@@ -52,6 +52,24 @@ def test_jwt_expire_hours_default():
     assert s.jwt_expire_hours == 8
 
 
+def test_timeframe_1m_disabled_by_default():
+    s = Settings()
+    assert s.timeframe_1m_enabled is False
+    assert "1m" not in s.supported_timeframes
+    assert s.supported_timeframes[0] == "5m"
+
+
+def test_timeframe_1m_enabled_inserts_1m():
+    s = Settings(timeframe_1m_enabled=True)
+    assert s.supported_timeframes[0] == "1m"
+    assert "5m" in s.supported_timeframes
+
+
+def test_sr_backfill_off_by_default():
+    s = Settings()
+    assert s.pattern_sr_backfill_on_startup is False
+
+
 def test_env_aliases_for_deploy(monkeypatch):
     clear_settings_cache()
     monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "https://fe.example")
@@ -59,6 +77,8 @@ def test_env_aliases_for_deploy(monkeypatch):
     monkeypatch.setenv("JWT_EXPIRE_HOURS", "8")
     monkeypatch.setenv("TIP_WATCHLIST_STORE", "memory")
     monkeypatch.setenv("TIP_PROFILE", "memory")
+    monkeypatch.setenv("TIP_TIMEFRAME_1M_ENABLED", "true")
+    monkeypatch.setenv("TIP_PATTERN_SR_BACKFILL_ON_STARTUP", "true")
     clear_settings_cache()
     from app.config import get_settings
 
@@ -66,4 +86,7 @@ def test_env_aliases_for_deploy(monkeypatch):
     assert "https://fe.example" in s.cors_origins_list()
     assert s.jwt_signing_secret() == "from-env-jwt"
     assert s.jwt_expire_hours == 8
+    assert s.timeframe_1m_enabled is True
+    assert "1m" in s.supported_timeframes
+    assert s.pattern_sr_backfill_on_startup is True
     clear_settings_cache()

@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     default_symbol: str = "Nifty 50"
     default_instrument_key: str = "NSE_INDEX|Nifty 50"
     default_timeframe: str = "5m"
+    # Seed + live + chart TFs. 1m is gated by timeframe_1m_enabled (off by default
+    # — ~2.6k historical bars/symbol and not used by pattern detectors).
+    timeframe_1m_enabled: bool = Field(default=False, alias="TIP_TIMEFRAME_1M_ENABLED")
     supported_timeframes: list[str] = Field(
         default_factory=lambda: ["1m", "5m", "15m", "1h", "4h", "1d"]
     )
@@ -121,8 +124,10 @@ class Settings(BaseSettings):
     pattern_sr_research_enabled: bool = Field(
         default=True, alias="TIP_PATTERN_SR_RESEARCH_ENABLED"
     )
+    # Historical Woodie repair. Off at boot — run scripts/backfill_woodie_sr.py
+    # after a schema change. Live today-rows still freeze via ensure_today.
     pattern_sr_backfill_on_startup: bool = Field(
-        default=True, alias="TIP_PATTERN_SR_BACKFILL_ON_STARTUP"
+        default=False, alias="TIP_PATTERN_SR_BACKFILL_ON_STARTUP"
     )
     pattern_sr_near_atr: float = Field(default=0.5, alias="TIP_PATTERN_SR_NEAR_ATR")
     pattern_sr_method: str = Field(default="woodie_open_v1", alias="TIP_PATTERN_SR_METHOD")
@@ -333,6 +338,21 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in (self.cors_allowed_origins or "").split(",") if o.strip()]
 
+    def sync_supported_timeframes(self) -> None:
+        """Insert or strip 1m to match timeframe_1m_enabled."""
+        tfs = list(self.supported_timeframes or [])
+        if self.timeframe_1m_enabled:
+            if "1m" not in tfs:
+                tfs = ["1m", *tfs]
+        else:
+            tfs = [tf for tf in tfs if tf != "1m"]
+        object.__setattr__(self, "supported_timeframes", tfs)
+
+    @model_validator(mode="after")
+    def _apply_timeframe_1m_flag(self):
+        self.sync_supported_timeframes()
+        return self
+
     def jwt_signing_secret(self) -> str:
         """Prefer JWT_SECRET; fall back to SESSION_SECRET for easy Render migration."""
         s = (self.jwt_secret or "").strip() or (self.session_secret or "").strip()
@@ -355,6 +375,15 @@ def normalize_sqlalchemy_url(url: str) -> str:
     return u
 
 
+def _env_bool(raw: str) -> bool | None:
+    v = (raw or "").strip().lower()
+    if v in ("1", "true", "yes", "on"):
+        return True
+    if v in ("0", "false", "no", "off"):
+        return False
+    return None
+
+
 @lru_cache
 def get_settings() -> Settings:
     # Force critical env vars even if pydantic alias binding is flaky in some runtimes
@@ -364,6 +393,8 @@ def get_settings() -> Settings:
     jwt_secret = os.environ.get("JWT_SECRET", "")
     jwt_hours = os.environ.get("JWT_EXPIRE_HOURS", "")
     session_secret = os.environ.get("SESSION_SECRET", "")
+    tf_1m = os.environ.get("TIP_TIMEFRAME_1M_ENABLED", "")
+    sr_backfill = os.environ.get("TIP_PATTERN_SR_BACKFILL_ON_STARTUP", "")
     settings = Settings()
     if store:
         object.__setattr__(settings, "tip_watchlist_store", store)
@@ -380,6 +411,13 @@ def get_settings() -> Settings:
             object.__setattr__(settings, "jwt_expire_hours", int(jwt_hours))
         except ValueError:
             pass
+    parsed_1m = _env_bool(tf_1m)
+    if parsed_1m is not None:
+        object.__setattr__(settings, "timeframe_1m_enabled", parsed_1m)
+        settings.sync_supported_timeframes()
+    parsed_backfill = _env_bool(sr_backfill)
+    if parsed_backfill is not None:
+        object.__setattr__(settings, "pattern_sr_backfill_on_startup", parsed_backfill)
     return settings
 
 

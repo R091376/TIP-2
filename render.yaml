@@ -27,6 +27,11 @@ services:
         value: postgres
       - key: TIP_PROFILE
         value: ""
+      # 512MB: skip 1m seed (~2.6k bars/symbol) and historical SR backfill at boot
+      - key: TIP_TIMEFRAME_1M_ENABLED
+        value: "false"
+      - key: TIP_PATTERN_SR_BACKFILL_ON_STARTUP
+        value: "false"
       # JWT access tokens (Bearer). 8 hours. No cookies.
       - key: JWT_EXPIRE_HOURS
         value: "8"
@@ -65,3 +70,5 @@ services:
           property: host
       - key: VITE_API_BASE_URL
         value: https://tip2-api.onrender.com
+      - key: VITE_FEATURE_TIMEFRAME_1M
+        value: "false"

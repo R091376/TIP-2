@@ -43,10 +43,13 @@ Blueprint file: [`render.yaml`](../render.yaml) at repo root.
 | `CORS_ALLOWED_ORIGINS` | FE + localhost | Browser CORS for split deploy |
 | `PYTHON_VERSION` | 3.12.8 | Runtime pin |
 
-Woodie S/R flags (optional kill switches, default ON in code):
+Woodie S/R flags (optional kill switches; live freeze + stamp default ON):
 `TIP_PATTERN_SR_ENABLED`, `TIP_PATTERN_SR_STAMP_ENABLED`,
-`TIP_PATTERN_SR_RESEARCH_ENABLED`, `TIP_PATTERN_SR_BACKFILL_ON_STARTUP`.
-Frontend: `VITE_FEATURE_PATTERN_SR_RESEARCH` (default ON).
+`TIP_PATTERN_SR_RESEARCH_ENABLED`.
+`TIP_PATTERN_SR_BACKFILL_ON_STARTUP` defaults **OFF** (historical repair only —
+`backend/scripts/backfill_woodie_sr.py`). Live today-rows still freeze via `ensure_today`.
+`TIP_TIMEFRAME_1M_ENABLED` defaults **OFF** (no 1m seed / chart chip). Set `true` to restore.
+Frontend: `VITE_FEATURE_PATTERN_SR_RESEARCH` (default ON), `VITE_FEATURE_TIMEFRAME_1M` (default OFF).
 
 ### Migrating from cookie auth
 

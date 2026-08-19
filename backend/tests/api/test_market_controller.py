@@ -3,7 +3,8 @@ def test_timeframes(client):
     assert r.status_code == 200
     body = r.json()
     assert body["defaultTimeframe"] == "5m"
-    assert "1m" in body["supported"]
+    assert "1m" not in body["supported"]
+    assert body["supported"] == ["5m", "15m", "1h", "4h", "1d"]
 
 
 def test_status(client):

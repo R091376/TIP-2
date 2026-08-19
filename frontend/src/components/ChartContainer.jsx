@@ -4,7 +4,7 @@ import { useAuth } from '../auth/useAuth'
 import { isChartPaperTradeEnabled } from '../config/featureFlags'
 import {
   DEFAULT_TIMEFRAME,
-  DEFAULT_TIMEFRAMES,
+  getDefaultTimeframes,
   fetchCandles,
 } from '../services/marketApi'
 import { parsePaperApiError } from '../services/paperApi'
@@ -51,7 +51,7 @@ export default function ChartContainer() {
 
   const [watchlist, setWatchlist] = useState([])
   const [activeSymbolId, setActiveSymbolId] = useState(null)
-  const [timeframes, setTimeframes] = useState([...DEFAULT_TIMEFRAMES])
+  const [timeframes, setTimeframes] = useState(() => getDefaultTimeframes())
   const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME)
   const [chartType, setChartType] = useState('candlestick')
   const [connectionStatus, setConnectionStatus] = useState('connecting')

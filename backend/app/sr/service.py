@@ -158,11 +158,24 @@ class DailySrService:
                 return bar.open, int(bar.time)
         return None, None
 
+    def _open_freeze_timeframes(self) -> list[str]:
+        """Finest-first TFs that can freeze today's Woodie open."""
+        supported = getattr(self._settings, "supported_timeframes", None)
+        candidates = ("1m", "5m", "15m")
+        if supported is None:
+            return list(candidates)
+        return [tf for tf in candidates if tf in supported]
+
     def _resolve_today_open_from_event(self, ev: CandleUpdatedEvent):
-        if ev.timeframe != "1m":
+        freeze_tfs = self._open_freeze_timeframes()
+        if not freeze_tfs:
             return None, None
+        finest = freeze_tfs[0]
+        if ev.timeframe != finest:
+            return None, None
+        minutes = {"1m": 1, "5m": 5, "15m": 15}[finest]
         day = candle_ist_date(int(ev.candle.time))
-        want = self._session_open_epoch(day, 1)
+        want = self._session_open_epoch(day, minutes)
         if int(ev.candle.time) != want:
             return None, None
         return float(ev.candle.open), int(ev.candle.time)

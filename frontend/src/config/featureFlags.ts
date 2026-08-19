@@ -82,6 +82,19 @@ export function isPatternSrResearchEnabled(): boolean {
   )
 }
 
+/**
+ * VITE_FEATURE_TIMEFRAME_1M — show/seed 1m on the chart and stats filters.
+ * Default OFF (512MB: 1m history is ~2.6k bars/symbol and detectors ignore it).
+ * Backend TIP_TIMEFRAME_1M_ENABLED is the seed/API source of truth; this flag
+ * is the fallback list before /api/market/timeframes returns.
+ */
+export function isTimeframe1mEnabled(): boolean {
+  return envTruthy(
+    import.meta.env.VITE_FEATURE_TIMEFRAME_1M as string | undefined,
+    false,
+  )
+}
+
 /** Max time to wait for API + Postgres before showing Retry (ms). */
 export const STARTUP_READY_TIMEOUT_MS = 180_000
 

@@ -4,7 +4,7 @@ export default function TimeframeSelector({
   onChange,
   disabled,
   orientation = 'horizontal',
-  /** Native select — compact mobile chrome (one control instead of 6 chips). */
+  /** Native select — compact mobile chrome (one control instead of chips). */
   variant = 'buttons',
 }) {
   if (!timeframes?.length) {

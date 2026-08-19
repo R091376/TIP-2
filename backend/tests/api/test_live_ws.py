@@ -38,6 +38,16 @@ def test_ws_unsupported_timeframe(client):
         assert "Unsupported timeframe" in msg["message"]
 
 
+def test_ws_1m_unsupported_when_flag_off(client):
+    with client.websocket_connect("/ws/live") as ws:
+        ws.send_json(
+            {"type": "subscribe", "symbolId": "NSE_INDEX|Nifty 50", "timeframe": "1m"}
+        )
+        msg = ws.receive_json()
+        assert msg["type"] == "error"
+        assert "Unsupported timeframe" in msg["message"]
+
+
 def test_ws_unknown_symbol(client):
     with client.websocket_connect("/ws/live") as ws:
         ws.send_json(

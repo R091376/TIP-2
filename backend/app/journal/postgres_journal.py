@@ -1060,7 +1060,7 @@ class PostgresPatternJournal:
         return True
 
     def warm_research_cache(self) -> None:
-        """Blocking initial load (startup / first research request)."""
+        """Blocking load. Call from the first research request, not startup."""
         cache = self._research_cache
         if cache is None or not getattr(cache, "enabled", False):
             return

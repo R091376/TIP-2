@@ -1,8 +1,18 @@
+import { isTimeframe1mEnabled } from '../config/featureFlags'
 import { encodeSymbolId } from './watchlistApi'
 import { api } from './http'
 
-export const DEFAULT_TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
+export const ALL_TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
 export const DEFAULT_TIMEFRAME = '5m'
+
+/** Chart / API fallback list. Honors VITE_FEATURE_TIMEFRAME_1M (default off). */
+export function getDefaultTimeframes(): string[] {
+  if (isTimeframe1mEnabled()) return [...ALL_TIMEFRAMES]
+  return ALL_TIMEFRAMES.filter((tf) => tf !== '1m')
+}
+
+/** @deprecated Prefer getDefaultTimeframes() so the 1m flag is applied. */
+export const DEFAULT_TIMEFRAMES = ['5m', '15m', '1h', '4h', '1d'] as const
 
 export type CandleDto = {
   time: number
@@ -38,7 +48,7 @@ export async function fetchTimeframes(): Promise<TimeframesDto> {
   try {
     return await api<TimeframesDto>('/api/market/timeframes')
   } catch {
-    return { defaultTimeframe: DEFAULT_TIMEFRAME, supported: [...DEFAULT_TIMEFRAMES] }
+    return { defaultTimeframe: DEFAULT_TIMEFRAME, supported: getDefaultTimeframes() }
   }
 }
 

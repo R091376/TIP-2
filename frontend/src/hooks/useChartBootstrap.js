@@ -5,9 +5,9 @@ import { useEffect } from 'react'
 import { createChart } from 'lightweight-charts'
 import {
   DEFAULT_TIMEFRAME,
-  DEFAULT_TIMEFRAMES,
   fetchMarketStatus,
   fetchTimeframes,
+  getDefaultTimeframes,
 } from '../services/marketApi'
 import { fetchWatchlist } from '../services/watchlistApi'
 import { createLiveSocket } from '../services/liveSocket'
@@ -78,7 +78,7 @@ export function useChartBootstrap({
 
         const supported = tfInfo.supported?.length
           ? tfInfo.supported
-          : [...DEFAULT_TIMEFRAMES]
+          : getDefaultTimeframes()
         // Optional deep-link from pattern stats: /?symbol=...&tf=5m
         let deepSymbol = null
         let deepTf = null

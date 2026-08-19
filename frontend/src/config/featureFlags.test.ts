@@ -72,6 +72,44 @@ describe('isAppShellEnabled', () => {
   })
 })
 
+describe('isTimeframe1mEnabled', () => {
+  afterEach(() => {
+    vi.resetModules()
+    vi.unstubAllEnvs()
+  })
+
+  it('defaults to OFF when unset', async () => {
+    vi.stubEnv('VITE_FEATURE_TIMEFRAME_1M', '')
+    const { isTimeframe1mEnabled } = await import('./featureFlags')
+    expect(isTimeframe1mEnabled()).toBe(false)
+  })
+
+  it('can be turned on', async () => {
+    vi.stubEnv('VITE_FEATURE_TIMEFRAME_1M', 'true')
+    const { isTimeframe1mEnabled } = await import('./featureFlags')
+    expect(isTimeframe1mEnabled()).toBe(true)
+  })
+})
+
+describe('getDefaultTimeframes', () => {
+  afterEach(() => {
+    vi.resetModules()
+    vi.unstubAllEnvs()
+  })
+
+  it('omits 1m when the flag is off', async () => {
+    vi.stubEnv('VITE_FEATURE_TIMEFRAME_1M', 'false')
+    const { getDefaultTimeframes } = await import('../services/marketApi')
+    expect(getDefaultTimeframes()).toEqual(['5m', '15m', '1h', '4h', '1d'])
+  })
+
+  it('includes 1m when the flag is on', async () => {
+    vi.stubEnv('VITE_FEATURE_TIMEFRAME_1M', 'true')
+    const { getDefaultTimeframes } = await import('../services/marketApi')
+    expect(getDefaultTimeframes()[0]).toBe('1m')
+  })
+})
+
 describe('isAdminLearnEnabled', () => {
   afterEach(() => {
     vi.resetModules()

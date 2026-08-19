@@ -32,7 +32,7 @@ export const woodieSr: LearnTopic = {
     'Quality chips: Near S/R (within 0.5× the pattern’s ATR), SR confluence (long at S* or short at R*), SR break (long through R* or short through S*).',
     'Built-in presets: Hammer at S2, Breakout cleared R1, Gap through S2. Group by Nearest or Type · nearest to compare S2 vs R1 vs mid-range.',
     'Near uses the pattern timeframe ATR at detect, not daily ATR. A 5m hammer can be “near S2” while a 1d hammer at the same rupee distance is not.',
-    'Cross / break filters skip older 5m (~60 days) and 15m (~90 days) backfill rows that have no signal candle. Historical open is that day’s 1d open except the last ~10 days when a 1m 09:15 bar was seeded.',
+    'Cross / break filters skip older 5m (~60 days) and 15m (~90 days) backfill rows that have no signal candle. Historical open is that day’s 1d open except recent sessions when a 5m 09:15 bar was seeded.',
   ],
   howWeCalculate: [
     'Take the last completed daily candle as previous day: high, low, close (never today’s still-open 1d bar).',
@@ -237,10 +237,10 @@ export const woodieSr: LearnTopic = {
   ],
   lifecycle: [
     'PRE_OPEN: no freeze (no official RTH open yet).',
-    'First 09:15 1m print: persist daily_sr_levels for the IST session.',
+    'First 09:15 print on the finest enabled TF (5m when 1m is off): persist daily_sr_levels for the IST session.',
     'Each accepted detect (after min-risk): stamp sr_* on the instance; never update later.',
     'Research reads those frozen fields. Dashboard pattern_statistics is unchanged.',
-    'Startup / symbol add: seed 1d then 1m, then recover today’s row from the 09:15 open.',
+    'Startup / symbol add: seed 1d first, then recover today’s row from the 09:15 open (5m, or 1m when TIP_TIMEFRAME_1M_ENABLED).',
   ],
   closedCandleOnly: true,
   relatedSlugs: [

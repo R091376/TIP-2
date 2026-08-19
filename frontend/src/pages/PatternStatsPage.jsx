@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
-import { isPatternResearchStatsEnabled, isPatternSrResearchEnabled } from '../config/featureFlags'
+import {
+  isPatternResearchStatsEnabled,
+  isPatternSrResearchEnabled,
+  isTimeframe1mEnabled,
+} from '../config/featureFlags'
 import {
   fetchPatternStatistics,
   fetchResearchStatistics,
@@ -23,7 +27,9 @@ import {
 import './authPages.css'
 import './patternStats.css'
 
-const TIMEFRAMES = ['all', '1m', '5m', '15m', '1h', '4h', '1d']
+const TIMEFRAMES = isTimeframe1mEnabled()
+  ? ['all', '1m', '5m', '15m', '1h', '4h', '1d']
+  : ['all', '5m', '15m', '1h', '4h', '1d']
 const RESEARCH_TFS = ['5m', '15m', '1h', '4h', '1d']
 const RESEARCH_TYPES = [
   'breakout',
@@ -1089,7 +1095,7 @@ export default function PatternStatsPage() {
                   <span className="rf-hint">
                     Near uses the pattern timeframe ATR at detect, not daily ATR. Cross/break
                     exclude older 5m (~60d) and 15m (~90d) backfill rows. Historical open is
-                    that day’s 1d open except the last ~10d when a 1m 09:15 bar was seeded.
+                    that day’s 1d open except the last ~10d when a 5m 09:15 bar was seeded.
                   </span>
                 </div>
               </div>
