@@ -37,7 +37,8 @@ export function useLiveMessageHandler(deps) {
     if (message.type === 'market_status') {
       d.updateConnectionStatus(d.wsStatusRef.current, message.marketPhase)
       if (message.marketPhase === 'closed') d.setInfoMessage(MARKET_CLOSED_MSG)
-      else d.setInfoMessage((prev) => (prev === MARKET_CLOSED_MSG ? null : prev))
+      else
+        d.setInfoMessage((prev) => (prev === MARKET_CLOSED_MSG ? null : prev))
       return
     }
 

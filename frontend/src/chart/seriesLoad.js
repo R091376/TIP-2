@@ -62,11 +62,19 @@ export async function loadReadySeries({
   preferFailedBanner = false,
   watchlistRef = null,
   disposedRef = null,
+  entry = null,
 }) {
   try {
     const candles = await loadCandles(symbolId, timeframe, generation)
     if (candles === null || disposedRef?.current) return 'stale'
-    setInfoMessage(infoAfterCandleLoad(candles, marketPhaseRef.current))
+    const active =
+      entry || watchlistRef?.current?.find((e) => e.symbolId === symbolId)
+    setInfoMessage(
+      infoAfterCandleLoad(candles, marketPhaseRef.current, {
+        sessionKind: active?.sessionKind,
+        ctsEnd: active?.ctsEnd,
+      }),
+    )
     socketRef.current?.subscribe(symbolId, timeframe)
     return 'ok'
   } catch (err) {

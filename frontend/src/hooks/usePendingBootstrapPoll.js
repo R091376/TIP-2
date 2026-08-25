@@ -48,6 +48,8 @@ export function usePendingBootstrapPoll({
           setSwitching,
           errorFallback: 'Failed to load candles',
           disposedRef,
+          watchlistRef,
+          entry: nextActive,
         })
       } else if (prevStatus === 'PENDING' && nextStatus === 'FAILED') {
         const msg = failedBannerForEntry(nextActive)

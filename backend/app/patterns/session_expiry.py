@@ -57,14 +57,18 @@ class SessionExpiryReconciler:
             return
         if event.phase != "CLOSED":
             return
+        if getattr(self._settings, "cas_session_enabled", True):
+            return
         self.expire_on_session_close()
 
-    def expire_on_session_close(self) -> int:
+    def expire_on_session_close(self, symbol_ids: set[str] | None = None) -> int:
         now = datetime.now(timezone.utc)
         session_tfs = set(self._settings.expiry_session_close_timeframes or [])
         all_open = self._store.all_open()
         by_series: dict[tuple[str, str], list] = defaultdict(list)
         for p in all_open:
+            if symbol_ids is not None and p.symbol_id not in symbol_ids:
+                continue
             by_series[(p.symbol_id, p.timeframe)].append(p)
 
         expired = 0
@@ -96,14 +100,18 @@ class SessionExpiryReconciler:
             self._store.replace_series(sid, tf, still)
 
         # Also age-expire by max candles for multi-day TFs
-        expired += self.expire_by_max_candles(now)
+        expired += self.expire_by_max_candles(now, symbol_ids=symbol_ids)
         logger.info("Session close: expired %s open pattern instance(s)", expired)
         return expired
 
-    def expire_by_max_candles(self, now: datetime | None = None) -> int:
+    def expire_by_max_candles(
+        self, now: datetime | None = None, symbol_ids: set[str] | None = None
+    ) -> int:
         now = now or datetime.now(timezone.utc)
         expired = 0
         for p in list(self._store.all_open()):
+            if symbol_ids is not None and p.symbol_id not in symbol_ids:
+                continue
             if p.is_terminal():
                 continue
             max_c = max_candles_for(self._settings, p.timeframe)

@@ -66,6 +66,7 @@ class AppContainer:
     daily_sr_service: object | None = None
     _bg_stop: threading.Event | None = None
     _bg_thread: threading.Thread | None = None
+    _cts_finalized: set | None = None
 
     def wire_events(self) -> None:
         self.event_bus.subscribe(CandleUpdatedEvent, self.broadcaster.on_candle_updated)
@@ -88,15 +89,68 @@ class AppContainer:
 
         def on_removed(ev: WatchlistSymbolRemovedEvent) -> None:
             self.pattern_service.cancel_for_symbol(ev.symbol_id)
+            self.bootstrap.forget_close(ev.symbol_id)
 
         self.event_bus.subscribe(WatchlistSymbolRemovedEvent, on_removed)
+
+    def _cas_on(self) -> bool:
+        return bool(getattr(self.settings, "cas_session_enabled", True))
 
     def _on_market_phase_for_candles(self, event: MarketPhaseChangedEvent) -> None:
         if event.phase != "CLOSED":
             return
+        if self._cas_on():
+            return
         n = self.candle_engine.finalize_session_candles()
         if n:
             logger.info("Session finalize: closed %s open intraday candle(s)", n)
+
+    def _due_cts_instruments(self, now_ist):
+        from app.market.session_policy import due_cts_instruments
+
+        if self._cts_finalized is None:
+            self._cts_finalized = set()
+        return due_cts_instruments(
+            now_ist,
+            self.watchlist_repo.find_all_active(),
+            self._cts_finalized,
+            cas_enabled=self._cas_on(),
+        )
+
+    def _reconcile_cas_on(self, now_ist, now_ms: int) -> None:
+        from app.market.session_policy import SessionKind
+
+        due = self._due_cts_instruments(now_ist)
+        if not due:
+            return
+        if self._cts_finalized is None:
+            self._cts_finalized = set()
+        ids: set[str] = set()
+        fin_by_bucket: dict[str, int] = {}
+        n_by_bucket: dict[str, int] = {}
+        for key, kind in due:
+            n = self.candle_engine.finalize_session_candles(
+                now_ms, instrument_key=key
+            )
+            self._cts_finalized.add((now_ist.date(), key, kind.value))
+            ids.add(key)
+            bucket = "cash" if kind is SessionKind.CASH else "cas_index"
+            n_by_bucket[bucket] = n_by_bucket.get(bucket, 0) + 1
+            fin_by_bucket[bucket] = fin_by_bucket.get(bucket, 0) + n
+        self.session_expiry.expire_on_session_close(symbol_ids=ids)
+        self.pattern_service.expire_session_timeframes(symbol_ids=ids)
+        if n_by_bucket.get("cas_index"):
+            logger.info(
+                "CAS/index CTS ended (15:15 IST): finalized %s candle(s) across %s symbols",
+                fin_by_bucket.get("cas_index", 0),
+                n_by_bucket["cas_index"],
+            )
+        if n_by_bucket.get("cash"):
+            logger.info(
+                "Non-CAS CTS ended (15:30 IST): finalized %s candle(s) across %s symbols",
+                fin_by_bucket.get("cash", 0),
+                n_by_bucket["cash"],
+            )
 
     def startup(self, loop: asyncio.AbstractEventLoop) -> None:
         self.broadcaster.set_loop(loop)
@@ -111,6 +165,9 @@ class AppContainer:
 
         self.instruments.ensure_loaded()
         self.watchlist_service.ensure_seeded()
+        self._cts_finalized = set()
+        if not self._cas_on():
+            logger.info("CAS session policy disabled; CTS 15:30 for all symbols")
 
         try:
             reconcile_patterns_on_startup(
@@ -158,21 +215,32 @@ class AppContainer:
                 try:
                     # Phase flip to CLOSED runs finalize via event bus first,
                     # then SessionExpiryReconciler (subscription order).
+                    from app.market.candle_boundary import NSE_ZONE
+                    from datetime import datetime as _dt
+
                     self.market_status.refresh_phase_from_clock()
                     now_ms = int(time.time() * 1000)
                     self.candle_engine.close_stale_open_candles(now_ms)
                     phase = self.market_status.get_market_phase()
-                    # Startup / already CLOSED: no phase-change event, but last
-                    # RTH bars may still be open after seed or a quiet close.
-                    if phase.value == "CLOSED":
+                    cas_on = self._cas_on()
+                    if cas_on:
+                        self._reconcile_cas_on(_dt.now(tz=NSE_ZONE), now_ms)
+                    elif phase.value == "CLOSED":
+                        # Startup / already CLOSED: no phase-change event, but last
+                        # RTH bars may still be open after seed or a quiet close.
                         n_fin = self.candle_engine.finalize_session_candles()
                         if n_fin:
                             logger.info(
                                 "Session finalize: closed %s open intraday candle(s)",
                                 n_fin,
                             )
-                    # session close expiry when phase flips to CLOSED
-                    if last_phase is not None and last_phase != phase and phase.value == "CLOSED":
+                    # session close expiry when phase flips to CLOSED (flag off only)
+                    if (
+                        not cas_on
+                        and last_phase is not None
+                        and last_phase != phase
+                        and phase.value == "CLOSED"
+                    ):
                         n = self.pattern_service.expire_session_timeframes()
                         if n:
                             logger.info("Session expiry: expired %s pattern instance(s)", n)
@@ -351,6 +419,7 @@ def build_container(settings: Settings | None = None) -> AppContainer:
         market_status,
         watchlist_repo,
         on_tick_extra=_paper_enqueue if paper_service is not None else None,
+        instruments=instruments,
     )
 
     from app.sr.service import DailySrService

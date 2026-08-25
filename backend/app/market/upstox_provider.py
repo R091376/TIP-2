@@ -57,7 +57,12 @@ class UpstoxMarketDataProvider:
             "Authorization": f"Bearer {token}",
         }
 
-    def fetch_intraday_candles(self, instrument_key: str, timeframe: str) -> list[Candle]:
+    def fetch_intraday_candles(
+        self,
+        instrument_key: str,
+        timeframe: str,
+        close_minutes: int | None = None,
+    ) -> list[Candle]:
         spec = parse_timeframe(timeframe)
         # GET /v3/historical-candle/intraday/{instrument_key}/{unit}/{interval}
         key_enc = quote(instrument_key, safe="")
@@ -67,7 +72,9 @@ class UpstoxMarketDataProvider:
             resp.raise_for_status()
             data = resp.json().get("data") or {}
             raw = from_raw_candles(data.get("candles"))
-            return rebucket_session_candles(raw, spec.interval_minutes())
+            return rebucket_session_candles(
+                raw, spec.interval_minutes(), close_minutes=close_minutes
+            )
         except Exception as e:
             raise UpstoxMarketDataException(
                 f"Failed to fetch intraday candles for {instrument_key}: {e}"
@@ -79,6 +86,7 @@ class UpstoxMarketDataProvider:
         timeframe: str,
         from_date: date,
         to_date: date,
+        close_minutes: int | None = None,
     ) -> list[Candle]:
         spec = parse_timeframe(timeframe)
         key_enc = quote(instrument_key, safe="")
@@ -97,7 +105,9 @@ class UpstoxMarketDataProvider:
                 )
             data = resp.json().get("data") or {}
             raw = from_raw_candles(data.get("candles"))
-            return rebucket_session_candles(raw, spec.interval_minutes())
+            return rebucket_session_candles(
+                raw, spec.interval_minutes(), close_minutes=close_minutes
+            )
         except UpstoxMarketDataException:
             raise
         except Exception as e:

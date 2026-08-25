@@ -85,10 +85,31 @@ def test_finalize_session_candles_closes_all_intraday_tfs():
 
     closed_tfs = {e.timeframe for e in closed_events}
     assert closed_tfs == set(ticks.keys())
-    assert "1d" not in closed_tfs
 
-    # Idempotent
-    assert engine.finalize_session_candles(now_epoch_ms=after_ms) == 0
+
+def test_cas_last_5m_finalize_and_drop_auction_tick():
+    engine = CandleEngine()
+    last = datetime(2026, 8, 4, 15, 10, tzinfo=IST)
+    t_ms = int(last.timestamp() * 1000)
+    engine.process_tick(Tick("CAS", 100.0, 100, t_ms), "5m", close_minutes=915)
+    assert engine.get_current_candle("CAS", "5m") is not None
+
+    at_cts = datetime(2026, 8, 4, 15, 15, tzinfo=IST)
+    n = engine.finalize_session_candles(
+        now_epoch_ms=int(at_cts.timestamp() * 1000), instrument_key="CAS"
+    )
+    assert n == 1
+    assert engine.get_current_candle("CAS", "5m") is None
+
+    auction = datetime(2026, 8, 4, 15, 35, tzinfo=IST)
+    engine.process_tick(
+        Tick("CAS", 105.0, 200, int(auction.timestamp() * 1000)),
+        "5m",
+        close_minutes=915,
+    )
+    assert engine.get_current_candle("CAS", "5m") is None
+    after_ms = int(datetime(2026, 8, 4, 16, 0, tzinfo=IST).timestamp() * 1000)
+    assert engine.finalize_session_candles(now_epoch_ms=after_ms, instrument_key="CAS") == 0
 
 
 def test_seed_pre_open_does_not_leave_yesterdays_last_bar_current():

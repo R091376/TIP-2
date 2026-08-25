@@ -4,8 +4,12 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+from datetime import datetime
+
 from app.events import CandleClosedEvent, CandleUpdatedEvent, EventBus
 from app.market.candle_boundary import (
+    NSE_SESSION_CLOSE_MINUTES,
+    NSE_ZONE,
     floor_to_candle_start_epoch_second,
     is_session_bar_start,
     should_emit_session_finalize,
@@ -15,11 +19,13 @@ from app.market.models import Candle, Tick
 from app.market.timeframe import parse_timeframe
 
 
-def _emit_closed_bar(candle_time: int, interval_minutes: int) -> bool:
+def _emit_closed_bar(
+    candle_time: int, interval_minutes: int, close_minutes: int | None = None
+) -> bool:
     """Daily bars always emit; intraday only for valid 09:15-anchored starts."""
     if interval_minutes >= 24 * 60:
         return True
-    return is_session_bar_start(candle_time, interval_minutes)
+    return is_session_bar_start(candle_time, interval_minutes, close_minutes)
 
 
 @dataclass
@@ -63,6 +69,13 @@ class CandleEngine:
         self._event_bus = event_bus
         self._state: dict[str, _SymbolState] = {}
         self._map_lock = threading.RLock()
+        self._close_by_instrument: dict[str, int] = {}
+
+    def _remember_close(self, instrument_key: str, close_minutes: int) -> None:
+        self._close_by_instrument[instrument_key] = close_minutes
+
+    def _close_for(self, instrument_key: str) -> int:
+        return self._close_by_instrument.get(instrument_key, NSE_SESSION_CLOSE_MINUTES)
 
     def _state_key(self, instrument_key: str, timeframe: str) -> str:
         return f"{instrument_key}|{timeframe}"
@@ -81,8 +94,11 @@ class CandleEngine:
         candles: list[Candle],
         *,
         now_epoch_ms: int | None = None,
+        close_minutes: int | None = None,
     ) -> None:
         interval = parse_timeframe(timeframe).interval_minutes()
+        close = NSE_SESSION_CLOSE_MINUTES if close_minutes is None else close_minutes
+        self._remember_close(instrument_key, close)
         state = self._state_for(instrument_key, timeframe)
         with state.lock:
             state.closed_candles.clear()
@@ -99,24 +115,36 @@ class CandleEngine:
             last = candles[-1]
             # Pre-open: floor(now) is yesterday's last RTH bar — keep it closed
             # so finalize does not re-fire next-day pattern alerts.
-            if should_seed_as_current(last.time, now_ms, interval):
+            if should_seed_as_current(last.time, now_ms, interval, close):
                 state.closed_candles.extend(candles[:-1])
                 state.current_candle = _MutableCandle.from_candle(last)
             else:
                 state.closed_candles.extend(candles)
 
-    def process_tick(self, tick: Tick, timeframe: str) -> None:
+    def process_tick(
+        self, tick: Tick, timeframe: str, close_minutes: int | None = None
+    ) -> None:
         interval = parse_timeframe(timeframe).interval_minutes()
+        close = NSE_SESSION_CLOSE_MINUTES if close_minutes is None else close_minutes
+        self._remember_close(tick.instrument_key, close)
+        if interval < 24 * 60:
+            dt = datetime.fromtimestamp(tick.timestamp_ms / 1000.0, tz=NSE_ZONE)
+            if dt.hour * 60 + dt.minute >= close:
+                return
         state = self._state_for(tick.instrument_key, timeframe)
         pending: list[object] = []
         with state.lock:
-            candle_start = floor_to_candle_start_epoch_second(tick.timestamp_ms, interval)
+            candle_start = floor_to_candle_start_epoch_second(
+                tick.timestamp_ms, interval, close
+            )
             volume_delta = self._compute_volume_delta(state, tick.volume_traded_today)
 
             if state.current_candle is None or state.current_candle.time != candle_start:
                 if state.current_candle is not None:
                     closed = self._close_current(state)
-                    if closed is not None and _emit_closed_bar(closed.time, interval):
+                    if closed is not None and _emit_closed_bar(
+                        closed.time, interval, close
+                    ):
                         pending.append(
                             CandleClosedEvent(tick.instrument_key, timeframe, closed)
                         )
@@ -186,6 +214,7 @@ class CandleEngine:
         with self._map_lock:
             for k in [k for k in self._state if k.startswith(prefix)]:
                 del self._state[k]
+        self._close_by_instrument.pop(instrument_key, None)
 
     def close_stale_open_candles(self, now_epoch_ms: int) -> int:
         """Close open candles whose bucket is strictly before floor(now).
@@ -208,7 +237,10 @@ class CandleEngine:
                 interval = parse_timeframe(timeframe).interval_minutes()
             except ValueError:
                 continue
-            current_boundary = floor_to_candle_start_epoch_second(now_epoch_ms, interval)
+            close = self._close_for(instrument_key)
+            current_boundary = floor_to_candle_start_epoch_second(
+                now_epoch_ms, interval, close
+            )
             state = self._state[key]
             pending: list[object] = []
             with state.lock:
@@ -220,7 +252,7 @@ class CandleEngine:
                 if closed is None:
                     continue
                 closed_count += 1
-                if _emit_closed_bar(closed.time, interval):
+                if _emit_closed_bar(closed.time, interval, close):
                     pending.append(CandleClosedEvent(instrument_key, timeframe, closed))
                     pending.append(
                         CandleUpdatedEvent(instrument_key, timeframe, closed, True)
@@ -230,13 +262,18 @@ class CandleEngine:
                     self._event_bus.publish(ev)
         return closed_count
 
-    def finalize_session_candles(self, now_epoch_ms: int | None = None) -> int:
+    def finalize_session_candles(
+        self,
+        now_epoch_ms: int | None = None,
+        *,
+        instrument_key: str | None = None,
+    ) -> int:
         """Force-close every open *intraday* candle at session end / after hours.
 
-        After 15:30 IST, ``floor_to_candle_start`` returns the last RTH bar
+        After CTS, ``floor_to_candle_start`` returns the last RTH bar
         start for each interval, so :meth:`close_stale_open_candles` leaves
-        that bar open forever. Call this when the market phase is CLOSED
-        (phase transition and periodic reconciler while closed).
+        that bar open forever. Call this when that symbol's CTS has ended
+        (or global CLOSED when the CAS flag is off).
 
         Daily bars are left open until the calendar day rolls (stale close
         next day). Safe to call repeatedly — no-op when nothing is open.
@@ -249,13 +286,16 @@ class CandleEngine:
             int(now_epoch_ms) if now_epoch_ms is not None else int(time.time() * 1000)
         )
         closed_count = 0
+        prefix = (instrument_key + "|") if instrument_key else None
         with self._map_lock:
             keys = list(self._state.keys())
         for key in keys:
+            if prefix is not None and not key.startswith(prefix):
+                continue
             pipe = key.rfind("|")
             if pipe <= 0 or pipe >= len(key) - 1:
                 continue
-            instrument_key = key[:pipe]
+            inst_key = key[:pipe]
             timeframe = key[pipe + 1 :]
             try:
                 interval = parse_timeframe(timeframe).interval_minutes()
@@ -264,6 +304,7 @@ class CandleEngine:
             # Daily (and multi-day) stay open across the cash session close.
             if interval >= 24 * 60:
                 continue
+            close = self._close_for(inst_key)
             state = self._state[key]
             pending: list[object] = []
             with state.lock:
@@ -275,10 +316,10 @@ class CandleEngine:
                 closed_count += 1
                 if not should_emit_session_finalize(closed.time, now_ms, interval):
                     continue
-                if _emit_closed_bar(closed.time, interval):
-                    pending.append(CandleClosedEvent(instrument_key, timeframe, closed))
+                if _emit_closed_bar(closed.time, interval, close):
+                    pending.append(CandleClosedEvent(inst_key, timeframe, closed))
                     pending.append(
-                        CandleUpdatedEvent(instrument_key, timeframe, closed, True)
+                        CandleUpdatedEvent(inst_key, timeframe, closed, True)
                     )
             if pending and self._event_bus:
                 for ev in pending:

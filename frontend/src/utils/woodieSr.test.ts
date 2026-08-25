@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CAS_AS_OF,
   buildSessionSegments,
+  clipSegmentEnd,
   computeWoodieOpenV1,
+  effectiveCtsForDate,
   filterSegmentsTodayOnly,
   nseSessionUtcSeconds,
   pickActiveSessionDate,
@@ -83,9 +86,38 @@ describe('buildSessionSegments', () => {
     expect(segs[0].prices.s2).toBe(98)
     expect(segs[1].prices.s2).toBe(108)
     expect(segs[0].start).toBe(utcToNseChartTime(t14a))
-    expect(segs[0].end).toBe(utcToNseChartTime(t14b))
+    expect(segs[0].end).toBe(
+      utcToNseChartTime(nseSessionUtcSeconds('2026-08-14', 15, 30)),
+    )
     expect(segs[1].start).toBe(utcToNseChartTime(t17a))
-    expect(segs[1].end).toBe(utcToNseChartTime(t17b))
+    expect(segs[1].end).toBe(
+      utcToNseChartTime(nseSessionUtcSeconds('2026-08-17', 15, 30)),
+    )
+  })
+
+  it('clips CAS days to 15:15 and pre-as_of days to 15:30', () => {
+    expect(CAS_AS_OF).toBe('2026-08-03')
+    expect(effectiveCtsForDate('2026-07-10', 15, 15)).toEqual({
+      hour: 15,
+      minute: 30,
+    })
+    expect(effectiveCtsForDate('2026-08-03', 15, 15)).toEqual({
+      hour: 15,
+      minute: 15,
+    })
+    const tLast = nseSessionUtcSeconds('2026-08-17', 15, 10)
+    const days = [day('2026-08-17', 110)]
+    const segs = buildSessionSegments(
+      days,
+      [{ time: nseSessionUtcSeconds('2026-08-17', 9, 15) }, { time: tLast }],
+      { hour: 15, minute: 15 },
+    )
+    expect(segs[0].end).toBe(
+      clipSegmentEnd(utcToNseChartTime(tLast), '2026-08-17', 15, 15),
+    )
+    expect(segs[0].end).toBe(
+      utcToNseChartTime(nseSessionUtcSeconds('2026-08-17', 15, 15)),
+    )
   })
 })
 

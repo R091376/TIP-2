@@ -64,10 +64,10 @@ class PatternEvaluator:
             self._journal.persist_lifecycle(p, events)
             self._publish(p, events)
 
-    def expire_session_timeframes(self) -> int:
+    def expire_session_timeframes(self, symbol_ids: set[str] | None = None) -> int:
         """Expire open pattern instances on session-close TFs (default 1m/5m/15m).
 
-        Called when market phase flips to CLOSED (after
+        Called when that symbol's CTS ends (after
         ``CandleEngine.finalize_session_candles`` force-closes open intraday
         bars so the last RTH ``CandleClosed`` has already been evaluated).
         Patterns that never hit succeed/fail get terminal stage=expired.
@@ -76,6 +76,8 @@ class PatternEvaluator:
         now = datetime.now(timezone.utc)
         count = 0
         for p in list(self._store.all_open()):
+            if symbol_ids is not None and p.symbol_id not in symbol_ids:
+                continue
             if p.timeframe not in tfs:
                 continue
             if p.is_terminal():

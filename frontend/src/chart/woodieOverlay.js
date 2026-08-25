@@ -155,7 +155,7 @@ export function applyWoodieOverlay(
   chart,
   series,
   days,
-  { candles, todayOnly = false, todayYmd = '' } = {},
+  { candles, todayOnly = false, todayYmd = '', ctsHour, ctsMinute } = {},
   handles,
 ) {
   const h = handles || createWoodieHandles()
@@ -176,7 +176,7 @@ export function applyWoodieOverlay(
       return h
     }
   }
-  let segs = buildSessionSegments(days, candles)
+  let segs = buildSessionSegments(days, candles, { hour: ctsHour, minute: ctsMinute })
   if (todayOnly) segs = filterSegmentsTodayOnly(segs, todayYmd)
   h.primitive.setSegments(segs)
   return h

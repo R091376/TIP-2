@@ -33,7 +33,7 @@ def is_trading_day(d: date | None) -> bool:
     return not is_holiday(d)
 
 
-def phase_at(now: datetime) -> MarketPhase:
+def phase_at(now: datetime, close_minutes: int | None = None) -> MarketPhase:
     if now.tzinfo is None:
         now = now.replace(tzinfo=NSE_ZONE)
     else:
@@ -44,7 +44,12 @@ def phase_at(now: datetime) -> MarketPhase:
         return MarketPhase.CLOSED
 
     t = now.time()
-    if t < _PRE_OPEN_START or t >= _MARKET_CLOSE:
+    close = (
+        time(close_minutes // 60, close_minutes % 60)
+        if close_minutes is not None
+        else _MARKET_CLOSE
+    )
+    if t < _PRE_OPEN_START or t >= close:
         return MarketPhase.CLOSED
     if t < _MARKET_OPEN:
         return MarketPhase.PRE_OPEN

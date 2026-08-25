@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.api.deps import AuthUser
 from app.market.nse_clock import BootstrapStatus
+from app.market.session_policy import session_payload
 from app.watchlist.models import SymbolBootstrapStatus
 
 router = APIRouter(prefix="/api/market", tags=["market"])
@@ -32,18 +33,37 @@ def get_timeframes(request: Request, _user: AuthUser):
 @router.get("/symbol")
 def get_symbol(request: Request, _user: AuthUser):
     c = request.app.state.container
+    cas_on = bool(getattr(getattr(c, "settings", None), "cas_session_enabled", True))
     primary = c.watchlist_repo.find_primary()
     if primary:
-        return {
+        body = {
             "symbol": primary.trading_symbol,
             "instrumentKey": primary.symbol_id,
             "defaultTimeframe": c.settings.default_timeframe,
         }
-    return {
+        body.update(
+            session_payload(
+                primary.trading_symbol,
+                segment=primary.segment,
+                instrument_type=primary.instrument_type,
+                cas_enabled=cas_on,
+            )
+        )
+        return body
+    body = {
         "symbol": c.settings.default_symbol,
         "instrumentKey": c.settings.default_instrument_key,
         "defaultTimeframe": c.settings.default_timeframe,
     }
+    body.update(
+        session_payload(
+            c.settings.default_symbol,
+            segment="NSE_INDEX" if "INDEX" in c.settings.default_instrument_key else "NSE_EQ",
+            instrument_type="INDEX" if "INDEX" in c.settings.default_instrument_key else "EQ",
+            cas_enabled=cas_on,
+        )
+    )
+    return body
 
 
 @router.get("/status")

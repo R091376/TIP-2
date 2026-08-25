@@ -85,6 +85,8 @@ export function useChartNavigation(ctx) {
         setError,
         setSwitching,
         errorFallback: 'Failed to load symbol',
+        watchlistRef,
+        entry,
       })
     },
     [
@@ -279,6 +281,8 @@ export function useChartNavigation(ctx) {
         setError,
         setSwitching,
         errorFallback: 'Failed to open alert on chart',
+        watchlistRef,
+        entry,
       })
     },
     [

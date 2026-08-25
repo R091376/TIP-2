@@ -95,6 +95,10 @@ def test_next_tick_market_fill(monkeypatch, wl):
         "app.paper.service.phase_from_clock",
         lambda: MarketPhase.OPEN,
     )
+    monkeypatch.setattr(
+        "app.paper.service.phase_at",
+        lambda *a, **k: MarketPhase.OPEN,
+    )
     settings = Settings(paper_enabled=True, paper_allow_memory=True)
     uid = uuid4()
     balances = {uid: Decimal("100000")}
@@ -148,6 +152,10 @@ def test_close_lot_expires_linked_and_orphan_stops(monkeypatch, wl):
     monkeypatch.setattr(
         "app.paper.service.phase_from_clock",
         lambda: MarketPhase.OPEN,
+    )
+    monkeypatch.setattr(
+        "app.paper.service.phase_at",
+        lambda *a, **k: MarketPhase.OPEN,
     )
     settings = Settings(paper_enabled=True, paper_allow_memory=True)
     uid = uuid4()
@@ -245,6 +253,7 @@ def test_close_lot_expires_linked_and_orphan_stops(monkeypatch, wl):
 
 def test_reject_index(monkeypatch, wl):
     monkeypatch.setattr("app.paper.service.phase_from_clock", lambda: MarketPhase.OPEN)
+    monkeypatch.setattr("app.paper.service.phase_at", lambda *a, **k: MarketPhase.OPEN)
     idx = WatchlistEntry(
         symbol_id="NSE_INDEX|Nifty 50",
         trading_symbol="Nifty 50",

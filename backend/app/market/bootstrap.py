@@ -58,6 +58,7 @@ class MarketBootstrapService:
         market_status: MarketStatusService,
         watchlist_repository: WatchlistRepository,
         on_tick_extra=None,
+        instruments=None,
     ) -> None:
         self._mdp = market_data_provider
         self._engine = candle_engine
@@ -65,10 +66,41 @@ class MarketBootstrapService:
         self._status = market_status
         self._watchlist = watchlist_repository
         self._on_tick_extra = on_tick_extra
+        self._instruments = instruments
+        self._close_by_key: dict[str, int] = {}
         self._daily_sr = None
 
     def set_daily_sr_service(self, svc) -> None:
         self._daily_sr = svc
+
+    def _cas_enabled(self) -> bool:
+        return bool(getattr(self._settings, "cas_session_enabled", True))
+
+    def _remember_close(self, entry: WatchlistEntry) -> int:
+        from app.market.session_policy import cts_close_minutes, session_kind
+
+        kind = session_kind(
+            entry.trading_symbol,
+            segment=entry.segment,
+            instrument_type=entry.instrument_type,
+        )
+        close = cts_close_minutes(kind, cas_enabled=self._cas_enabled())
+        self._close_by_key[entry.symbol_id] = close
+        return close
+
+    def forget_close(self, instrument_key: str) -> None:
+        self._close_by_key.pop(instrument_key, None)
+
+    def _close_for_tick(self, instrument_key: str) -> int:
+        cached = self._close_by_key.get(instrument_key)
+        if cached is not None:
+            return cached
+        from app.market.session_policy import cts_close_minutes, session_kind_from_cache
+
+        kind = session_kind_from_cache(instrument_key, self._instruments)
+        close = cts_close_minutes(kind, cas_enabled=self._cas_enabled())
+        self._close_by_key[instrument_key] = close
+        return close
 
 
     def recover_all_active(self) -> None:
@@ -129,6 +161,7 @@ class MarketBootstrapService:
 
     def bootstrap_symbol(self, entry: WatchlistEntry) -> BootstrapSymbolResult:
         symbol_id = entry.symbol_id
+        close = self._remember_close(entry)
         timeframes = list(self._settings.supported_timeframes)
         if getattr(self._settings, "pattern_sr_enabled", False):
             rest = [tf for tf in timeframes if tf not in ("1d", "1m")]
@@ -145,8 +178,12 @@ class MarketBootstrapService:
                 logger.info("Bootstrap cancelled for %s before TF %s", symbol_id, timeframe)
                 return BootstrapSymbolResult.cancelled(symbol_id)
             try:
-                seed_candles = self._load_seed_candles(symbol_id, timeframe)
-                self._engine.seed(symbol_id, timeframe, seed_candles)
+                seed_candles = self._load_seed_candles(
+                    symbol_id, timeframe, close_minutes=close
+                )
+                self._engine.seed(
+                    symbol_id, timeframe, seed_candles, close_minutes=close
+                )
                 if not seed_candles:
                     errors.append(f"{timeframe}: empty seed (no candles)")
                     logger.warning(
@@ -197,12 +234,18 @@ class MarketBootstrapService:
         return BootstrapSymbolResult.failed(symbol_id)
 
     def on_tick(self, tick: Tick) -> None:
-        # Gate live bars on wall-clock NSE session (09:15–15:30 IST), not feed
-        # market_info alone. A mis-mapped feed CLOSED used to freeze candles
-        # mid-session (e.g. last bar stuck at 15:05 while the market ran to 15:30).
-        from app.market.nse_clock import MarketPhase, phase_from_clock
+        # Gate live bars on wall-clock NSE session, not feed market_info alone.
+        # Global clock stays 15:30 so non-CAS names keep trading; per-symbol
+        # CTS drops CAS/index ticks after 15:15. Never hit the watchlist repo.
+        from datetime import datetime
+
+        from app.market.candle_boundary import NSE_ZONE
+        from app.market.nse_clock import MarketPhase, phase_at, phase_from_clock
 
         if phase_from_clock() != MarketPhase.OPEN:
+            return
+        close = self._close_for_tick(tick.instrument_key)
+        if phase_at(datetime.now(tz=NSE_ZONE), close_minutes=close) != MarketPhase.OPEN:
             return
         if self._on_tick_extra is not None:
             try:
@@ -211,11 +254,16 @@ class MarketBootstrapService:
                 logger.exception("on_tick_extra failed")
         for tf in self._settings.supported_timeframes:
             try:
-                self._engine.process_tick(tick, tf)
+                self._engine.process_tick(tick, tf, close_minutes=close)
             except Exception:
                 logger.exception("process_tick failed for %s %s", tick.instrument_key, tf)
 
-    def _load_seed_candles(self, instrument_key: str, timeframe: str) -> list[Candle]:
+    def _load_seed_candles(
+        self,
+        instrument_key: str,
+        timeframe: str,
+        close_minutes: int | None = None,
+    ) -> list[Candle]:
         # Historical window: [today-lookback … yesterday]; today via intraday
         from app.market.candle_boundary import NSE_ZONE
         from datetime import datetime
@@ -228,7 +276,9 @@ class MarketBootstrapService:
             from_date = to_date
 
         try:
-            intraday = self._mdp.fetch_intraday_candles(instrument_key, timeframe)
+            intraday = self._mdp.fetch_intraday_candles(
+                instrument_key, timeframe, close_minutes=close_minutes
+            )
         except UpstoxMarketDataException:
             logger.warning(
                 "Intraday fetch failed for %s %s; using historical only",
@@ -238,7 +288,11 @@ class MarketBootstrapService:
             intraday = []
 
         historical = self._fetch_historical_chunked(
-            instrument_key, timeframe, from_date, to_date
+            instrument_key,
+            timeframe,
+            from_date,
+            to_date,
+            close_minutes=close_minutes,
         )
         return merge_candles(historical, intraday)
 
@@ -248,6 +302,7 @@ class MarketBootstrapService:
         timeframe: str,
         from_date: date,
         to_date: date,
+        close_minutes: int | None = None,
     ) -> list[Candle]:
         """Walk date range in Upstox-safe chunks (mirrors Java MarketBootstrapService)."""
         chunk_days = _historical_chunk_days(timeframe)
@@ -260,7 +315,11 @@ class MarketBootstrapService:
                 chunk_start = from_date
             try:
                 chunk = self._mdp.fetch_historical_candles(
-                    instrument_key, timeframe, chunk_start, chunk_end
+                    instrument_key,
+                    timeframe,
+                    chunk_start,
+                    chunk_end,
+                    close_minutes=close_minutes,
                 )
             except UpstoxMarketDataException as e:
                 logger.warning(

@@ -8,6 +8,7 @@ import { sortedCandlesFromMap } from '../chart/helpers'
 import { fetchWoodieSr } from '../services/srApi'
 import { istYmdFromUtcSeconds } from '../utils/chartTime'
 import { todayIstYmd } from '../utils/researchFilters'
+import { parseCtsEnd } from '../utils/woodieSr'
 
 const LS_SHOW_WOODIE = 'tip.chart.showWoodieSr'
 const LS_WOODIE_TODAY_ONLY = 'tip.chart.woodieSrTodayOnly'
@@ -40,6 +41,7 @@ export function useWoodieSrOverlay({
   chartRef,
   seriesRef,
   candlesRef,
+  ctsEnd,
 }) {
   const [showWoodie, setShowWoodieState] = useState(() =>
     enabled ? readBoolPref(LS_SHOW_WOODIE, true) : false,
@@ -64,6 +66,7 @@ export function useWoodieSrOverlay({
     const candles = candlesRef?.current
       ? sortedCandlesFromMap(candlesRef.current)
       : []
+    const cts = parseCtsEnd(ctsEnd)
     applyWoodieOverlay(
       chart,
       series,
@@ -72,10 +75,12 @@ export function useWoodieSrOverlay({
         candles,
         todayOnly: todayOnlyRef.current,
         todayYmd: todayIstYmd(),
+        ctsHour: cts.hour,
+        ctsMinute: cts.minute,
       },
       handlesRef.current,
     )
-  }, [chartRef, seriesRef, candlesRef, enabled])
+  }, [chartRef, seriesRef, candlesRef, enabled, ctsEnd])
 
   const clear = useCallback(() => {
     clearWoodieOverlay(chartRef.current, seriesRef.current, handlesRef.current)

@@ -13,7 +13,12 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings
 from app.market.models import Tick
-from app.market.nse_clock import MarketPhase, phase_from_clock
+from app.market.nse_clock import MarketPhase, phase_at, phase_from_clock
+from app.market.session_policy import (
+    SessionKind,
+    cts_close_minutes,
+    session_kind_from_entry,
+)
 from app.paper.cash import (
     apply_fill_cash,
     lock_reference_price,
@@ -88,6 +93,8 @@ class PaperTradingService:
         self._accounts: dict[UUID, CashAccount] = {}
         self._open_by_symbol: dict[str, set[UUID]] = {}
         self._square_off_dates: set[date] = set()
+        self._square_off_ran: set[tuple[date, str]] = set()
+        self._cts_sl_cancelled: set[date] = set()
         self._user_cash_provider = user_cash_provider  # (user_id) -> Decimal
         self._user_cash_writer = user_cash_writer  # (user_id, balance, ledger_entries)
         self._worker = PaperMatcherWorker(
@@ -178,11 +185,6 @@ class PaperTradingService:
                 status_code=403,
                 detail={"code": "TRADING_DISABLED", "message": "Trading is disabled"},
             )
-        if phase_from_clock() != MarketPhase.OPEN and source == OrderSource.USER:
-            raise HTTPException(
-                status_code=400,
-                detail={"code": "MARKET_CLOSED", "message": "Orders only during market OPEN"},
-            )
         if qty < 1:
             raise HTTPException(
                 status_code=400,
@@ -211,6 +213,8 @@ class PaperTradingService:
                     },
                 )
         trading_symbol = entry.trading_symbol if entry else instrument_key.split("|")[-1]
+        if source == OrderSource.USER:
+            self._require_user_session_open(entry)
 
         px = Decimal(str(price)) if price is not None else None
         tpx = Decimal(str(trigger_price)) if trigger_price is not None else None
@@ -429,15 +433,12 @@ class PaperTradingService:
         trigger_price: float | None = None,
     ) -> dict:
         self._require_enabled()
-        if phase_from_clock() != MarketPhase.OPEN:
-            raise HTTPException(
-                status_code=400,
-                detail={"code": "MARKET_CLOSED", "message": "Modify only during OPEN"},
-            )
         with self._user_lock(user_id):
             order = self._orders.get(order_id)
             if order is None or order.user_id != user_id:
                 raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "Order not found"})
+            entry = self._watchlist.find_by_symbol_id(order.instrument_key)
+            self._require_user_session_open(entry)
             if order.status not in OPEN_STATUSES:
                 raise HTTPException(
                     status_code=400,
@@ -917,36 +918,71 @@ class PaperTradingService:
         if not self.enabled:
             return
         now_ist = datetime.now(tz=NSE_ZONE)
-        so_hm = getattr(self._settings, "paper_mis_square_off", "15:20")
-        try:
-            hh, mm = str(so_hm).split(":")
-            so_t = time(int(hh), int(mm))
-        except Exception:
-            so_t = time(15, 20)
-        if now_ist.time() < so_t:
-            return
         if phase_from_clock() == MarketPhase.PRE_OPEN:
             return
         d = now_ist.date()
-        if d in self._square_off_dates:
-            # still force-close leftovers if CLOSED
-            if phase_from_clock() == MarketPhase.CLOSED:
-                self._force_remaining_mis(d)
+        cas_on = bool(getattr(self._settings, "cas_session_enabled", True))
+        if not cas_on:
+            so_t = self._parse_hhmm(
+                getattr(self._settings, "paper_mis_square_off", "15:20"), 15, 20
+            )
+            if now_ist.time() < so_t:
+                return
+            if d in self._square_off_dates:
+                if phase_from_clock() == MarketPhase.CLOSED:
+                    self._force_remaining_mis(d)
+                return
+            self._run_mis_square_off(d)
             return
-        self._run_mis_square_off(d)
 
-    def _run_mis_square_off(self, trade_date: date) -> None:
-        logger.info("MIS square-off starting for %s", trade_date)
-        # cancel open MIS orders
+        cas_t = self._parse_hhmm(
+            getattr(self._settings, "paper_mis_square_off_cas", "15:10"), 15, 10
+        )
+        cash_t = self._parse_hhmm(
+            getattr(self._settings, "paper_mis_square_off", "15:20"), 15, 20
+        )
+        if now_ist.time() >= cas_t and (d, SessionKind.CAS_CASH.value) not in self._square_off_ran:
+            self._run_mis_square_off(d, kinds={SessionKind.CAS_CASH})
+        if now_ist.time() >= time(15, 15) and d not in self._cts_sl_cancelled:
+            self._cancel_cas_stops(d)
+            self._force_remaining_mis(d, kinds={SessionKind.CAS_CASH})
+            self._cts_sl_cancelled.add(d)
+        if now_ist.time() >= cash_t and (d, SessionKind.CASH.value) not in self._square_off_ran:
+            self._run_mis_square_off(d, kinds={SessionKind.CASH})
+        if phase_from_clock() == MarketPhase.CLOSED:
+            # Leftover MIS (any kind) + every remaining CNC, including CAS limits
+            # that survived 15:15 (only SL/SL_M are cancelled at CTS).
+            self._force_remaining_mis(d)
+
+    def _kind_for_key(self, instrument_key: str) -> SessionKind:
+        entry = self._watchlist.find_by_symbol_id(instrument_key)
+        if entry is not None:
+            return session_kind_from_entry(entry)
+        return SessionKind.CASH
+
+    def _matches_kinds(self, instrument_key: str, kinds: set[SessionKind] | None) -> bool:
+        if kinds is None:
+            return True
+        return self._kind_for_key(instrument_key) in kinds
+
+    def _run_mis_square_off(
+        self, trade_date: date, kinds: set[SessionKind] | None = None
+    ) -> None:
+        kind_label = ",".join(sorted(k.value for k in kinds)) if kinds else "all"
+        logger.info("MIS square-off starting for %s kind=%s", trade_date, kind_label)
         for o in list(self._orders.values()):
-            if o.product == Product.MIS and o.status in OPEN_STATUSES:
-                try:
-                    self.cancel_order(o.user_id, o.id, reason="MIS_SQUARE_OFF")
-                except Exception:
-                    logger.exception("cancel MIS order %s", o.id)
-        # place system close for each MIS lot
+            if o.product != Product.MIS or o.status not in OPEN_STATUSES:
+                continue
+            if not self._matches_kinds(o.instrument_key, kinds):
+                continue
+            try:
+                self.cancel_order(o.user_id, o.id, reason="MIS_SQUARE_OFF")
+            except Exception:
+                logger.exception("cancel MIS order %s", o.id)
         for L in list(self._lots.values()):
             if L.product != Product.MIS or L.status != LotStatus.OPEN:
+                continue
+            if not self._matches_kinds(L.instrument_key, kinds):
                 continue
             side = "SELL" if L.side == LotSide.LONG else "BUY"
             try:
@@ -963,12 +999,35 @@ class PaperTradingService:
                 )
             except Exception:
                 logger.exception("square-off place failed lot=%s", L.id)
-        self._square_off_dates.add(trade_date)
+        if kinds is None:
+            self._square_off_dates.add(trade_date)
+        else:
+            for k in kinds:
+                self._square_off_ran.add((trade_date, k.value))
+            if SessionKind.CASH in kinds:
+                self._square_off_dates.add(trade_date)
 
-    def _force_remaining_mis(self, trade_date: date) -> None:
+    def _cancel_cas_stops(self, trade_date: date) -> None:
+        for o in list(self._orders.values()):
+            if o.status not in OPEN_STATUSES:
+                continue
+            if o.order_type not in (OrderType.SL, OrderType.SL_M):
+                continue
+            if self._kind_for_key(o.instrument_key) != SessionKind.CAS_CASH:
+                continue
+            try:
+                self.cancel_order(o.user_id, o.id, reason="CTS_END")
+            except Exception:
+                logger.exception("CAS CTS SL cancel failed %s", o.id)
+
+    def _force_remaining_mis(
+        self, trade_date: date, kinds: set[SessionKind] | None = None
+    ) -> None:
         now = datetime.now(timezone.utc)
         for L in list(self._lots.values()):
             if L.product != Product.MIS or L.status != LotStatus.OPEN:
+                continue
+            if not self._matches_kinds(L.instrument_key, kinds):
                 continue
             with self._user_lock(L.user_id):
                 acc = self._account(L.user_id)
@@ -976,7 +1035,9 @@ class PaperTradingService:
                 self._force_close_lot(acc, L, Decimal(str(px)), now, reason="MIS_FORCE_CLOSED")
                 self._persist_lot(L)
                 self._persist_account(acc)
-        # expire open CNC residuals? design: CNC orders expire, lots remain
+        # CNC SESSION_END is a full-session event (15:30 / flag-off), not CTS.
+        if kinds is not None:
+            return
         for o in list(self._orders.values()):
             if o.status in OPEN_STATUSES and o.product == Product.CNC:
                 try:
@@ -985,6 +1046,29 @@ class PaperTradingService:
                     pass
 
     # --- helpers ---
+
+    @staticmethod
+    def _parse_hhmm(raw: str, default_h: int, default_m: int) -> time:
+        try:
+            hh, mm = str(raw).split(":")
+            return time(int(hh), int(mm))
+        except Exception:
+            return time(default_h, default_m)
+
+    def _require_user_session_open(self, entry) -> None:
+        if phase_from_clock() != MarketPhase.OPEN:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "MARKET_CLOSED", "message": "Orders only during market OPEN"},
+            )
+        cas_on = bool(getattr(self._settings, "cas_session_enabled", True))
+        kind = session_kind_from_entry(entry) if entry is not None else SessionKind.CASH
+        close = cts_close_minutes(kind, cas_enabled=cas_on)
+        if phase_at(datetime.now(tz=NSE_ZONE), close_minutes=close) != MarketPhase.OPEN:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "MARKET_CLOSED", "message": "Orders only during market OPEN"},
+            )
 
     def _require_enabled(self) -> None:
         if not self.enabled:

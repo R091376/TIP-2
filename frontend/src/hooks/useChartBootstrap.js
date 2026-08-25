@@ -168,7 +168,12 @@ export function useChartBootstrap({
           try {
             const candles = await loadCandles(primary.symbolId, initialTf, generation)
             if (isStale() || candles === null) return
-            setInfoMessage(infoAfterCandleLoad(candles, marketPhaseRef.current))
+            setInfoMessage(
+              infoAfterCandleLoad(candles, marketPhaseRef.current, {
+                sessionKind: primary.sessionKind,
+                ctsEnd: primary.ctsEnd,
+              }),
+            )
           } catch (err) {
             if (!isStale())
               setError(err instanceof Error ? err.message : 'Failed to load candles')

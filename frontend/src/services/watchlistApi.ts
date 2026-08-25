@@ -14,6 +14,8 @@ export type WatchlistEntryDto = {
   bootstrapStatus?: string
   bootstrapError?: string | null
   active?: boolean
+  sessionKind?: 'cas_cash' | 'cash' | 'index'
+  ctsEnd?: string
 }
 
 /** GET /api/watchlist */

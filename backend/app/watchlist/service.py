@@ -153,6 +153,8 @@ class WatchlistService:
                 logger.warning("unsubscribe failed for %s: %s", symbol_id, e)
         if self._engine:
             self._engine.evict(symbol_id)
+        if self._bootstrap is not None and hasattr(self._bootstrap, "forget_close"):
+            self._bootstrap.forget_close(symbol_id)
         if self._broadcaster:
             self._broadcaster.evict_throttle_keys(symbol_id)
         if self._ws:

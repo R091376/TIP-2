@@ -285,6 +285,8 @@ class Settings(BaseSettings):
     paper_allow_memory: bool = Field(default=True, alias="TIP_PAPER_ALLOW_MEMORY")
     paper_market_lock_haircut: float = Field(default=1.02, alias="TIP_PAPER_MARKET_LOCK_HAIRCUT")
     paper_mis_square_off: str = Field(default="15:20", alias="TIP_PAPER_MIS_SQUARE_OFF")
+    paper_mis_square_off_cas: str = Field(default="15:10", alias="TIP_PAPER_MIS_SQUARE_OFF_CAS")
+    cas_session_enabled: bool = Field(default=True, alias="TIP_CAS_SESSION_ENABLED")
     paper_max_open_orders: int = Field(default=50, alias="TIP_PAPER_MAX_OPEN_ORDERS")
     paper_max_open_lots: int = Field(default=50, alias="TIP_PAPER_MAX_OPEN_LOTS")
     paper_max_fill_qty_per_tick: int | None = Field(
@@ -395,6 +397,7 @@ def get_settings() -> Settings:
     session_secret = os.environ.get("SESSION_SECRET", "")
     tf_1m = os.environ.get("TIP_TIMEFRAME_1M_ENABLED", "")
     sr_backfill = os.environ.get("TIP_PATTERN_SR_BACKFILL_ON_STARTUP", "")
+    cas_flag = os.environ.get("TIP_CAS_SESSION_ENABLED", "")
     settings = Settings()
     if store:
         object.__setattr__(settings, "tip_watchlist_store", store)
@@ -418,6 +421,9 @@ def get_settings() -> Settings:
     parsed_backfill = _env_bool(sr_backfill)
     if parsed_backfill is not None:
         object.__setattr__(settings, "pattern_sr_backfill_on_startup", parsed_backfill)
+    parsed_cas = _env_bool(cas_flag)
+    if parsed_cas is not None:
+        object.__setattr__(settings, "cas_session_enabled", parsed_cas)
     return settings
 
 

@@ -27,12 +27,19 @@ def session_close_minutes() -> int:
     return NSE_SESSION_CLOSE_MINUTES
 
 
-def last_session_bar_start_minutes(interval_minutes: int) -> int:
+def _close(close_minutes: int | None) -> int:
+    return NSE_SESSION_CLOSE_MINUTES if close_minutes is None else close_minutes
+
+
+def last_session_bar_start_minutes(
+    interval_minutes: int, close_minutes: int | None = None
+) -> int:
     """Minutes-from-midnight IST of the last bar start on a full session day."""
     if interval_minutes <= 0:
         raise ValueError(f"intervalMinutes must be positive: {interval_minutes}")
+    close = _close(close_minutes)
     # Last bar whose start is still before close
-    session_len = NSE_SESSION_CLOSE_MINUTES - NSE_SESSION_OPEN_MINUTES
+    session_len = close - NSE_SESSION_OPEN_MINUTES
     if session_len <= 0:
         return NSE_SESSION_OPEN_MINUTES
     n = max(0, (session_len - 1) // interval_minutes)
@@ -46,12 +53,15 @@ def _epoch_for_day_minutes(day: date, minutes_of_day: int) -> int:
     return int(start.timestamp())
 
 
-def floor_to_candle_start_epoch_second(epoch_millis: int, interval_minutes: int) -> int:
+def floor_to_candle_start_epoch_second(
+    epoch_millis: int, interval_minutes: int, close_minutes: int | None = None
+) -> int:
     """Floor an instant to the start of its NSE session candle bucket (epoch seconds)."""
     if interval_minutes <= 0:
         raise ValueError(f"intervalMinutes must be positive: {interval_minutes}")
 
     date_time = datetime.fromtimestamp(epoch_millis / 1000.0, tz=NSE_ZONE)
+    close = _close(close_minutes)
 
     # Daily (and multi-day treated as calendar day in IST)
     if interval_minutes >= 24 * 60:
@@ -65,11 +75,15 @@ def floor_to_candle_start_epoch_second(epoch_millis: int, interval_minutes: int)
     # (Live path should not process ticks here; this is for safety / remap.)
     if minutes_of_day < NSE_SESSION_OPEN_MINUTES:
         prev = day - timedelta(days=1)
-        return _epoch_for_day_minutes(prev, last_session_bar_start_minutes(interval_minutes))
+        return _epoch_for_day_minutes(
+            prev, last_session_bar_start_minutes(interval_minutes, close)
+        )
 
     # At/after close → last bar of this session day
-    if minutes_of_day >= NSE_SESSION_CLOSE_MINUTES:
-        return _epoch_for_day_minutes(day, last_session_bar_start_minutes(interval_minutes))
+    if minutes_of_day >= close:
+        return _epoch_for_day_minutes(
+            day, last_session_bar_start_minutes(interval_minutes, close)
+        )
 
     elapsed = minutes_of_day - NSE_SESSION_OPEN_MINUTES
     floored_elapsed = (elapsed // interval_minutes) * interval_minutes
@@ -77,7 +91,9 @@ def floor_to_candle_start_epoch_second(epoch_millis: int, interval_minutes: int)
     return _epoch_for_day_minutes(day, start_minutes)
 
 
-def is_session_bar_start(epoch_seconds: int, interval_minutes: int) -> bool:
+def is_session_bar_start(
+    epoch_seconds: int, interval_minutes: int, close_minutes: int | None = None
+) -> bool:
     """True if ``epoch_seconds`` is a valid RTH bar start for this interval."""
     if interval_minutes <= 0:
         return False
@@ -89,7 +105,7 @@ def is_session_bar_start(epoch_seconds: int, interval_minutes: int) -> bool:
     minutes_of_day = dt.hour * 60 + dt.minute
     if minutes_of_day < NSE_SESSION_OPEN_MINUTES:
         return False
-    if minutes_of_day >= NSE_SESSION_CLOSE_MINUTES:
+    if minutes_of_day >= _close(close_minutes):
         return False
     elapsed = minutes_of_day - NSE_SESSION_OPEN_MINUTES
     return elapsed % interval_minutes == 0
@@ -101,7 +117,10 @@ def candle_ist_date(epoch_seconds: int) -> date:
 
 
 def should_seed_as_current(
-    last_candle_time: int, now_epoch_ms: int, interval_minutes: int
+    last_candle_time: int,
+    now_epoch_ms: int,
+    interval_minutes: int,
+    close_minutes: int | None = None,
 ) -> bool:
     """Whether the last historical bar is still the open (forming) candle.
 
@@ -115,7 +134,9 @@ def should_seed_as_current(
     """
     if interval_minutes <= 0:
         return False
-    boundary = floor_to_candle_start_epoch_second(now_epoch_ms, interval_minutes)
+    boundary = floor_to_candle_start_epoch_second(
+        now_epoch_ms, interval_minutes, close_minutes
+    )
     if last_candle_time != boundary:
         return False
     # Daily: forming until the calendar day rolls.

@@ -167,6 +167,8 @@ export default function ChartContainer() {
     toggleVolumePane,
   } = engine
 
+  const activeEntryForWoodie =
+    watchlist.find((e) => e.symbolId === activeSymbolId) ?? null
   const woodie = useWoodieSrOverlay({
     enabled: isWoodieSrOverlayEnabled(),
     symbolId: activeSymbolId,
@@ -174,6 +176,7 @@ export default function ChartContainer() {
     chartRef,
     seriesRef,
     candlesRef,
+    ctsEnd: activeEntryForWoodie?.ctsEnd,
   })
 
   const updateConnectionStatus = useCallback((wsStatus, marketPhase) => {

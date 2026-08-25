@@ -78,6 +78,23 @@ def test_1h_and_4h_upstox_grid():
     ]
 
 
+def test_date_gated_cas_drop_not_fold():
+    pre = [
+        _c(2026, 7, 10, 15, 10, o=100, cl=101, v=1),
+        _c(2026, 7, 10, 15, 25, o=101, cl=102, v=2),
+    ]
+    kept = rebucket_session_candles(pre, 5, 915)
+    assert [c.time for c in kept] == [_t(2026, 7, 10, 15, 10), _t(2026, 7, 10, 15, 25)]
+
+    post = [
+        _c(2026, 8, 4, 15, 10, o=100, cl=101, v=1),
+        _c(2026, 8, 4, 15, 25, o=101, cl=102, v=2),
+    ]
+    dropped = rebucket_session_candles(post, 5, 915)
+    assert [c.time for c in dropped] == [_t(2026, 8, 4, 15, 10)]
+    assert dropped[0].close == 101
+
+
 def test_daily_unchanged():
     raw = [_c(2026, 7, 10, 0, 0, o=1, cl=2)]
     out = rebucket_session_candles(raw, 24 * 60)

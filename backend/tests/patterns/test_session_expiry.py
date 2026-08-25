@@ -65,3 +65,48 @@ def test_max_sessions_1h():
     n = rec.expire_on_session_close()
     assert n >= 1
     assert store.get_open("K", "1h") == []
+
+
+def test_expire_on_session_close_filters_symbol_ids():
+    settings = Settings()
+    store = ActiveInstanceStore()
+    journal = InMemoryPatternJournal()
+    engine = CandleEngine()
+    rec = SessionExpiryReconciler(settings, store, journal, engine)
+
+    cas = new_pattern(
+        pattern_type=PatternType.BREAKOUT,
+        symbol_id="CAS",
+        timeframe="5m",
+        direction=PatternDirection.LONG,
+        reference_level=100,
+        lookback_high=100,
+        atr_at_detect=1,
+        entry_price=101,
+        stop_level=100,
+        target_level=105,
+        detect_candle_time=1,
+        mfe_price=101,
+        mae_price=100,
+    )
+    cash = new_pattern(
+        pattern_type=PatternType.BREAKOUT,
+        symbol_id="CASH",
+        timeframe="5m",
+        direction=PatternDirection.LONG,
+        reference_level=100,
+        lookback_high=100,
+        atr_at_detect=1,
+        entry_price=101,
+        stop_level=100,
+        target_level=105,
+        detect_candle_time=1,
+        mfe_price=101,
+        mae_price=100,
+    )
+    store.put(cas)
+    store.put(cash)
+    n = rec.expire_on_session_close(symbol_ids={"CAS"})
+    assert n >= 1
+    assert store.get_open("CAS", "5m") == []
+    assert len(store.get_open("CASH", "5m")) == 1

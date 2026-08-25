@@ -45,6 +45,40 @@ export type WoodieDayLevels = {
 
 const IST_OFFSET_SEC = 5 * 3600 + 30 * 60
 
+/** Lockstep with backend/app/market/data/cas_fo_cash_symbols.json as_of. */
+export const CAS_AS_OF = '2026-08-03'
+
+export function parseCtsEnd(ctsEnd: string | null | undefined): {
+  hour: number
+  minute: number
+} {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(ctsEnd || '').trim())
+  if (!m) return { hour: 15, minute: 30 }
+  return { hour: Number(m[1]), minute: Number(m[2]) }
+}
+
+export function clipSegmentEnd(
+  lastCandleChart: number,
+  sessionDate: string,
+  ctsHour: number,
+  ctsMinute: number,
+): number {
+  const ctsUnix = nseSessionUtcSeconds(sessionDate, ctsHour, ctsMinute)
+  if (!ctsUnix) return lastCandleChart
+  const ctsChart = utcToNseChartTime(ctsUnix)
+  return Math.max(lastCandleChart, ctsChart)
+}
+
+export function effectiveCtsForDate(
+  ymd: string,
+  liveHour: number,
+  liveMinute: number,
+): { hour: number; minute: number } {
+  const day = normalizeYmd(ymd)
+  if (!day || day < CAS_AS_OF) return { hour: 15, minute: 30 }
+  return { hour: liveHour, minute: liveMinute }
+}
+
 export function nseSessionUtcSeconds(
   sessionDate: string,
   hour: number,
@@ -136,6 +170,7 @@ type DayGroup = {
 export function buildSessionSegments(
   days: WoodieDayLevels[],
   candles?: CandleLike[] | null,
+  cts?: { hour?: number; minute?: number } | null,
 ): WoodieSessionSegment[] {
   const frozenByDay = new Map<string, Partial<Record<WoodieLevelKey, number>>>()
   for (const day of days || []) {
@@ -192,10 +227,14 @@ export function buildSessionSegments(
     }
     if (!prices || !Object.keys(prices).length) continue
     if (g.first <= 0 || g.last < g.first) continue
+    const liveH = cts?.hour ?? 15
+    const liveM = cts?.minute ?? 30
+    const eff = effectiveCtsForDate(g.ymd, liveH, liveM)
+    const end = clipSegmentEnd(g.last, g.ymd, eff.hour, eff.minute)
     out.push({
       sessionDate: g.ymd,
       start: g.first,
-      end: g.last,
+      end,
       prices,
     })
   }

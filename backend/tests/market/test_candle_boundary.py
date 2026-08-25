@@ -83,6 +83,17 @@ def test_pre_open_floors_to_previous_day_last_bar():
     )
 
 
+def test_cas_last_bar_math():
+    assert last_session_bar_start_minutes(5, 915) == 15 * 60 + 10
+    assert last_session_bar_start_minutes(15, 915) == 15 * 60
+    assert last_session_bar_start_minutes(60, 915) == 14 * 60 + 15
+    assert floor_to_candle_start_epoch_second(
+        epoch_ms(2026, 8, 4, 15, 12), 5, 915
+    ) == expected_sec(2026, 8, 4, 15, 10)
+    assert not is_session_bar_start(expected_sec(2026, 8, 4, 15, 25), 5, 915)
+    assert is_session_bar_start(expected_sec(2026, 8, 4, 15, 25), 5)
+
+
 def test_is_session_bar_start():
     assert is_session_bar_start(expected_sec(2026, 7, 10, 9, 15), 5)
     assert is_session_bar_start(expected_sec(2026, 7, 10, 9, 20), 5)
