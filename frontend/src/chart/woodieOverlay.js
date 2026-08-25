@@ -10,12 +10,24 @@ export function createWoodieHandles() {
   return { primitive: null, histSeries: [], priceLines: [] }
 }
 
-function timeToX(ts, time) {
-  const exact = ts.timeToCoordinate(time)
-  if (exact != null && Number.isFinite(exact)) return exact
-  const idx = ts.timeToIndex(time, true)
+/**
+ * Map a chart time to pane x. LWC v5 has `logicalToCoordinate`, not
+ * `indexToCoordinate` — CTS session-end is often not an exact bar.
+ */
+export function timeToX(ts, time) {
+  if (!ts || time == null) return null
+  if (typeof ts.timeToCoordinate === 'function') {
+    const exact = ts.timeToCoordinate(time)
+    if (exact != null && Number.isFinite(exact)) return exact
+  }
+  const idx =
+    typeof ts.timeToIndex === 'function' ? ts.timeToIndex(time, true) : null
   if (idx == null) return null
-  const x = ts.indexToCoordinate(idx)
+  const toCoord =
+    (typeof ts.logicalToCoordinate === 'function' && ts.logicalToCoordinate) ||
+    (typeof ts.indexToCoordinate === 'function' && ts.indexToCoordinate)
+  if (typeof toCoord !== 'function') return null
+  const x = toCoord.call(ts, idx)
   return x == null || !Number.isFinite(x) ? null : x
 }
 
@@ -53,43 +65,47 @@ class WoodieRenderer {
     const segments = this._owner._segments
     if (!chart || !series || !segments.length) return
     const ts = chart.timeScale()
-    target.useBitmapCoordinateSpace((scope) => {
-      const ctx = scope.context
-      const hpr = scope.horizontalPixelRatio
-      const vpr = scope.verticalPixelRatio
-      const barW = (ts.options().barSpacing || 6) * hpr
-      ctx.save()
-      ctx.lineWidth = Math.max(1, Math.round(vpr))
-      ctx.setLineDash([6 * hpr, 4 * hpr])
-      ctx.lineCap = 'butt'
-      for (const seg of segments) {
-        let x1 = timeToX(ts, seg.start)
-        let x2 = timeToX(ts, seg.end)
-        if (x1 == null && x2 == null) continue
-        if (x1 == null) x1 = 0
-        if (x2 == null) x2 = ts.width()
-        let left = Math.min(x1, x2) * hpr
-        let right = Math.max(x1, x2) * hpr
-        if (right - left < 2) {
-          const hw = Math.max(barW * 0.45, 3)
-          left -= hw
-          right += hw
+    try {
+      target.useBitmapCoordinateSpace((scope) => {
+        const ctx = scope.context
+        const hpr = scope.horizontalPixelRatio
+        const vpr = scope.verticalPixelRatio
+        const barW = (ts.options?.()?.barSpacing || 6) * hpr
+        ctx.save()
+        ctx.lineWidth = Math.max(1, Math.round(vpr))
+        ctx.setLineDash([6 * hpr, 4 * hpr])
+        ctx.lineCap = 'butt'
+        for (const seg of segments) {
+          let x1 = timeToX(ts, seg.start)
+          let x2 = timeToX(ts, seg.end)
+          if (x1 == null && x2 == null) continue
+          if (x1 == null) x1 = 0
+          if (x2 == null) x2 = typeof ts.width === 'function' ? ts.width() : 0
+          let left = Math.min(x1, x2) * hpr
+          let right = Math.max(x1, x2) * hpr
+          if (right - left < 2) {
+            const hw = Math.max(barW * 0.45, 3)
+            left -= hw
+            right += hw
+          }
+          for (const key of WOODIE_LEVEL_KEYS) {
+            const price = seg.prices[key]
+            if (price == null) continue
+            const yMedia = series.priceToCoordinate(price)
+            if (yMedia == null) continue
+            const y = Math.round(yMedia * vpr) + (ctx.lineWidth % 2 ? 0.5 : 0)
+            ctx.strokeStyle = WOODIE_LEVEL_COLORS[key]
+            ctx.beginPath()
+            ctx.moveTo(left, y)
+            ctx.lineTo(right, y)
+            ctx.stroke()
+          }
         }
-        for (const key of WOODIE_LEVEL_KEYS) {
-          const price = seg.prices[key]
-          if (price == null) continue
-          const yMedia = series.priceToCoordinate(price)
-          if (yMedia == null) continue
-          const y = Math.round(yMedia * vpr) + (ctx.lineWidth % 2 ? 0.5 : 0)
-          ctx.strokeStyle = WOODIE_LEVEL_COLORS[key]
-          ctx.beginPath()
-          ctx.moveTo(left, y)
-          ctx.lineTo(right, y)
-          ctx.stroke()
-        }
-      }
-      ctx.restore()
-    })
+        ctx.restore()
+      })
+    } catch {
+      // Primitive paint must not take down the chart (LWC API mismatches).
+    }
   }
 }
 
