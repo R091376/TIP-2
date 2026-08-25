@@ -1,3 +1,4 @@
+import ChartIndicatorsMenu from './ChartIndicatorsMenu'
 import ChartTypeToggle from './ChartTypeToggle'
 import ConnectionStatus from './ConnectionStatus'
 import TimeframeSelector from './TimeframeSelector'
@@ -52,6 +53,14 @@ export default function ChartHeader({
   mobilePanel,
   onMobilePanelChange,
   alertsCount = 0,
+  showAtr,
+  showVolume,
+  showWoodie,
+  onToggleAtr,
+  onToggleVolume,
+  onToggleWoodie,
+  woodieTodayOnly,
+  onWoodieTodayOnlyChange,
 }) {
   const showMobilePanels = typeof onMobilePanelChange === 'function'
 
@@ -76,6 +85,17 @@ export default function ChartHeader({
           onChange={onChartTypeChange}
           disabled={controlsDisabled}
         />
+        <ChartIndicatorsMenu
+          showAtr={showAtr}
+          showVolume={showVolume}
+          showWoodie={showWoodie}
+          onToggleAtr={onToggleAtr}
+          onToggleVolume={onToggleVolume}
+          onToggleWoodie={onToggleWoodie}
+          woodieTodayOnly={woodieTodayOnly}
+          onWoodieTodayOnlyChange={onWoodieTodayOnlyChange}
+          disabled={controlsDisabled}
+        />
       </div>
 
       {/* Phone: one toolbar — TF dropdown + type + icon panel switch */}
@@ -91,6 +111,18 @@ export default function ChartHeader({
           compact
           chartType={chartType}
           onChange={onChartTypeChange}
+          disabled={controlsDisabled}
+        />
+        <ChartIndicatorsMenu
+          compact
+          showAtr={showAtr}
+          showVolume={showVolume}
+          showWoodie={showWoodie}
+          onToggleAtr={onToggleAtr}
+          onToggleVolume={onToggleVolume}
+          onToggleWoodie={onToggleWoodie}
+          woodieTodayOnly={woodieTodayOnly}
+          onWoodieTodayOnlyChange={onWoodieTodayOnlyChange}
           disabled={controlsDisabled}
         />
         {showMobilePanels ? (

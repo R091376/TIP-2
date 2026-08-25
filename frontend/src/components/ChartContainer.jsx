@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
-import { isChartPaperTradeEnabled } from '../config/featureFlags'
+import { isChartPaperTradeEnabled, isWoodieSrOverlayEnabled } from '../config/featureFlags'
 import {
   DEFAULT_TIMEFRAME,
   getDefaultTimeframes,
@@ -19,6 +19,7 @@ import { useChartBootstrap } from '../hooks/useChartBootstrap'
 import { useChartNavigation } from '../hooks/useChartNavigation'
 import { useLiveMessageHandler } from '../hooks/useLiveMessageHandler'
 import { usePendingBootstrapPoll } from '../hooks/usePendingBootstrapPoll'
+import { useWoodieSrOverlay } from '../hooks/useWoodieSrOverlay'
 import { paperTradeDisabledReason } from '../utils/paperTradable'
 import { parsePanel, stripPanelFromSearch } from '../utils/panelDeepLink'
 import { seriesKey } from '../utils/patternOverlay'
@@ -166,6 +167,15 @@ export default function ChartContainer() {
     toggleVolumePane,
   } = engine
 
+  const woodie = useWoodieSrOverlay({
+    enabled: isWoodieSrOverlayEnabled(),
+    symbolId: activeSymbolId,
+    timeframe,
+    chartRef,
+    seriesRef,
+    candlesRef,
+  })
+
   const updateConnectionStatus = useCallback((wsStatus, marketPhase) => {
     wsStatusRef.current = wsStatus
     if (marketPhase) marketPhaseRef.current = marketPhase
@@ -180,9 +190,10 @@ export default function ChartContainer() {
       candles.forEach((c) => candlesRef.current.set(c.time, c))
       loadedSeriesKeyRef.current = seriesKey(symbolId, tf)
       if (seriesRef.current) applySeriesData(seriesRef.current, chartTypeRef.current)
+      woodie.paintWoodie()
       return candles
     },
-    [applySeriesData, candlesRef, loadedSeriesKeyRef, seriesRef],
+    [applySeriesData, candlesRef, loadedSeriesKeyRef, seriesRef, woodie.paintWoodie],
   )
 
   const onLiveMessage = useLiveMessageHandler({
@@ -281,7 +292,9 @@ export default function ChartContainer() {
       chartTypeEffectReadyRef.current = true
       return
     }
+    woodie.clearWoodie()
     switchChartType(chartType)
+    woodie.paintWoodie()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chartType, loading])
 
@@ -491,6 +504,16 @@ export default function ChartContainer() {
         mobilePanel={mobilePanel}
         onMobilePanelChange={setMobilePanel}
         alertsCount={overlay.alerts?.length || 0}
+        showAtr={showAtr}
+        showVolume={showVolume}
+        onToggleAtr={toggleAtrPane}
+        onToggleVolume={toggleVolumePane}
+        showWoodie={isWoodieSrOverlayEnabled() ? woodie.showWoodie : undefined}
+        onToggleWoodie={isWoodieSrOverlayEnabled() ? woodie.toggleWoodie : undefined}
+        woodieTodayOnly={woodie.woodieTodayOnly}
+        onWoodieTodayOnlyChange={
+          isWoodieSrOverlayEnabled() ? woodie.setWoodieTodayOnly : undefined
+        }
       />
 
       {error && <div className="chart-error">{error}</div>}
@@ -522,8 +545,12 @@ export default function ChartContainer() {
             clearDrawingsEnabled={overlay.hasChartDrawings}
             showAtr={showAtr}
             showVolume={showVolume}
-            onToggleAtr={toggleAtrPane}
-            onToggleVolume={toggleVolumePane}
+            showWoodie={isWoodieSrOverlayEnabled() ? woodie.showWoodie : false}
+            woodieTodayOnly={woodie.woodieTodayOnly}
+            onWoodieTodayOnlyChange={
+              isWoodieSrOverlayEnabled() ? woodie.setWoodieTodayOnly : undefined
+            }
+            onHideWoodie={isWoodieSrOverlayEnabled() ? woodie.toggleWoodie : undefined}
             patternInspect={
               overlay.focusedAlert ||
               overlay.focusedInstance ||

@@ -27,6 +27,14 @@ class DailySrStore(Protocol):
         self, session_date: date, method: str = METHOD_WOODIE_OPEN_V1
     ) -> list[str]: ...
 
+    def list_for_symbol(
+        self,
+        symbol_id: str,
+        start: date,
+        end: date,
+        method: str = METHOD_WOODIE_OPEN_V1,
+    ) -> list[tuple[date, WoodieLevels, str]]: ...
+
 
 def _row_to_levels(row) -> WoodieLevels:
     return WoodieLevels(
@@ -91,6 +99,24 @@ class InMemoryDailySrStore:
             for (sid, day, meth) in self._rows
             if day == session_date and meth == method
         ]
+
+    def list_for_symbol(
+        self,
+        symbol_id: str,
+        start: date,
+        end: date,
+        method: str = METHOD_WOODIE_OPEN_V1,
+    ) -> list[tuple[date, WoodieLevels, str]]:
+        out: list[tuple[date, WoodieLevels, str]] = []
+        for (sid, day, meth), (meta, levels) in self._rows.items():
+            if sid != symbol_id or meth != method:
+                continue
+            if day < start or day > end:
+                continue
+            src = getattr(meta, "freeze_source", "") or ""
+            out.append((day, levels, src))
+        out.sort(key=lambda row: row[0])
+        return out
 
 
 class PostgresDailySrStore:
@@ -213,3 +239,29 @@ class PostgresDailySrStore:
                 )
             ).all()
             return list(rows)
+
+    def list_for_symbol(
+        self,
+        symbol_id: str,
+        start: date,
+        end: date,
+        method: str = METHOD_WOODIE_OPEN_V1,
+    ) -> list[tuple[date, WoodieLevels, str]]:
+        from sqlalchemy import select
+
+        from app.journal.entities import DailySrLevelRow
+
+        with self._sf() as s:
+            rows = s.scalars(
+                select(DailySrLevelRow)
+                .where(
+                    DailySrLevelRow.symbol_id == symbol_id,
+                    DailySrLevelRow.session_date >= start,
+                    DailySrLevelRow.session_date <= end,
+                    DailySrLevelRow.method == method,
+                )
+                .order_by(DailySrLevelRow.session_date)
+            ).all()
+            return [
+                (row.session_date, _row_to_levels(row), row.freeze_source) for row in rows
+            ]

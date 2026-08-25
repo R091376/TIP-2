@@ -1,3 +1,4 @@
+import ChartWoodieLegend from './ChartWoodieLegend'
 import OhlcLegend from './OhlcLegend'
 import PatternInstancePanel from './PatternInstancePanel'
 import {
@@ -9,7 +10,8 @@ import {
 
 /**
  * Main chart surface: loading overlay, OHLC legend, trade actions,
- * ATR/volume toggles + legend chips, pattern inspect panel, LWC host.
+ * ATR/volume legend chips, pattern inspect panel, LWC host.
+ * Extra-pane toggles live in ChartHeader → Indicators dropdown.
  */
 export default function ChartPanel({
   containerRef,
@@ -24,8 +26,10 @@ export default function ChartPanel({
   patternInspect = null,
   showAtr = true,
   showVolume = true,
-  onToggleAtr,
-  onToggleVolume,
+  showWoodie = false,
+  woodieTodayOnly = true,
+  onWoodieTodayOnlyChange,
+  onHideWoodie,
 }) {
   const showClearDrawings =
     typeof onClearDrawings === 'function' && Boolean(clearDrawingsEnabled)
@@ -65,42 +69,13 @@ export default function ChartPanel({
       <div className="chart-top-toolbar" aria-label="Trade, OHLC, and drawings">
         {tradeSlot}
         <OhlcLegend candle={ohlcLegend} />
-        <div className="chart-pane-toggles" role="group" aria-label="Indicator panes">
-          {typeof onToggleAtr === 'function' && (
-            <button
-              type="button"
-              className={`chart-pane-toggle chart-pane-toggle--atr ${showAtr ? 'chart-pane-toggle--on' : ''}`}
-              aria-pressed={showAtr}
-              title={showAtr ? 'Hide ATR pane' : 'Show ATR pane'}
-              onPointerDown={stopChartPointer}
-              onMouseDown={stopChartPointer}
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                onToggleAtr()
-              }}
-            >
-              ATR
-            </button>
-          )}
-          {typeof onToggleVolume === 'function' && (
-            <button
-              type="button"
-              className={`chart-pane-toggle chart-pane-toggle--vol ${showVolume ? 'chart-pane-toggle--on' : ''}`}
-              aria-pressed={showVolume}
-              title={showVolume ? 'Hide volume pane' : 'Show volume pane'}
-              onPointerDown={stopChartPointer}
-              onMouseDown={stopChartPointer}
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                onToggleVolume()
-              }}
-            >
-              Vol
-            </button>
-          )}
-        </div>
+        {showWoodie ? (
+          <ChartWoodieLegend
+            todayOnly={woodieTodayOnly}
+            onTodayOnlyChange={onWoodieTodayOnlyChange}
+            onHide={onHideWoodie}
+          />
+        ) : null}
         {showClearDrawings && (
           <button
             type="button"

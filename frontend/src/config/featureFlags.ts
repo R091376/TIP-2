@@ -95,6 +95,17 @@ export function isTimeframe1mEnabled(): boolean {
   )
 }
 
+/**
+ * VITE_FEATURE_WOODIE_SR_OVERLAY — chart Woodie S/R lines from frozen daily rows.
+ * Default ON. Backend still owns the calculator (GET /api/symbols/{id}/sr).
+ */
+export function isWoodieSrOverlayEnabled(): boolean {
+  return envTruthy(
+    import.meta.env.VITE_FEATURE_WOODIE_SR_OVERLAY as string | undefined,
+    true,
+  )
+}
+
 /** Max time to wait for API + Postgres before showing Retry (ms). */
 export const STARTUP_READY_TIMEOUT_MS = 180_000
 

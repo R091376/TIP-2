@@ -68,6 +68,20 @@ class DailySrService:
         # Watchlist-driven ensure is done from bootstrap_symbol / this method's caller
         # with explicit symbol lists via ensure_today.
 
+    def list_window(
+        self, symbol_id: str, start: date, end: date
+    ) -> list[tuple[date, object, str]]:
+        """Frozen rows in [start, end] inclusive. Does not compute missing days."""
+        if not getattr(self._settings, "pattern_sr_enabled", True):
+            return []
+        if end < start:
+            return []
+        list_fn = getattr(self._store, "list_for_symbol", None)
+        if not callable(list_fn):
+            return []
+        method = getattr(self._settings, "pattern_sr_method", None) or METHOD_WOODIE_OPEN_V1
+        return list_fn(symbol_id, start, end, method)
+
     def ensure_levels(self, symbol_id: str, session_date: date):
         """Return frozen levels, computing them if missing."""
         hit = self._store.get(symbol_id, session_date, METHOD_WOODIE_OPEN_V1)

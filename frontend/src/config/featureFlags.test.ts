@@ -91,6 +91,25 @@ describe('isTimeframe1mEnabled', () => {
   })
 })
 
+describe('isWoodieSrOverlayEnabled', () => {
+  afterEach(() => {
+    vi.resetModules()
+    vi.unstubAllEnvs()
+  })
+
+  it('defaults to ON when unset', async () => {
+    vi.stubEnv('VITE_FEATURE_WOODIE_SR_OVERLAY', '')
+    const { isWoodieSrOverlayEnabled } = await import('./featureFlags')
+    expect(isWoodieSrOverlayEnabled()).toBe(true)
+  })
+
+  it('can be turned off', async () => {
+    vi.stubEnv('VITE_FEATURE_WOODIE_SR_OVERLAY', 'false')
+    const { isWoodieSrOverlayEnabled } = await import('./featureFlags')
+    expect(isWoodieSrOverlayEnabled()).toBe(false)
+  })
+})
+
 describe('getDefaultTimeframes', () => {
   afterEach(() => {
     vi.resetModules()

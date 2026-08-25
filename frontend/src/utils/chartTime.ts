@@ -46,3 +46,14 @@ export function utcToNseChartTime(utcSeconds: number | string | null | undefined
     ) / 1000,
   )
 }
+
+/** IST calendar date (YYYY-MM-DD) for a UTC epoch-seconds candle time. */
+export function istYmdFromUtcSeconds(utcSeconds: number | string | null | undefined): string {
+  const chart = utcToNseChartTime(utcSeconds)
+  if (!chart) return ''
+  const d = new Date(chart * 1000)
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
