@@ -63,6 +63,7 @@ def to_new_row(p: ActivePattern, now: datetime) -> PatternInstanceRow:
         sr_open_through=p.sr_open_through,
         sr_gap_dir=p.sr_gap_dir,
         sr_ladder_json=p.sr_ladder_json,
+        geometry_json=p.geometry,
         created_at=now,
         updated_at=now,
     )
@@ -99,6 +100,15 @@ def fill_sr_if_null(p: ActivePattern, row: PatternInstanceRow) -> None:
     row.sr_open_through = p.sr_open_through
     row.sr_gap_dir = p.sr_gap_dir
     row.sr_ladder_json = p.sr_ladder_json
+
+
+def fill_geometry_if_null(p: ActivePattern, row: PatternInstanceRow) -> None:
+    """Write geometry once when a reused fingerprint row is still empty."""
+    if row.geometry_json is not None:
+        return
+    if p.geometry is None:
+        return
+    row.geometry_json = p.geometry
 
 
 def parse_confirmation_mode(raw: str | None) -> ConfirmationMode:
@@ -154,6 +164,7 @@ def to_domain(row: PatternInstanceRow) -> ActivePattern:
         sr_open_through=row.sr_open_through,
         sr_gap_dir=row.sr_gap_dir,
         sr_ladder_json=row.sr_ladder_json,
+        geometry=row.geometry_json,
     )
     if status in (PatternStage.SUCCEEDED, PatternStage.FAILED, PatternStage.EXPIRED):
         outcome = {

@@ -19,6 +19,10 @@ class PatternType(str, Enum):
     INSIDE_BAR = "inside_bar"
     HIGHER_HIGH = "higher_high"
     LOWER_LOW = "lower_low"
+    DOUBLE_BOTTOM = "double_bottom"
+    DOUBLE_TOP = "double_top"
+    HEAD_SHOULDERS = "head_shoulders"
+    INVERSE_HEAD_SHOULDERS = "inverse_head_shoulders"
 
     def is_pin_bar(self) -> bool:
         return self in (PatternType.HAMMER, PatternType.SHOOTING_STAR)
@@ -28,6 +32,15 @@ class PatternType(str, Enum):
 
     def is_structure(self) -> bool:
         return self in (PatternType.HIGHER_HIGH, PatternType.LOWER_LOW)
+
+    def is_double(self) -> bool:
+        return self in (PatternType.DOUBLE_BOTTOM, PatternType.DOUBLE_TOP)
+
+    def is_head_shoulders(self) -> bool:
+        return self in (PatternType.HEAD_SHOULDERS, PatternType.INVERSE_HEAD_SHOULDERS)
+
+    def is_classical(self) -> bool:
+        return self.is_double() or self.is_head_shoulders()
 
 
 class PatternStage(str, Enum):
@@ -107,6 +120,7 @@ class ActivePattern:
     sr_open_through: str | None = None
     sr_gap_dir: str | None = None
     sr_ladder_json: dict | None = None
+    geometry: dict | None = None
     terminal: bool = False
     final_outcome: FinalOutcome | None = None
     terminal_reason: str | None = None
@@ -209,6 +223,7 @@ class ActivePattern:
             "srOpenThrough": self.sr_open_through,
             "srGapDir": self.sr_gap_dir,
             "srLadder": self.sr_ladder_json,
+            "geometry": self.geometry,
             "terminal": self.terminal,
             "finalOutcome": self.final_outcome.value if self.final_outcome else None,
             "terminalReason": self.terminal_reason,
@@ -257,6 +272,7 @@ def new_pattern(**kwargs) -> ActivePattern:
         sr_open_through=kwargs.get("sr_open_through"),
         sr_gap_dir=kwargs.get("sr_gap_dir"),
         sr_ladder_json=kwargs.get("sr_ladder_json"),
+        geometry=kwargs.get("geometry"),
     )
 
 

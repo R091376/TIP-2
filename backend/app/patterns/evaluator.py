@@ -9,8 +9,10 @@ from app.patterns.active_store import ActiveInstanceStore
 from app.patterns.breakout import evaluate_breakout_bar
 from app.patterns.breakdown import evaluate_breakdown_bar
 from app.patterns.consolidation import evaluate_consolidation_bar
+from app.patterns.double import evaluate_double_bar
 from app.patterns.engulfing import evaluate_engulfing_bar
 from app.patterns.expected_r import expected_r
+from app.patterns.head_shoulders import evaluate_hs_bar
 from app.patterns.inside_bar import evaluate_inside_bar
 from app.patterns.journal import PatternJournal
 from app.patterns.lifecycle_support import expire
@@ -358,11 +360,34 @@ class PatternEvaluator:
                 evaluate_volume_breakout_bar,
                 True,
             ),
+            (
+                lambda p: p.pattern_type.is_double(),
+                "double",
+                evaluate_double_bar,
+                True,
+            ),
+            (
+                lambda p: p.pattern_type.is_head_shoulders(),
+                "head_shoulders",
+                evaluate_hs_bar,
+                True,
+            ),
         ]
 
         still: list[ActivePattern] = []
         for pred, cfg_attr, evaluate_fn, needs_index in specs:
             cfg = {**getattr(self._settings, cfg_attr), "atr_period": atr}
+            family_on = True
+            if cfg_attr == "double":
+                family_on = bool(getattr(self._settings, "pattern_double_enabled", True))
+            elif cfg_attr == "head_shoulders":
+                family_on = bool(getattr(self._settings, "pattern_hs_enabled", True))
+            tf_map = cfg.get("enabled_timeframes")
+            tf_on = True if not isinstance(tf_map, dict) else bool(tf_map.get(timeframe, True))
+            cfg = {
+                **cfg,
+                "_new_detects": bool(cfg.get("enabled", True) and family_on and tf_on),
+            }
             open_items = [p for p in open_all if pred(p)]
             if needs_index:
                 ev = evaluate_fn(

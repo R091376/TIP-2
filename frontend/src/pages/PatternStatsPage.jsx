@@ -43,6 +43,10 @@ const RESEARCH_TYPES = [
   'inside_bar',
   'higher_high',
   'lower_low',
+  'double_bottom',
+  'double_top',
+  'head_shoulders',
+  'inverse_head_shoulders',
 ]
 /** Base options; live types from data are merged in. */
 const BASE_PATTERN_TYPES = ['all', 'breakout', 'breakdown']

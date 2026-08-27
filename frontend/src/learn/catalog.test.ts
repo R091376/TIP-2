@@ -82,7 +82,7 @@ describe('tipParameters cover tipDefaults buckets', () => {
 })
 
 describe('tipDefaults shape', () => {
-  it('has all eight detector buckets', () => {
+  it('has all ten detector buckets', () => {
     for (const k of [
       'breakout',
       'breakdown',
@@ -92,6 +92,8 @@ describe('tipDefaults shape', () => {
       'structure',
       'consolidation',
       'volume_breakout',
+      'double',
+      'head_shoulders',
     ]) {
       expect(tipDefaults[k as keyof typeof tipDefaults]).toBeTruthy()
     }

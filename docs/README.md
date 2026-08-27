@@ -7,7 +7,8 @@ Authoritative math and lifecycle docs for indicators, patterns, and the pattern 
 | Indicators | [`indicators/`](indicators/) (ATR, Donchian, Volume SMA) |
 | Patterns | [`patterns/`](patterns/) |
 | Modules (journal, …) | [`modules/`](modules/) |
-| Planned: classical patterns + stack roadmap | [`design-patterns-stack-and-filtered-stats.md`](design-patterns-stack-and-filtered-stats.md) (not implemented) |
+| Classical patterns (double / H&S) | [`design-classical-patterns.md`](design-classical-patterns.md) — implemented; [`patterns/double-bottom.md`](patterns/double-bottom.md), [`double-top.md`](patterns/double-top.md), [`head-shoulders.md`](patterns/head-shoulders.md), [`inverse-head-shoulders.md`](patterns/inverse-head-shoulders.md) |
+| Historical P2–P5 sketch | [`design-patterns-stack-and-filtered-stats.md`](design-patterns-stack-and-filtered-stats.md) — P2/P3 superseded by the classical design |
 | **Design: composable stack filters (P0 research stats)** | [`design-composable-stack-filters.md`](design-composable-stack-filters.md) — implement when ready |
 | **Design: Woodie daily S/R** | [`design-woodie-sr.md`](design-woodie-sr.md) |
 | Learn (operator education) | `/learn` in the app; Woodie topic at `/learn/concepts/woodie-sr` |
@@ -26,7 +27,7 @@ Authoritative math and lifecycle docs for indicators, patterns, and the pattern 
 ```
 market (closed candles)
   → indicators (ATR, Donchian, …)
-  → patterns (Breakout / Breakdown / classic candles / consolidation / volume breakout, …)
+  → patterns (Breakout / Breakdown / classic candles / consolidation / volume breakout / double / H&S, …)
   → journal (Postgres)
   → REST / WebSocket
 ```

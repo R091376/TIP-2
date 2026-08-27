@@ -44,6 +44,10 @@ def settings_projection() -> dict:
     from app.indicators.volume_sma import VolumeSmaIndicator
 
     s = get_settings()
+
+    def public_detector(d: dict) -> dict:
+        return {k: v for k, v in dict(d).items() if not isinstance(v, dict)}
+
     return {
         "atr_period": s.atr_period,
         "breakout": dict(s.breakout),
@@ -54,6 +58,8 @@ def settings_projection() -> dict:
         "structure": dict(s.structure),
         "consolidation": dict(s.consolidation),
         "volume_breakout": dict(s.volume_breakout),
+        "double": public_detector(s.double),
+        "head_shoulders": public_detector(s.head_shoulders),
         "indicators": {
             "atr": {"period": int(s.atr_period)},
             "donchian": {"period": DonchianIndicator.DEFAULT_PERIOD},

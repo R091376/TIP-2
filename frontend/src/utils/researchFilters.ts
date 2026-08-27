@@ -269,8 +269,23 @@ export function withResearchDefaults(params: ResearchFilterParams = {}): Researc
   return { ...DEFAULT_RESEARCH_FILTERS, ...params }
 }
 
-/** Built-in stacks. Every preset includes maxRiskR ≤ 1.5. */
+/** Built-in stacks. Most include maxRiskR ≤ 1.5; classical-measured uses 4. */
 export const BUILTIN_STACK_PRESETS: StackPreset[] = [
+  {
+    id: 'classical-measured',
+    name: 'Classical measured move',
+    filters: {
+      patternType: [
+        'double_bottom',
+        'double_top',
+        'head_shoulders',
+        'inverse_head_shoulders',
+      ],
+      resolvedOnly: true,
+      excludeReasons: ['startup_recovery'],
+      maxRiskR: 4.0,
+    },
+  },
   {
     id: 'short-breakdown-quality',
     name: 'Short / breakdown quality',

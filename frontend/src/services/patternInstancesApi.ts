@@ -32,6 +32,35 @@ export type PatternInstanceDto = {
   terminalReason?: string | null
   endPrice?: number | null
   active?: boolean
+  geometry?: ClassicalGeometry | null
+}
+
+export type ClassicalPivot = {
+  role: string
+  index?: number
+  time?: number
+  price?: number
+  high?: boolean
+}
+
+export type ClassicalGeometry = {
+  kind?: string
+  version?: number
+  pivots?: ClassicalPivot[]
+  confirmation?: { style?: string; price?: number; leftTime?: number; rightTime?: number }
+  neckline?: {
+    style?: string
+    p1Time?: number
+    p1Price?: number
+    p2Time?: number
+    p2Price?: number
+    priceAtBreak?: number
+    slopePerBar?: number
+  }
+  patternHeight?: number
+  breakIndex?: number
+  breakTime?: number
+  breakPrice?: number
 }
 
 export type FetchSymbolPatternsParams = {

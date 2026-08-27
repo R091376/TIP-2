@@ -98,6 +98,7 @@ class PatternInstanceRow(Base):
     sr_open_through: Mapped[str | None] = mapped_column(Text, nullable=True)
     sr_gap_dir: Mapped[str | None] = mapped_column(Text, nullable=True)
     sr_ladder_json: Mapped[dict | None] = mapped_column(JSONType(), nullable=True)
+    geometry_json: Mapped[dict | None] = mapped_column(JSONType(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

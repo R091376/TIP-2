@@ -1,4 +1,5 @@
 import { createSeriesMarkers, LineStyle } from 'lightweight-charts'
+import type { ClassicalGeometry } from '../services/patternInstancesApi'
 import { utcToNseChartTime } from './chartTime'
 
 /** Bars visible on each side of the focused event (logical range). */
@@ -168,10 +169,12 @@ export type PatternOverlayRails = {
 
 export type PatternOverlayHandle = {
   series: LwcSeries
+  chart?: LwcChart
   priceLine?: LwcPriceLine | null
   /** Extra rails (entry / stop / target). */
   railLines?: LwcPriceLine[]
   markersPlugin?: LwcMarkersPlugin | null
+  extraSeries?: LwcSeries[]
   instanceId?: string
   focusAlertId?: string
   symbolId?: string
@@ -207,6 +210,15 @@ export function clearPatternOverlay(handle: PatternOverlayHandle | null | undefi
   } catch {
     // ignore
   }
+  if (handle.extraSeries?.length && handle.chart) {
+    for (const extra of handle.extraSeries) {
+      try {
+        handle.chart.removeSeries(extra)
+      } catch {
+        // ignore
+      }
+    }
+  }
 }
 
 export type OverlaySpec = {
@@ -220,6 +232,44 @@ export type OverlaySpec = {
   focusView?: boolean
   /** Optional trade rails from full instance DTO. */
   rails?: PatternOverlayRails | null
+  geometry?: ClassicalGeometry | null
+}
+
+function pivotShortLabel(role: string | undefined): string {
+  switch ((role || '').toLowerCase()) {
+    case 'trough1':
+      return 'L1'
+    case 'trough2':
+      return 'L2'
+    case 'peak':
+      return 'P'
+    case 'peak1':
+      return 'H1'
+    case 'peak2':
+      return 'H2'
+    case 'trough':
+      return 'T'
+    case 'left_shoulder':
+      return 'LS'
+    case 'right_shoulder':
+      return 'RS'
+    case 'head':
+      return 'H'
+    case 'left_armpit':
+      return 'A'
+    case 'right_armpit':
+      return 'B'
+    default:
+      return (role || 'P').slice(0, 3).toUpperCase()
+  }
+}
+
+function snapChartTime(seriesChartTimes: number[], rawUtc: number | undefined): number | null {
+  if (rawUtc == null || !Number.isFinite(Number(rawUtc))) return null
+  const rawChartTime = utcToNseChartTime(rawUtc)
+  const snapped = nearestInSorted(seriesChartTimes, rawChartTime)
+  const t = snapped?.value ?? rawChartTime
+  return Number.isFinite(Number(t)) ? Number(t) : null
 }
 
 function tryCreatePriceLine(
@@ -353,6 +403,22 @@ export function applyInstanceOverlay(
       _focus: ev.id === focus.id,
     }
   })
+  const geometry = spec.geometry
+  if (geometry?.pivots?.length) {
+    for (const pivot of geometry.pivots) {
+      const t = snapChartTime(seriesChartTimes, pivot.time)
+      if (t == null) continue
+      markerSpecs.push({
+        time: t,
+        position: pivot.high ? 'aboveBar' : 'belowBar',
+        shape: 'circle' as const,
+        color: '#94a3b8',
+        text: pivotShortLabel(pivot.role),
+        size: 0,
+        _focus: false,
+      })
+    }
+  }
 
   // Same bar time: merge short labels instead of dropping earlier stages
   type MarkerSpec = (typeof markerSpecs)[number]
@@ -384,6 +450,45 @@ export function applyInstanceOverlay(
     markersPlugin = null
   }
 
+  const extraSeries: LwcSeries[] = []
+  const neck = geometry?.neckline
+  if (neck && (neck.style || 'sloped') === 'sloped' && chart?.addLineSeries) {
+    const p1t = snapChartTime(seriesChartTimes, neck.p1Time)
+    const p2t = snapChartTime(seriesChartTimes, neck.p2Time)
+    const brt = snapChartTime(seriesChartTimes, geometry?.breakTime)
+    const points: { time: number; value: number }[] = []
+    if (p1t != null && Number.isFinite(Number(neck.p1Price))) {
+      points.push({ time: p1t, value: Number(neck.p1Price) })
+    }
+    if (p2t != null && Number.isFinite(Number(neck.p2Price))) {
+      points.push({ time: p2t, value: Number(neck.p2Price) })
+    }
+    if (brt != null && Number.isFinite(Number(neck.priceAtBreak))) {
+      points.push({ time: brt, value: Number(neck.priceAtBreak) })
+    }
+    points.sort((a, b) => a.time - b.time)
+    const uniq: { time: number; value: number }[] = []
+    for (const pt of points) {
+      if (!uniq.length || uniq[uniq.length - 1].time !== pt.time) uniq.push(pt)
+    }
+    if (uniq.length >= 2) {
+      try {
+        const line = chart.addLineSeries({
+          color: '#a78bfa',
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        })
+        line.setData(uniq)
+        extraSeries.push(line)
+      } catch {
+        // overlay polyline is optional
+      }
+    }
+  }
+
   if (focusView) {
     const focusChartTime = utcToNseChartTime(focus.time)
     tryFocusAroundBar(chart, seriesChartTimes, focusChartTime)
@@ -391,9 +496,11 @@ export function applyInstanceOverlay(
 
   return {
     series,
+    chart,
     priceLine,
     railLines,
     markersPlugin,
+    extraSeries,
     instanceId: spec.instanceId || focus.instanceId,
     focusAlertId: focus.id,
     symbolId: focus.symbolId,

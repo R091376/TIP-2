@@ -13,6 +13,8 @@ export function patternConfigBucket(patternType: string | null | undefined): str
   if (t === 'higher_high' || t === 'lower_low') return 'structure'
   if (t === 'consolidation') return 'consolidation'
   if (t === 'volume_breakout') return 'volume_breakout'
+  if (t === 'double_bottom' || t === 'double_top') return 'double'
+  if (t === 'head_shoulders' || t === 'inverse_head_shoulders') return 'head_shoulders'
   return null
 }
 
@@ -34,6 +36,13 @@ const KNOB_LABELS: Record<string, string> = {
   max_duration_candles: 'Max duration bars',
   confirmation_mode: 'Confirmation mode',
   detector_version: 'Detector version',
+  trough_tolerance_atr: 'Trough equality (×ATR)',
+  measured_move_frac: 'Measured-move fraction',
+  stop_buffer_atr: 'Stop buffer (×ATR)',
+  fractal_width: 'Fractal width',
+  min_height_atr: 'Min height (×ATR)',
+  shoulder_tolerance_atr: 'Shoulder equality (×ATR)',
+  min_head_prominence_atr: 'Head prominence (×ATR)',
 }
 
 /**
@@ -60,6 +69,13 @@ export function patternConfigKnobs(patternType: string | null | undefined): Conf
     'max_duration_candles',
     'confirmation_mode',
     'detector_version',
+    'trough_tolerance_atr',
+    'measured_move_frac',
+    'stop_buffer_atr',
+    'fractal_width',
+    'min_height_atr',
+    'shoulder_tolerance_atr',
+    'min_head_prominence_atr',
   ]
   const out: ConfigKnob[] = []
   const rec = obj as Record<string, unknown>

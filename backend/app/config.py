@@ -131,6 +131,8 @@ class Settings(BaseSettings):
     )
     pattern_sr_near_atr: float = Field(default=0.5, alias="TIP_PATTERN_SR_NEAR_ATR")
     pattern_sr_method: str = Field(default="woodie_open_v1", alias="TIP_PATTERN_SR_METHOD")
+    pattern_double_enabled: bool = Field(default=True, alias="TIP_PATTERN_DOUBLE_ENABLED")
+    pattern_hs_enabled: bool = Field(default=True, alias="TIP_PATTERN_HS_ENABLED")
 
     # Pattern detector knobs (mirror Java defaults)
     breakout: dict[str, Any] = Field(
@@ -214,6 +216,77 @@ class Settings(BaseSettings):
             "success_atr_mult": 1.5,
             "max_candles_after_detect": 20,
             "detector_version": "volume-breakout-v1",
+        }
+    )
+    double: dict[str, Any] = Field(
+        default_factory=lambda: {
+            "enabled": True,
+            "enable_bottom": True,
+            "enable_top": True,
+            "enabled_timeframes": {
+                "1m": False,
+                "5m": False,
+                "15m": True,
+                "1h": True,
+                "4h": True,
+                "1d": True,
+            },
+            "fractal_width": 2,
+            "lookback_candles": 80,
+            "trough_tolerance_atr": 0.35,
+            "max_second_deeper_atr": 0.25,
+            "min_pivot_separation": 5,
+            "max_pivot_separation": 50,
+            "min_height_atr": 1.0,
+            "max_height_atr": 8.0,
+            "stop_buffer_atr": 0.15,
+            "measured_move_frac": 1.0,
+            "success_atr_mult": 1.5,
+            "target_mode": "measured",
+            "retest_atr_mult": 0.25,
+            "strengthen_atr_mult": 1.0,
+            "confirmation_mode": "close",
+            "volume_multiplier": 1.5,
+            "volume_avg_period": 20,
+            "max_candles_after_detect": 40,
+            "detector_version": "double-v1",
+            "log_rejects": False,
+        }
+    )
+    head_shoulders: dict[str, Any] = Field(
+        default_factory=lambda: {
+            "enabled": True,
+            "enable_regular": True,
+            "enable_inverse": True,
+            "enabled_timeframes": {
+                "1m": False,
+                "5m": False,
+                "15m": True,
+                "1h": True,
+                "4h": True,
+                "1d": True,
+            },
+            "fractal_width": 2,
+            "lookback_candles": 100,
+            "shoulder_tolerance_atr": 0.60,
+            "min_head_prominence_atr": 0.50,
+            "max_time_asymmetry": 2.5,
+            "min_span_bars": 8,
+            "max_span_bars": 70,
+            "max_neckline_slope_atr_per_bar": 0.20,
+            "allow_sloping_neckline": True,
+            "stop_buffer_atr": 0.15,
+            "measured_move_frac": 1.0,
+            "success_atr_mult": 1.5,
+            "target_mode": "measured",
+            "retest_atr_mult": 0.25,
+            "strengthen_atr_mult": 1.0,
+            "confirmation_mode": "close",
+            "volume_multiplier": 1.5,
+            "volume_avg_period": 20,
+            "max_candles_after_detect": 50,
+            "detector_version": "hs-v1",
+            "log_rejects": False,
         }
     )
     expiry_session_close_timeframes: list[str] = Field(

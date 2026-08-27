@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { utcToNseChartTime } from './chartTime'
 import {
+  applyInstanceOverlay,
+  clearPatternOverlay,
   collectInstanceEvents,
   findAlertAtChartTime,
   nearestInSorted,
@@ -170,5 +172,78 @@ describe('findAlertAtChartTime', () => {
         markerChartTimes: [ct],
       })?.id,
     ).toBe('a')
+  })
+})
+
+vi.mock('lightweight-charts', () => ({
+  LineStyle: { Dashed: 2, Solid: 0 },
+  createSeriesMarkers: () => ({ setMarkers: vi.fn(), detach: vi.fn() }),
+}))
+
+function fakeSeries() {
+  return {
+    createPriceLine: () => ({}),
+    removePriceLine: vi.fn(),
+  }
+}
+
+function fakeChart() {
+  const setData = vi.fn()
+  return {
+    addLineSeries: vi.fn(() => ({ setData })),
+    removeSeries: vi.fn(),
+    setData,
+  }
+}
+
+const event = {
+  id: 'e1',
+  instanceId: 'i1',
+  time: 1_700_000_000,
+  stage: 'detected',
+  symbolId: 'S',
+  timeframe: '15m',
+  patternType: 'head_shoulders',
+  direction: 'short',
+  referenceLevel: 103.2,
+  price: 102.8,
+}
+
+describe('applyInstanceOverlay classical geometry', () => {
+  it('does not throw when geometry is missing', () => {
+    const handle = applyInstanceOverlay(fakeSeries(), fakeChart(), {
+      events: [event],
+      focusAlert: event,
+      rails: { reference: 103.2, entry: 102.8, stop: 110, target: 90 },
+    })
+    expect(handle).toBeTruthy()
+    expect(handle?.extraSeries?.length ?? 0).toBe(0)
+  })
+
+  it('adds a sloped neckline series from geometry', () => {
+    const chart = fakeChart()
+    const handle = applyInstanceOverlay(fakeSeries(), chart, {
+      events: [event],
+      focusAlert: event,
+      geometry: {
+        kind: 'head_shoulders',
+        neckline: {
+          style: 'sloped',
+          p1Time: 1_700_000_000,
+          p1Price: 104,
+          p2Time: 1_700_000_060,
+          p2Price: 103.5,
+          priceAtBreak: 103.2,
+        },
+        breakTime: 1_700_000_120,
+        pivots: [
+          { role: 'head', time: 1_700_000_060, price: 116, high: true },
+        ],
+      },
+    })
+    expect(chart.addLineSeries).toHaveBeenCalled()
+    expect(handle?.extraSeries?.length).toBe(1)
+    clearPatternOverlay(handle)
+    expect(chart.removeSeries).toHaveBeenCalled()
   })
 })

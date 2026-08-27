@@ -41,6 +41,7 @@ from app.journal.mapper import (
     CLOSED_STATUSES,
     OPEN_STATUSES,
     copy_mutable,
+    fill_geometry_if_null,
     fill_sr_if_null,
     to_domain,
     to_new_row,
@@ -257,6 +258,7 @@ class PostgresPatternJournal:
             if row is None:
                 return
             fill_sr_if_null(pattern, row)
+            fill_geometry_if_null(pattern, row)
             s.commit()
 
     def find_statistics(
@@ -483,6 +485,7 @@ class PostgresPatternJournal:
             if row is not None:
                 copy_mutable(pattern, row, now)
                 fill_sr_if_null(pattern, row)
+                fill_geometry_if_null(pattern, row)
             return
 
         row = self._ensure_instance_row(s, pattern, now)
@@ -494,6 +497,7 @@ class PostgresPatternJournal:
 
         copy_mutable(pattern, row, now)
         fill_sr_if_null(pattern, row)
+        fill_geometry_if_null(pattern, row)
 
         if pattern.is_terminal() and pattern.final_outcome is not None:
             existing = s.get(PatternOutcomeRow, durable_id)

@@ -17,6 +17,10 @@ export const TOPIC_DEFAULTS_BUCKET: Record<string, string[]> = {
   bearish_engulfing: ['engulfing', 'atr_period'],
   higher_high: ['structure', 'atr_period'],
   lower_low: ['structure', 'atr_period'],
+  double_bottom: ['double', 'atr_period'],
+  double_top: ['double', 'atr_period'],
+  head_shoulders: ['head_shoulders', 'atr_period'],
+  inverse_head_shoulders: ['head_shoulders', 'atr_period'],
   'woodie-sr': [
     'pattern_sr_enabled',
     'pattern_sr_stamp_enabled',
@@ -40,6 +44,10 @@ export const EXPECTED_PATTERN_TYPE_IDS = [
   'inside_bar',
   'higher_high',
   'lower_low',
+  'double_bottom',
+  'double_top',
+  'head_shoulders',
+  'inverse_head_shoulders',
 ] as const
 
 /** Expected indicator slugs. */

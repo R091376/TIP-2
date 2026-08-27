@@ -31,6 +31,10 @@ Static, no-JavaScript copies of every Learn topic for AI tools, search, and plai
 - [Inside bar](./patterns/inside_bar.md) — A bar fully inside the mother bar, then a close that breaks the mother range. *(SPA: /learn/patterns/inside_bar)*
 - [Higher high](./patterns/higher_high.md) — A confirmed swing high that is higher than the previous swing high. *(SPA: /learn/patterns/higher_high)*
 - [Lower low](./patterns/lower_low.md) — A confirmed swing low that is lower than the previous swing low. *(SPA: /learn/patterns/lower_low)*
+- [Double bottom](./patterns/double_bottom.md) — Two similar troughs; long when a closed bar breaks the intervening peak. *(SPA: /learn/patterns/double_bottom)*
+- [Double top](./patterns/double_top.md) — Two similar peaks; short when a closed bar breaks the intervening trough. *(SPA: /learn/patterns/double_top)*
+- [Head and shoulders](./patterns/head_shoulders.md) — Shoulder–head–shoulder; short on a close through the (possibly sloped) neckline. *(SPA: /learn/patterns/head_shoulders)*
+- [Inverse head and shoulders](./patterns/inverse_head_shoulders.md) — Inverted H&S; long on a close through the neckline joining the two armpit highs. *(SPA: /learn/patterns/inverse_head_shoulders)*
 
 ---
 

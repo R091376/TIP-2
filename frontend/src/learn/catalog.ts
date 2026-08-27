@@ -13,6 +13,10 @@ import { bearishEngulfing } from './content/patterns/bearish_engulfing'
 import { insideBar } from './content/patterns/inside_bar'
 import { higherHigh } from './content/patterns/higher_high'
 import { lowerLow } from './content/patterns/lower_low'
+import { doubleBottom } from './content/patterns/double_bottom'
+import { doubleTop } from './content/patterns/double_top'
+import { headShoulders } from './content/patterns/head_shoulders'
+import { inverseHeadShoulders } from './content/patterns/inverse_head_shoulders'
 import { woodieSr } from './content/concepts/woodie-sr'
 
 export const INDICATOR_TOPICS: LearnTopic[] = [atr14, donchian20, volumeSma20]
@@ -31,6 +35,10 @@ export const PATTERN_TOPICS: LearnTopic[] = [
   insideBar,
   higherHigh,
   lowerLow,
+  doubleBottom,
+  doubleTop,
+  headShoulders,
+  inverseHeadShoulders,
 ]
 
 export const ALL_TOPICS: LearnTopic[] = [

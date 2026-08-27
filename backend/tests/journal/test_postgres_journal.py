@@ -577,3 +577,51 @@ def test_fill_sr_if_null_on_fingerprint_reuse(journal):
         row = s.get(PatternInstanceRow, first.id)
         assert row is not None
         assert row.sr_nearest == "s2"
+
+
+def test_geometry_round_trip_and_fill_if_null(journal):
+    j, sf = journal
+    now = datetime.now(timezone.utc)
+    geo = {
+        "kind": "double_bottom",
+        "version": 1,
+        "pivots": [{"role": "trough1", "index": 12, "time": 1, "price": 100.0, "high": False}],
+        "patternHeight": 8.0,
+    }
+    first = _pattern(pattern_type=PatternType.DOUBLE_BOTTOM, geometry=geo)
+    j.persist_lifecycle(
+        first,
+        [PatternStageEvent(first.id, PatternStage.DETECTED, first.detect_candle_time, 101.0, now)],
+    )
+    open_list = j.find_open("NSE_EQ|TEST", "5m")
+    assert len(open_list) == 1
+    assert open_list[0].geometry == geo
+    assert open_list[0].to_dto()["geometry"]["kind"] == "double_bottom"
+
+    blank = _pattern(pattern_type=PatternType.DOUBLE_BOTTOM, geometry=None)
+    j.persist_lifecycle(
+        blank,
+        [PatternStageEvent(blank.id, PatternStage.DETECTED, blank.detect_candle_time, 101.0, now)],
+    )
+    with sf() as s:
+        row = s.get(PatternInstanceRow, first.id)
+        assert row is not None
+        assert row.geometry_json == geo
+
+    later = _pattern(
+        pattern_type=PatternType.DOUBLE_BOTTOM,
+        geometry={"kind": "double_bottom", "version": 2},
+    )
+    j.persist_lifecycle(
+        later,
+        [
+            PatternStageEvent(
+                later.id, PatternStage.CONFIRMED, later.detect_candle_time, 101.0, now
+            )
+        ],
+    )
+    with sf() as s:
+        row = s.get(PatternInstanceRow, first.id)
+        assert row is not None
+        assert row.geometry_json == geo
+

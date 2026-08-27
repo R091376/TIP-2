@@ -477,6 +477,11 @@ export function usePatternOverlay({
       rails = railsFromAlert(focusAlert)
       if (rails) railsRef.current = rails
     }
+    let geometry = null
+    if (iid) {
+      const cached = instanceCacheRef.current.get(iid)
+      geometry = cached?.geometry || null
+    }
 
     wipeOverlay()
     overlayHandleRef.current = applyInstanceOverlay(seriesRef.current, chartRef.current, {
@@ -489,6 +494,7 @@ export function usePatternOverlay({
       seriesChartTimes: seriesChartTimesFromCandles(candles),
       focusView,
       rails,
+      geometry,
     })
 
     if (overlayHandleRef.current) {

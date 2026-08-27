@@ -1,82 +1,139 @@
 {
-  "atr_period": 14,
   "VOLUME_SMA_PERIOD": 20,
-  "indicators": {
-    "atr": { "period": 14 },
-    "donchian": { "period": 20 },
-    "volume_sma": { "period": 20 }
+  "atr_period": 14,
+  "breakdown": {
+    "confirmation_mode": "both",
+    "detector_version": "breakdown-v1",
+    "lookback_candles": 20,
+    "retest_atr_mult": 0.25,
+    "strengthen_atr_mult": 1.0,
+    "success_atr_mult_without_retest": 2.0,
+    "success_rr": 2.0,
+    "volume_avg_period": 20,
+    "volume_multiplier": 1.5
   },
   "breakout": {
-    "lookback_candles": 20,
-    "volume_avg_period": 20,
     "confirmation_mode": "both",
-    "volume_multiplier": 1.5,
+    "detector_version": "breakout-v1",
+    "lookback_candles": 20,
     "retest_atr_mult": 0.25,
     "strengthen_atr_mult": 1.0,
-    "success_rr": 2.0,
     "success_atr_mult_without_retest": 2.0,
-    "detector_version": "breakout-v1"
-  },
-  "breakdown": {
-    "lookback_candles": 20,
+    "success_rr": 2.0,
     "volume_avg_period": 20,
-    "confirmation_mode": "both",
-    "volume_multiplier": 1.5,
-    "retest_atr_mult": 0.25,
-    "strengthen_atr_mult": 1.0,
-    "success_rr": 2.0,
-    "success_atr_mult_without_retest": 2.0,
-    "detector_version": "breakdown-v1"
-  },
-  "pinbar": {
-    "shadow_body_mult": 2.0,
-    "max_body_range_ratio": 0.35,
-    "max_opposite_wick_range_ratio": 0.25,
-    "min_range_atr_mult": 0.5,
-    "success_atr_mult": 1.5,
-    "require_trend_context": true,
-    "trend_lookback": 10,
-    "max_candles_after_detect": 20,
-    "detector_version": "pinbar-v1"
-  },
-  "engulfing": {
-    "min_range_atr_mult": 0.5,
-    "success_atr_mult": 1.5,
-    "max_candles_after_detect": 20,
-    "detector_version": "engulfing-v1"
-  },
-  "inside_bar": {
-    "min_mother_range_atr_mult": 0.5,
-    "success_atr_mult": 1.5,
-    "max_candles_after_detect": 20,
-    "max_bars_after_inside": 5,
-    "detector_version": "inside-bar-v1"
-  },
-  "structure": {
-    "fractal_width": 2,
-    "success_atr_mult": 1.5,
-    "max_candles_after_detect": 30,
-    "detector_version": "structure-v1"
+    "volume_multiplier": 1.5
   },
   "consolidation": {
-    "window_candles": 10,
-    "range_atr_mult": 1.5,
+    "detector_version": "consolidation-v1",
     "max_duration_candles": 30,
+    "range_atr_mult": 1.5,
     "tighten_ratio": 0.85,
-    "detector_version": "consolidation-v1"
+    "window_candles": 10
+  },
+  "double": {
+    "confirmation_mode": "close",
+    "detector_version": "double-v1",
+    "enable_bottom": true,
+    "enable_top": true,
+    "enabled": true,
+    "fractal_width": 2,
+    "log_rejects": false,
+    "lookback_candles": 80,
+    "max_candles_after_detect": 40,
+    "max_height_atr": 8.0,
+    "max_pivot_separation": 50,
+    "max_second_deeper_atr": 0.25,
+    "measured_move_frac": 1.0,
+    "min_height_atr": 1.0,
+    "min_pivot_separation": 5,
+    "retest_atr_mult": 0.25,
+    "stop_buffer_atr": 0.15,
+    "strengthen_atr_mult": 1.0,
+    "success_atr_mult": 1.5,
+    "target_mode": "measured",
+    "trough_tolerance_atr": 0.35,
+    "volume_avg_period": 20,
+    "volume_multiplier": 1.5
+  },
+  "engulfing": {
+    "detector_version": "engulfing-v1",
+    "max_candles_after_detect": 20,
+    "min_range_atr_mult": 0.5,
+    "success_atr_mult": 1.5
+  },
+  "head_shoulders": {
+    "allow_sloping_neckline": true,
+    "confirmation_mode": "close",
+    "detector_version": "hs-v1",
+    "enable_inverse": true,
+    "enable_regular": true,
+    "enabled": true,
+    "fractal_width": 2,
+    "log_rejects": false,
+    "lookback_candles": 100,
+    "max_candles_after_detect": 50,
+    "max_neckline_slope_atr_per_bar": 0.2,
+    "max_span_bars": 70,
+    "max_time_asymmetry": 2.5,
+    "measured_move_frac": 1.0,
+    "min_head_prominence_atr": 0.5,
+    "min_span_bars": 8,
+    "retest_atr_mult": 0.25,
+    "shoulder_tolerance_atr": 0.6,
+    "stop_buffer_atr": 0.15,
+    "strengthen_atr_mult": 1.0,
+    "success_atr_mult": 1.5,
+    "target_mode": "measured",
+    "volume_avg_period": 20,
+    "volume_multiplier": 1.5
+  },
+  "indicators": {
+    "atr": {
+      "period": 14
+    },
+    "donchian": {
+      "period": 20
+    },
+    "volume_sma": {
+      "period": 20
+    }
+  },
+  "inside_bar": {
+    "detector_version": "inside-bar-v1",
+    "max_bars_after_inside": 5,
+    "max_candles_after_detect": 20,
+    "min_mother_range_atr_mult": 0.5,
+    "success_atr_mult": 1.5
+  },
+  "pattern_sr_backfill_on_startup": false,
+  "pattern_sr_enabled": true,
+  "pattern_sr_method": "woodie_open_v1",
+  "pattern_sr_near_atr": 0.5,
+  "pattern_sr_research_enabled": true,
+  "pattern_sr_stamp_enabled": true,
+  "pinbar": {
+    "detector_version": "pinbar-v1",
+    "max_body_range_ratio": 0.35,
+    "max_candles_after_detect": 20,
+    "max_opposite_wick_range_ratio": 0.25,
+    "min_range_atr_mult": 0.5,
+    "require_trend_context": true,
+    "shadow_body_mult": 2.0,
+    "success_atr_mult": 1.5,
+    "trend_lookback": 10
+  },
+  "structure": {
+    "detector_version": "structure-v1",
+    "fractal_width": 2,
+    "max_candles_after_detect": 30,
+    "success_atr_mult": 1.5
   },
   "volume_breakout": {
-    "volume_avg_period": 20,
-    "volume_multiplier": 2.0,
+    "detector_version": "volume-breakout-v1",
+    "max_candles_after_detect": 20,
     "min_range_atr_mult": 0.5,
     "success_atr_mult": 1.5,
-    "max_candles_after_detect": 20,
-    "detector_version": "volume-breakout-v1"
-  },
-  "pattern_sr_enabled": true,
-  "pattern_sr_stamp_enabled": true,
-  "pattern_sr_research_enabled": true,
-  "pattern_sr_backfill_on_startup": true,
-  "pattern_sr_near_atr": 0.5,
-  "pattern_sr_method": "woodie_open_v1"
+    "volume_avg_period": 20,
+    "volume_multiplier": 2.0
+  }
 }
