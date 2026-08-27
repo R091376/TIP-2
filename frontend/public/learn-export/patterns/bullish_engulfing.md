@@ -168,6 +168,12 @@ After detect, price closes back under the stop region → Failed.
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Engulfing Pattern](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-pattern-dictionary#engulfing_pattern) — Body engulfs prior body (not necessarily the full high–low range)
+- [StockCharts ChartSchool — Bullish reversal candlesticks](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-bullish-reversal-patterns)
+- [Investopedia — Bullish Engulfing](https://www.investopedia.com/terms/b/bullishengulfingpattern.asp)
+
 **Docs**
 
 - `docs/patterns/engulfing.md`

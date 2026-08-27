@@ -1,6 +1,7 @@
 import { LONG_TRADE_RULES_VS_MEASUREMENTS } from '../../exampleBlocks'
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
+import { INSIDE_BAR_SOURCES } from '../learnSources'
 
 export const insideBar: LearnTopic = {
   kind: 'pattern',
@@ -179,6 +180,7 @@ export const insideBar: LearnTopic = {
   patternTypeId: 'inside_bar',
   sourceDocs: ['docs/patterns/inside-bar.md'],
   sourceCode: ['backend/app/patterns/inside_bar.py'],
+  externalSources: INSIDE_BAR_SOURCES,
   lastReviewed: '2026-08-04',
   detectorVersionHint: 'inside-bar-v1',
 }

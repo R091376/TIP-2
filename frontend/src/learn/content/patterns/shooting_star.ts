@@ -1,6 +1,7 @@
 import { SHORT_TRADE_RULES_VS_MEASUREMENTS } from '../../exampleBlocks'
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
+import { SHOOTING_STAR_SOURCES } from '../learnSources'
 
 export const shootingStar: LearnTopic = {
   kind: 'pattern',
@@ -174,6 +175,7 @@ export const shootingStar: LearnTopic = {
   patternTypeId: 'shooting_star',
   sourceDocs: ['docs/patterns/hammer-shooting-star.md'],
   sourceCode: ['backend/app/patterns/pinbar.py'],
+  externalSources: SHOOTING_STAR_SOURCES,
   lastReviewed: '2026-08-04',
   detectorVersionHint: 'pinbar-v1',
 }

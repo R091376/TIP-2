@@ -1,6 +1,7 @@
 import { LONG_TRADE_RULES_VS_MEASUREMENTS } from '../../exampleBlocks'
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
+import { HIGHER_HIGH_SOURCES } from '../learnSources'
 
 export const higherHigh: LearnTopic = {
   kind: 'pattern',
@@ -170,6 +171,7 @@ export const higherHigh: LearnTopic = {
   patternTypeId: 'higher_high',
   sourceDocs: ['docs/patterns/hh-ll.md'],
   sourceCode: ['backend/app/patterns/structure.py'],
+  externalSources: HIGHER_HIGH_SOURCES,
   lastReviewed: '2026-08-04',
   detectorVersionHint: 'structure-v1',
 }

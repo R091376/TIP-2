@@ -151,6 +151,8 @@ export type LearnTopic = {
   patternTypeId?: string
   sourceDocs: string[]
   sourceCode: string[]
+  /** Public textbook / ChartSchool / empirical pages (optional). */
+  externalSources?: { label: string; url: string; note?: string }[]
   lastReviewed: string
   detectorVersionHint?: string
   /** Research / product questions this topic answers. */

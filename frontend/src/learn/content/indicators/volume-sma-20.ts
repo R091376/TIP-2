@@ -1,5 +1,6 @@
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
+import { VOLUME_SMA_SOURCES } from '../learnSources'
 
 export const volumeSma20: LearnTopic = {
   kind: 'indicator',
@@ -130,5 +131,6 @@ export const volumeSma20: LearnTopic = {
     'backend/app/indicators/volume_sma.py',
     'frontend/src/chart/helpers.js',
   ],
+  externalSources: VOLUME_SMA_SOURCES,
   lastReviewed: '2026-08-04',
 }

@@ -1290,6 +1290,8 @@ None blocking. Rev 3 also locks recover timing (no `ensure_today` until 1m is se
 
 ## References
 
+### Internal
+
 - Journal module: `docs/modules/journal.md`
 - Research filters: `docs/design-composable-stack-filters.md`
 - Product / session grid: `docs/PRODUCT-DECISIONS.md`
@@ -1303,6 +1305,18 @@ None blocking. Rev 3 also locks recover timing (no `ensure_today` until 1m is se
 - Structure pivots (HH/LL only): `backend/app/patterns/structure.py`
 - Research snapshot: `backend/app/patterns/research_cache.py` (`ensure(force=…)`, `refresh_if_stale`)
 - Epoch helper: `app.patterns.research_filters.as_epoch_seconds`
+
+### Textbook and online sources
+
+`woodie_open_v1` is the **open-weighted** Ken Wood / Woodie CCI-club formula, not the close-weighted lookalike many primers publish as “Woodie.”
+
+| Rule | Source | TIP v1 |
+|---|---|---|
+| \(PP = (H + L + 2 \times Open) / 4\) | [MyPivots Woodie](https://www.mypivots.com/dictionary/definition/228/woodie-pivot-points); [Sierra Chart Formula Type 3](https://www.sierrachart.com/index.php?page=doc/PivotPoints.html); [eSignal Woodie_Pivots.efs](https://efs.kb.esignal.com/hc/en-us/articles/6362892232987-Woodie-Pivots-efs) | `today_open` is the first 09:15 IST print; H/L are **previous** session |
+| R1/S1 from \(2 \times PP - L/H\); R2/S2 = PP ± range | Same pages | Identical |
+| Named after Ken Wood | [thinkorswim WoodiesPivots](https://toslc.thinkorswim.com/center/reference/Tech-Indicators/studies-library/V-Z/WoodiesPivots) | Method string `woodie_open_v1` |
+| What a daily pivot ladder is | [ChartSchool Pivot Points](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/pivot-points) | ChartSchool documents **Standard** \((H+L+C)/3\), not this formula |
+| Close-weighted “Woodie” \(PP = (H+L+2C)/4\) | BabyPips and many TradingView scripts | **Not used** — that ignores today’s gap, which is the product question |
 
 ---
 

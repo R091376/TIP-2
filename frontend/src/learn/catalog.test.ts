@@ -81,6 +81,40 @@ describe('tipParameters cover tipDefaults buckets', () => {
   })
 })
 
+describe('external citations', () => {
+  it('every Learn topic links at least one live https source', () => {
+    for (const t of ALL_TOPICS) {
+      expect(t.externalSources?.length, `${t.slug} externalSources`).toBeGreaterThan(0)
+      for (const s of t.externalSources!) {
+        expect(s.url.startsWith('https://'), `${t.slug} ${s.url}`).toBe(true)
+        expect(s.label.length, `${t.slug} empty label`).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('double / H&S topics link to live ChartSchool and Bulkowski pages', () => {
+    for (const slug of ['double_bottom', 'double_top', 'head_shoulders', 'inverse_head_shoulders']) {
+      const t = getTopic('pattern', slug)
+      expect(t, slug).toBeTruthy()
+      const urls = t!.externalSources!.map((s) => s.url)
+      expect(urls.some((u) => u.includes('chartschool.stockcharts.com')), `${slug} ChartSchool`).toBe(
+        true,
+      )
+      expect(urls.some((u) => u.includes('thepatternsite.com')), `${slug} Bulkowski`).toBe(true)
+    }
+  })
+
+  it('indicators and Woodie cite ChartSchool or the open-weighted Woodie formula pages', () => {
+    const atr = getTopic('indicator', 'atr-14')
+    expect(atr!.externalSources!.some((s) => s.url.includes('average-true-range-atr'))).toBe(true)
+    const don = getTopic('indicator', 'donchian-20')
+    expect(don!.externalSources!.some((s) => s.url.includes('price-channels'))).toBe(true)
+    const woodie = getTopic('concept', 'woodie-sr')
+    expect(woodie!.externalSources!.some((s) => s.url.includes('mypivots.com'))).toBe(true)
+    expect(woodie!.externalSources!.some((s) => s.url.includes('sierrachart.com'))).toBe(true)
+  })
+})
+
 describe('tipDefaults shape', () => {
   it('has all ten detector buckets', () => {
     for (const k of [

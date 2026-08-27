@@ -6,6 +6,7 @@
 | **Period** | 14 (default; config `tip.pattern.atr-period`) |
 | **Code** | `com.tip.indicators.AtrIndicator` |
 | **Status** | Implemented (pure Java) |
+| **Sources** | J. Welles Wilder, *New Concepts in Technical Trading Systems* (1978); [StockCharts ChartSchool — ATR](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/average-true-range-atr) |
 
 ## Purpose
 
@@ -62,3 +63,17 @@ Same price units as OHLC (e.g. INR). Not a percentage.
 
 - Breakout: `docs/patterns/breakout.md`
 - Design: PI-8 (R = `atr_at_detect`)
+
+## Trusted-source geometry
+
+| Rule | Source | TIP v1 |
+|---|---|---|
+| True range includes gaps | Wilder; ChartSchool | \(\max(H-L,\|H-C_{prev}\|,\|L-C_{prev}\|)\) |
+| Default period 14 | ChartSchool (Wilder’s later convention; original book often uses 7) | `atr_period = 14` |
+| Smooth with prior ATR, not a rolling SMA | Wilder: \((prior \times 13 + TR) / 14\) | Same Wilder smoothing after the first window |
+| Directionless (volatility only) | Wilder | ATR is the R unit, not a directional signal |
+
+## Online sources
+
+- [StockCharts ChartSchool — Average True Range (ATR)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/average-true-range-atr)
+- [Investopedia — Average True Range (ATR)](https://www.investopedia.com/terms/a/atr.asp)

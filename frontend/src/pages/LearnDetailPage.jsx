@@ -167,6 +167,19 @@ export default function LearnDetailPage() {
             Detector version: <code>{topic.detectorVersionHint}</code>
           </div>
         ) : null}
+        {topic.externalSources?.length ? (
+          <div>
+            Textbook / online:{' '}
+            {topic.externalSources.map((s, i) => (
+              <span key={s.url}>
+                {i > 0 ? ' · ' : ''}
+                <a href={s.url} target="_blank" rel="noopener noreferrer">
+                  {s.label}
+                </a>
+              </span>
+            ))}
+          </div>
+        ) : null}
         <div>
           Sources:{' '}
           {[...topic.sourceDocs, ...topic.sourceCode].map((s, i) => (

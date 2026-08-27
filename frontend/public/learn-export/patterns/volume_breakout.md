@@ -176,6 +176,12 @@ Two different “no win” stories: (1) equity bar detects then fails through st
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Relative Volume (RVOL)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/relative-volume-rvol) — Unusual volume vs a lookback average
+- [StockCharts ChartSchool — On Balance Volume](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/on-balance-volume-obv) — Volume confirms price commitment (Elder / Granville lineage)
+- [Investopedia — Volume](https://www.investopedia.com/terms/v/volume.asp)
+
 **Docs**
 
 - `docs/patterns/volume-breakout.md`

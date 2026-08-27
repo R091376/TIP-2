@@ -163,6 +163,12 @@ Detect short, later close above the higher peak fails.
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Double Top Reversal](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/double-top-reversal) — M geometry; not complete until the intervening trough breaks; measured-move target
+- [Bulkowski — Adam and Eve double tops](https://thepatternsite.com/AdamEvePatterns.html) — Encyclopedia of Chart Patterns identification
+- [Investopedia — Double Top](https://www.investopedia.com/terms/d/doubletop.asp)
+
 **Docs**
 
 - `docs/patterns/double-top.md`

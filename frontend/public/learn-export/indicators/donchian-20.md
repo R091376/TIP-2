@@ -125,6 +125,12 @@ A high wick above the ceiling is not enough — breakout needs close above the p
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Price Channels (Donchian)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/price-channels) — Richard Donchian; N-period high / low channel (default 20)
+- [StockCharts ChartSchool — Donchian Trading Guidelines](https://chartschool.stockcharts.com/table-of-contents/overview/donchian-trading-guidelines)
+- [Investopedia — Donchian Channels](https://www.investopedia.com/terms/d/donchianchannels.asp)
+
 **Docs**
 
 - `docs/indicators/donchian-20.md`

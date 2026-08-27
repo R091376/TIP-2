@@ -1,6 +1,7 @@
 import { SHORT_TRADE_RULES_VS_MEASUREMENTS } from '../../exampleBlocks'
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
+import { LOWER_LOW_SOURCES } from '../learnSources'
 
 export const lowerLow: LearnTopic = {
   kind: 'pattern',
@@ -165,6 +166,7 @@ export const lowerLow: LearnTopic = {
   patternTypeId: 'lower_low',
   sourceDocs: ['docs/patterns/hh-ll.md'],
   sourceCode: ['backend/app/patterns/structure.py'],
+  externalSources: LOWER_LOW_SOURCES,
   lastReviewed: '2026-08-04',
   detectorVersionHint: 'structure-v1',
 }

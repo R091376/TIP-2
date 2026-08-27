@@ -186,9 +186,21 @@ export function topicToMarkdown(topic: LearnTopic, opts?: { baseUrl?: string }):
     )
   }
 
+  parts.push('## Sources', '')
+  if (topic.externalSources?.length) {
+    parts.push(
+      '**Textbook / online**',
+      '',
+      bullets(
+        topic.externalSources.map((s) => {
+          const note = s.note ? ` — ${s.note}` : ''
+          return `[${s.label}](${s.url})${note}`
+        }),
+      ),
+      '',
+    )
+  }
   parts.push(
-    '## Sources',
-    '',
     '**Docs**',
     '',
     bullets(topic.sourceDocs.map((d) => `\`${d}\``)),

@@ -169,6 +169,12 @@ Wick below the neckline with close still above it does not detect. After detect,
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Head and Shoulders Bottom](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/head-and-shoulders-bottom) — Inverted H&S; neckline through reaction highs; measured-move target
+- [Bulkowski — Head-and-Shoulders Bottoms](https://thepatternsite.com/hsb.html) — Encyclopedia of Chart Patterns identification
+- [Investopedia — Inverse Head and Shoulders](https://www.investopedia.com/terms/i/inverseheadandshoulders.asp)
+
 **Docs**
 
 - `docs/patterns/inverse-head-shoulders.md`

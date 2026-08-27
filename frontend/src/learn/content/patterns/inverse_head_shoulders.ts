@@ -1,4 +1,5 @@
 import { classicalPatternTopic } from './classicalShared'
+import { INVERSE_HEAD_SHOULDERS_SOURCES } from './classicalSources'
 
 export const inverseHeadShoulders = classicalPatternTopic({
   slug: 'inverse_head_shoulders',
@@ -9,6 +10,7 @@ export const inverseHeadShoulders = classicalPatternTopic({
   detectorVersionHint: 'hs-v1',
   sourceDocs: ['docs/patterns/inverse-head-shoulders.md'],
   sourceCode: ['backend/app/patterns/head_shoulders.py', 'backend/app/patterns/geometry.py'],
+  externalSources: INVERSE_HEAD_SHOULDERS_SOURCES,
   relatedSlug: { slug: 'head_shoulders', label: 'Head and shoulders' },
   formulaPlain:
     'Five confirmed swings with the head as the lowest low. Detected on the first close above the neckline.',

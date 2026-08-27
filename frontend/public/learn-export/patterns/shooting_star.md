@@ -172,6 +172,12 @@ After detect, price rips back through the stop above the star → Failed.
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Shooting Star](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-pattern-dictionary#shooting_star) — Long upper shadow; close near the open after a failed rally
+- [StockCharts ChartSchool — Bearish reversal candlesticks](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-bearish-reversal-patterns)
+- [Investopedia — Shooting Star](https://www.investopedia.com/terms/s/shootingstar.asp)
+
 **Docs**
 
 - `docs/patterns/hammer-shooting-star.md`

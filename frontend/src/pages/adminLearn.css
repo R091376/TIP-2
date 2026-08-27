@@ -285,6 +285,16 @@
   font-size: 0.78rem;
 }
 
+.learn-footnote a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.learn-footnote a:hover {
+  color: var(--text, #e8eaed);
+}
+
 .learn-example__note {
   font-size: 0.875rem;
   color: #fbbf24;

@@ -6,6 +6,7 @@
 | **Period** | 20 (default; config `tip.pattern.breakout.volume-avg-period`) |
 | **Code** | `com.tip.indicators.VolumeSmaIndicator` |
 | **Status** | Implemented (pure Java) |
+| **Sources** | John Murphy (volume confirms price); [StockCharts ChartSchool — SMA](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/moving-averages-simple-and-exponential); [Relative Volume](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/relative-volume-rvol) |
 
 ## Purpose
 
@@ -52,3 +53,17 @@ Requires at least `n + 1` closed bars.
 ## Related
 
 - Breakout confirmation: `docs/patterns/breakout.md`
+
+## Trusted-source geometry
+
+| Rule | Source | TIP v1 |
+|---|---|---|
+| Simple average of the last N values | ChartSchool SMA | SMA of volume, period 20 |
+| Compare current volume to a lookback average | ChartSchool RVOL | Detect-bar volume ≥ `volume_multiplier × prior SMA` when confirmation includes volume |
+| Volume confirms price | Murphy | Optional; indices with unusable volume fall back to close-only |
+
+## Online sources
+
+- [StockCharts ChartSchool — Moving Averages (SMA)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/moving-averages-simple-and-exponential)
+- [StockCharts ChartSchool — Relative Volume (RVOL)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/relative-volume-rvol)
+- [Investopedia — Volume](https://www.investopedia.com/terms/v/volume.asp)

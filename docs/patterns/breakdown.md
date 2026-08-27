@@ -7,6 +7,7 @@
 | **Code** | `com.tip.patterns.breakdown` (`BreakdownDetector`, `BreakdownLifecycle`, `BreakdownBarEvaluator`) |
 | **Rules base** | `Pattern-Definitions-v1.0-Final.md` §2 (exact mirror of Breakout) + design divergences (PI-7 etc.) applied symmetrically |
 | **Status** | **Implemented end-to-end** (pure domain + Spring evaluator + journal + REST/WS when Postgres) |
+| **Sources** | Donchian N-bar low (mirror of breakout); [StockCharts ChartSchool — Price Channels](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/price-channels); [Investopedia — Breakdown](https://www.investopedia.com/terms/b/breakdown.asp) |
 
 ## Purpose
 
@@ -136,3 +137,10 @@ Shared: `tip.pattern.atr-period`, expiry, WS broadcast stages.
 - `docs/indicators/atr-14.md`, `docs/indicators/donchian-20.md`
 - `docs/modules/journal.md`
 - `Pattern-Intelligence-Design-v1.0.md` PR7
+
+Trusted-source mapping is shared with `docs/patterns/breakout.md`.
+
+## Online sources
+
+- [StockCharts ChartSchool — Price Channels (Donchian)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/price-channels)
+- [Investopedia — Breakdown](https://www.investopedia.com/terms/b/breakdown.asp)

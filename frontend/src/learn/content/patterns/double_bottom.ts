@@ -1,4 +1,5 @@
 import { classicalPatternTopic } from './classicalShared'
+import { DOUBLE_BOTTOM_SOURCES } from './classicalSources'
 
 export const doubleBottom = classicalPatternTopic({
   slug: 'double_bottom',
@@ -9,6 +10,7 @@ export const doubleBottom = classicalPatternTopic({
   detectorVersionHint: 'double-v1',
   sourceDocs: ['docs/patterns/double-bottom.md'],
   sourceCode: ['backend/app/patterns/double.py', 'backend/app/patterns/geometry.py'],
+  externalSources: DOUBLE_BOTTOM_SOURCES,
   relatedSlug: { slug: 'double_top', label: 'Double top' },
   formulaPlain:
     'Two confirmed swing lows within an ATR band, with a peak between them. Detected on the first close above that peak.',

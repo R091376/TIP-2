@@ -20,6 +20,24 @@ describe('toMarkdown', () => {
     }
   })
 
+  it('classical topics export ChartSchool URLs under Sources', () => {
+    const db = ALL_TOPICS.find((t) => t.slug === 'double_bottom')
+    expect(db).toBeTruthy()
+    const md = topicToMarkdown(db!)
+    expect(md).toContain('**Textbook / online**')
+    expect(md).toContain('chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/double-bottom-reversal')
+    expect(md).toContain('thepatternsite.com/dbsetup.html')
+  })
+
+  it('ATR and Woodie exports include live formula pages', () => {
+    const atr = ALL_TOPICS.find((t) => t.slug === 'atr-14')
+    expect(topicToMarkdown(atr!)).toContain('average-true-range-atr')
+    const woodie = ALL_TOPICS.find((t) => t.slug === 'woodie-sr')
+    const md = topicToMarkdown(woodie!)
+    expect(md).toContain('mypivots.com/dictionary/definition/228/woodie-pivot-points')
+    expect(md).toContain('sierrachart.com')
+  })
+
   it('builds index and ALL bundles', () => {
     const index = buildLearnExportIndex(ALL_TOPICS)
     expect(index).toContain('# TIP Learn — Markdown export')

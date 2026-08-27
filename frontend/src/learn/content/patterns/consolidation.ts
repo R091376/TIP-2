@@ -1,6 +1,7 @@
 import { REGIME_RULES_VS_MEASUREMENTS } from '../../exampleBlocks'
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
+import { CONSOLIDATION_SOURCES } from '../learnSources'
 
 export const consolidation: LearnTopic = {
   kind: 'pattern',
@@ -168,6 +169,7 @@ export const consolidation: LearnTopic = {
   patternTypeId: 'consolidation',
   sourceDocs: ['docs/patterns/consolidation.md'],
   sourceCode: ['backend/app/patterns/consolidation.py'],
+  externalSources: CONSOLIDATION_SOURCES,
   lastReviewed: '2026-08-04',
   detectorVersionHint: 'consolidation-v1',
 }

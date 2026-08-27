@@ -1,5 +1,6 @@
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
+import { DONCHIAN_SOURCES } from '../learnSources'
 
 export const donchian20: LearnTopic = {
   kind: 'indicator',
@@ -133,5 +134,6 @@ export const donchian20: LearnTopic = {
   ],
   sourceDocs: ['docs/indicators/donchian-20.md'],
   sourceCode: ['backend/app/indicators/donchian.py'],
+  externalSources: DONCHIAN_SOURCES,
   lastReviewed: '2026-08-04',
 }

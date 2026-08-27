@@ -5,7 +5,7 @@
 | **Types** | `hammer` (long), `shooting_star` (short) |
 | **Code (planned)** | `com.tip.patterns.pinbar` |
 | **Status** | **Implemented** (classic TA sources + TIP short lifecycle) |
-| **Sources** | Steve Nison, *Japanese Candlestick Charting Techniques* (hammer / hanging man / shooting star geometry); Thomas Bulkowski, *Encyclopedia of Candlestick Charts* (shadow ratios, confirmation); John Murphy, *Technical Analysis of the Financial Markets* (candlestick context & follow-through) |
+| **Sources** | Steve Nison, *Japanese Candlestick Charting Techniques* (hammer / hanging man / shooting star geometry); Thomas Bulkowski, *Encyclopedia of Candlestick Charts* (shadow ratios, confirmation); John Murphy, *Technical Analysis of the Financial Markets*; [StockCharts ChartSchool — Hammer](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-pattern-dictionary#hammer); [Shooting Star](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-pattern-dictionary#shooting_star) |
 
 ## Purpose
 
@@ -161,4 +161,13 @@ Reuse existing session / max-duration expiry (`PatternLifecycleSupport` / sessio
 3. PatternProperties + yml  
 4. PatternEvaluator wire  
 5. Unit tests (geometry, confirm, fail, success)  
-6. Manual: equity during session with postgres patterns enabled  
+6. Manual: equity during session with postgres patterns enabled
+
+## Online sources
+
+- [StockCharts ChartSchool — Hammer](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-pattern-dictionary#hammer)
+- [StockCharts ChartSchool — Shooting Star](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-pattern-dictionary#shooting_star)
+- [StockCharts ChartSchool — Bullish reversal candlesticks](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-bullish-reversal-patterns)
+- [StockCharts ChartSchool — Bearish reversal candlesticks](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-bearish-reversal-patterns)
+- [Investopedia — Hammer](https://www.investopedia.com/terms/h/hammer.asp)
+- [Investopedia — Shooting Star](https://www.investopedia.com/terms/s/shootingstar.asp)  

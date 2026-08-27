@@ -169,6 +169,12 @@ After detect, price closes through the prior swing-low stop region → Failed.
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Alligator (Bill Williams)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/alligator) — Williams fractals: a high/low that is the extreme of the surrounding N bars
+- [StockCharts ChartSchool — Swing Charting](https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/swing-charting)
+- [Investopedia — Fractal (Williams)](https://www.investopedia.com/terms/f/fractal.asp) — Five-bar fractal (width 2) is the default Williams definition; TIP default width is also 2
+
 **Docs**
 
 - `docs/patterns/hh-ll.md`

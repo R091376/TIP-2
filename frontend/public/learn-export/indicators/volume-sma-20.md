@@ -122,6 +122,12 @@ Same baseline, weaker signal volume — fails the 1.5× test.
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Moving Averages (SMA)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/moving-averages-simple-and-exponential) — Simple average of the last N values; TIP applies this to volume
+- [StockCharts ChartSchool — Relative Volume (RVOL)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/relative-volume-rvol) — Current volume vs a lookback average — same idea as breakout volume confirmation
+- [Investopedia — Volume](https://www.investopedia.com/terms/v/volume.asp)
+
 **Docs**
 
 - `docs/indicators/volume-sma-20.md`

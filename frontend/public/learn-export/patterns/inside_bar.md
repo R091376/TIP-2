@@ -172,6 +172,11 @@ After a long detect, price closes back through the mother low → Failed.
 
 ## Sources
 
+**Textbook / online**
+
+- [Investopedia — Inside Day](https://www.investopedia.com/terms/i/inside-day.asp) — High and low contained in the prior bar’s range (mother–inside)
+- [StockCharts ChartSchool — Narrow Range Day (NR7)](https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/narrow-range-day-nr7) — Related compression-then-expansion idea; TIP fires on a close through the mother, not NR7 rank
+
 **Docs**
 
 - `docs/patterns/inside-bar.md`

@@ -1,5 +1,6 @@
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
+import { WOODIE_SOURCES } from '../learnSources'
 
 export const woodieSr: LearnTopic = {
   kind: 'concept',
@@ -257,6 +258,7 @@ export const woodieSr: LearnTopic = {
     'backend/app/sr/service.py',
     'backend/app/patterns/evaluator.py',
   ],
+  externalSources: WOODIE_SOURCES,
   lastReviewed: '2026-08-18',
   detectorVersionHint: 'woodie_open_v1',
 }

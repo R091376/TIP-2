@@ -165,6 +165,12 @@ Price closes back above the stop region → Failed short.
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Engulfing Pattern](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-pattern-dictionary#engulfing_pattern) — Body engulfs prior body (not necessarily the full high–low range)
+- [StockCharts ChartSchool — Bearish reversal candlesticks](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-bearish-reversal-patterns)
+- [Investopedia — Bearish Engulfing](https://www.investopedia.com/terms/b/bearishengulfingp.asp)
+
 **Docs**
 
 - `docs/patterns/engulfing.md`

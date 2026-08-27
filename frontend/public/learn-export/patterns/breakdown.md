@@ -190,6 +190,11 @@ Price dips a little, then a closed bar finishes back above the floor → Failed 
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Price Channels (Donchian)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/price-channels) — Close below the N-period low is the channel breakdown
+- [Investopedia — Breakdown](https://www.investopedia.com/terms/b/breakdown.asp)
+
 **Docs**
 
 - `docs/patterns/breakdown.md`

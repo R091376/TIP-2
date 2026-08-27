@@ -1,6 +1,7 @@
 import { SHORT_TRADE_RULES_VS_MEASUREMENTS } from '../../exampleBlocks'
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
+import { BEARISH_ENGULFING_SOURCES } from '../learnSources'
 
 export const bearishEngulfing: LearnTopic = {
   kind: 'pattern',
@@ -160,6 +161,7 @@ export const bearishEngulfing: LearnTopic = {
   patternTypeId: 'bearish_engulfing',
   sourceDocs: ['docs/patterns/engulfing.md'],
   sourceCode: ['backend/app/patterns/engulfing.py'],
+  externalSources: BEARISH_ENGULFING_SOURCES,
   lastReviewed: '2026-08-04',
   detectorVersionHint: 'engulfing-v1',
 }

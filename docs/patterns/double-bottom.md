@@ -6,6 +6,7 @@
 | **Direction** | `long` |
 | **Code** | `app.patterns.double` (`detect_double`, `evaluate_double_bar`) |
 | **Status** | Implemented (closed-candle, non-repainting) |
+| **Sources** | Edwards & Magee, *Technical Analysis of Stock Trends* (W, measuring formula); John Murphy, *Technical Analysis of the Financial Markets*; Thomas Bulkowski, *Encyclopedia of Chart Patterns* (close above confirmation line); [StockCharts ChartSchool — Double Bottom Reversal](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/double-bottom-reversal) |
 
 ## Purpose
 
@@ -48,3 +49,27 @@ Closed-candle only.
 `Settings.double` / `TIP_PATTERN_DOUBLE_ENABLED`. 5m/1m off; 15m+ on. Version `double-v1`.
 
 See `docs/design-classical-patterns.md`.
+
+## Trusted-source geometry
+
+TIP is a closed-candle detector, not a discretionary replica of daily/weekly textbook charts. Mapping:
+
+| Rule | Source | TIP v1 |
+|---|---|---|
+| Two troughs + intervening peak | Edwards & Magee; Murphy; StockCharts | Confirmed Williams fractals (width 2) |
+| Pattern is not complete until the peak breaks | [StockCharts](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/double-bottom-reversal) | First **closed** bar `> peak` |
+| Confirm on a **close** above the confirmation line | [Bulkowski setup](https://thepatternsite.com/dbsetup.html) | Same; wick-through does not detect |
+| Troughs roughly equal | StockCharts: within ~3% | ATR band (`trough_tolerance_atr`) |
+| Meaningful bounce between troughs | StockCharts: 10–20% | `min_height_atr` |
+| Measured-move target | Edwards & Magee; StockCharts | Height projected above the peak, plus ATR floor |
+| Volume expansion on the break | StockCharts (especially bottoms) | Optional; recorded as `volume_ok_at_detect` |
+| Prior downtrend required | All reversal textbooks | **Not required** — geometry + close-through only |
+| Throwback to broken resistance | StockCharts; Bulkowski | Retested stage |
+| Invalidation | Close through the troughs | Structural stop; a close back through the peak that stays above the stop does **not** fail (occupancy) |
+
+## Online sources
+
+- [StockCharts ChartSchool — Double Bottom Reversal](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/double-bottom-reversal)
+- [Bulkowski — Double Bottom types](https://thepatternsite.com/DoubleBottomTypes.html)
+- [Bulkowski — Double Bottom setup (close above confirmation)](https://thepatternsite.com/dbsetup.html)
+- [Investopedia — Double Bottom](https://www.investopedia.com/terms/d/doublebottom.asp)

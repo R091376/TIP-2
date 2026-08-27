@@ -6,6 +6,7 @@
 | **Period** | 20 (default; config `tip.pattern.breakout.lookback-candles`) |
 | **Code** | `com.tip.indicators.DonchianIndicator` |
 | **Status** | Implemented (pure Java) |
+| **Sources** | Richard Donchian (price channels / turtle-style N-bar high-low); [StockCharts ChartSchool — Price Channels](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/price-channels) |
 
 ## Purpose
 
@@ -66,3 +67,17 @@ Price (same as OHLC).
 
 - Breakout stages: `docs/patterns/breakout.md`
 - Breakdown stages: `docs/patterns/breakdown.md`
+
+## Trusted-source geometry
+
+| Rule | Source | TIP v1 |
+|---|---|---|
+| Upper = N-period high, lower = N-period low | Donchian; ChartSchool Price Channels (default 20) | Same; default `lookback_candles = 20` |
+| Channel can be used on any TF | ChartSchool | Same |
+| Breakout vs the channel | ChartSchool: thrust above the upper line | Breakout uses **prior** N highs (excludes the signal bar) so `close > max(high)` can fire |
+
+## Online sources
+
+- [StockCharts ChartSchool — Price Channels (Donchian)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/price-channels)
+- [StockCharts ChartSchool — Donchian Trading Guidelines](https://chartschool.stockcharts.com/table-of-contents/overview/donchian-trading-guidelines)
+- [Investopedia — Donchian Channels](https://www.investopedia.com/terms/d/donchianchannels.asp)

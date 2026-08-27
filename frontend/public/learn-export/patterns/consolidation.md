@@ -166,6 +166,12 @@ If the box never expands before max_duration_candles, the instance can end as Fa
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Rectangle](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/rectangle) — Multi-bar congestion / trading range
+- [StockCharts ChartSchool — Bollinger Band Squeeze](https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/bollinger-band-squeeze) — Volatility compression before expansion
+- [StockCharts ChartSchool — Narrow Range Day (NR7)](https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/narrow-range-day-nr7) — Related compression idea; TIP uses ATR-normalized multi-bar range, not NR7
+
 **Docs**
 
 - `docs/patterns/consolidation.md`

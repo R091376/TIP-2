@@ -1,6 +1,7 @@
 import { LONG_TRADE_RULES_VS_MEASUREMENTS } from '../../exampleBlocks'
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
+import { BREAKOUT_SOURCES } from '../learnSources'
 
 export const breakout: LearnTopic = {
   kind: 'pattern',
@@ -267,6 +268,7 @@ export const breakout: LearnTopic = {
   patternTypeId: 'breakout',
   sourceDocs: ['docs/patterns/breakout.md'],
   sourceCode: ['backend/app/patterns/breakout.py'],
+  externalSources: BREAKOUT_SOURCES,
   lastReviewed: '2026-08-04',
   detectorVersionHint: 'breakout-v1',
 }

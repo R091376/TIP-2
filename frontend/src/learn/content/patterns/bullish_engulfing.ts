@@ -1,6 +1,7 @@
 import { LONG_TRADE_RULES_VS_MEASUREMENTS } from '../../exampleBlocks'
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
+import { BULLISH_ENGULFING_SOURCES } from '../learnSources'
 
 export const bullishEngulfing: LearnTopic = {
   kind: 'pattern',
@@ -170,6 +171,7 @@ export const bullishEngulfing: LearnTopic = {
   patternTypeId: 'bullish_engulfing',
   sourceDocs: ['docs/patterns/engulfing.md'],
   sourceCode: ['backend/app/patterns/engulfing.py'],
+  externalSources: BULLISH_ENGULFING_SOURCES,
   lastReviewed: '2026-08-04',
   detectorVersionHint: 'engulfing-v1',
 }

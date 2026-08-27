@@ -5,7 +5,7 @@
 | **Type** | `volume_breakout` |
 | **Code** | `com.tip.patterns.volumebreakout` |
 | **Status** | Implemented |
-| **Sources** | Alexander Elder / classic volume analysis (unusual volume with price commitment); John Murphy (volume confirms price); TIP Pattern-Definitions (2× avg vol + 0.5×ATR move) |
+| **Sources** | Alexander Elder / classic volume analysis (unusual volume with price commitment); John Murphy (volume confirms price); [StockCharts ChartSchool — Relative Volume](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/relative-volume-rvol); TIP Pattern-Definitions (2× avg vol + 0.5×ATR move) |
 
 ## Why it adds value
 
@@ -57,3 +57,17 @@ Single-bar climax fits **Detected → Confirmed → Succeeded | Failed** better 
 | `success-atr-mult` | 1.5 |
 | `max-candles-after-detect` | 20 |
 | `detector-version` | volume-breakout-v1 |
+
+## Trusted-source geometry
+
+| Rule | Source | TIP v1 |
+|---|---|---|
+| Unusual volume vs a lookback average | ChartSchool RVOL; Elder | Detect-bar volume ≥ `2.0 × SMA(20)` |
+| Volume with a committed price bar | Murphy; Elder | Also require range ≥ `0.5 × ATR` |
+| Does not need a Donchian break | TIP (independent co-fire) | Can fire without a 20-bar high/low |
+
+## Online sources
+
+- [StockCharts ChartSchool — Relative Volume (RVOL)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/relative-volume-rvol)
+- [StockCharts ChartSchool — On Balance Volume](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/on-balance-volume-obv)
+- [Investopedia — Volume](https://www.investopedia.com/terms/v/volume.asp)

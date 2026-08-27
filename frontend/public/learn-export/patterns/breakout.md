@@ -234,6 +234,11 @@ After confirm, if price dips into the retest band near the reference without clo
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Price Channels (Donchian)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/price-channels) — Close above the N-period high is the channel breakout
+- [Investopedia — Breakout](https://www.investopedia.com/terms/b/breakout.asp)
+
 **Docs**
 
 - `docs/patterns/breakout.md`

@@ -1,6 +1,7 @@
 import { SHORT_TRADE_RULES_VS_MEASUREMENTS } from '../../exampleBlocks'
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
+import { BREAKDOWN_SOURCES } from '../learnSources'
 
 export const breakdown: LearnTopic = {
   kind: 'pattern',
@@ -203,6 +204,7 @@ export const breakdown: LearnTopic = {
   patternTypeId: 'breakdown',
   sourceDocs: ['docs/patterns/breakdown.md'],
   sourceCode: ['backend/app/patterns/breakdown.py'],
+  externalSources: BREAKDOWN_SOURCES,
   lastReviewed: '2026-08-04',
   detectorVersionHint: 'breakdown-v1',
 }

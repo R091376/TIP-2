@@ -1,4 +1,5 @@
 import { classicalPatternTopic } from './classicalShared'
+import { HEAD_SHOULDERS_SOURCES } from './classicalSources'
 
 export const headShoulders = classicalPatternTopic({
   slug: 'head_shoulders',
@@ -9,6 +10,7 @@ export const headShoulders = classicalPatternTopic({
   detectorVersionHint: 'hs-v1',
   sourceDocs: ['docs/patterns/head-shoulders.md'],
   sourceCode: ['backend/app/patterns/head_shoulders.py', 'backend/app/patterns/geometry.py'],
+  externalSources: HEAD_SHOULDERS_SOURCES,
   relatedSlug: { slug: 'inverse_head_shoulders', label: 'Inverse H&S' },
   formulaPlain:
     'Five confirmed swings: left shoulder, armpit, higher head, armpit, right shoulder. Detected on the first close below the neckline through the two armpits.',

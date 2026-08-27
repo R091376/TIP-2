@@ -176,6 +176,12 @@ After detect, a closed bar finishes under the pin low → Failed. MFE may still 
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Hammer](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-pattern-dictionary#hammer) — Long lower shadow; close well above the session low
+- [StockCharts ChartSchool — Bullish reversal candlesticks](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-bullish-reversal-patterns)
+- [Investopedia — Hammer](https://www.investopedia.com/terms/h/hammer.asp)
+
 **Docs**
 
 - `docs/patterns/hammer-shooting-star.md`

@@ -144,6 +144,11 @@ When Breakout detects, it freezes atr_at_detect. That single number drives retes
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Average True Range (ATR)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/average-true-range-atr) — Wilder 1978; TR = max(H−L, |H−prior C|, |L−prior C|); default period 14; Wilder smoothing
+- [Investopedia — Average True Range (ATR)](https://www.investopedia.com/terms/a/atr.asp)
+
 **Docs**
 
 - `docs/indicators/atr-14.md`
@@ -288,6 +293,12 @@ A high wick above the ceiling is not enough — breakout needs close above the p
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Price Channels (Donchian)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/price-channels) — Richard Donchian; N-period high / low channel (default 20)
+- [StockCharts ChartSchool — Donchian Trading Guidelines](https://chartschool.stockcharts.com/table-of-contents/overview/donchian-trading-guidelines)
+- [Investopedia — Donchian Channels](https://www.investopedia.com/terms/d/donchianchannels.asp)
+
 **Docs**
 
 - `docs/indicators/donchian-20.md`
@@ -428,6 +439,12 @@ Same baseline, weaker signal volume — fails the 1.5× test.
 - [Volume breakout](./../patterns/volume_breakout.md) (`pattern/volume_breakout`)
 
 ## Sources
+
+**Textbook / online**
+
+- [StockCharts ChartSchool — Moving Averages (SMA)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/moving-averages-simple-and-exponential) — Simple average of the last N values; TIP applies this to volume
+- [StockCharts ChartSchool — Relative Volume (RVOL)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/relative-volume-rvol) — Current volume vs a lookback average — same idea as breakout volume confirmation
+- [Investopedia — Volume](https://www.investopedia.com/terms/v/volume.asp)
 
 **Docs**
 
@@ -673,6 +690,14 @@ Later a 5m hammer detects at 6.2 with ATR = 1. Nearest named level is S2 (6.5). 
 - [Shooting star](./../patterns/shooting_star.md) (`pattern/shooting_star`)
 
 ## Sources
+
+**Textbook / online**
+
+- [MyPivots — Woodie Pivot Points](https://www.mypivots.com/dictionary/definition/228/woodie-pivot-points) — PP = (H + L + 2 × today’s open) / 4 — the open-weighted formula TIP uses
+- [Sierra Chart — Pivot Points (Formula Type 3)](https://www.sierrachart.com/index.php?page=doc/PivotPoints.html) — PP = (yesterday H + L + current open + current open) / 4
+- [eSignal — Woodie_Pivots.efs](https://efs.kb.esignal.com/hc/en-us/articles/6362892232987-Woodie-Pivots-efs) — PP = (yesterday H + yesterday L + (today open × 2)) / 4
+- [thinkorswim — WoodiesPivots (Ken Wood)](https://toslc.thinkorswim.com/center/reference/Tech-Indicators/studies-library/V-Z/WoodiesPivots)
+- [StockCharts ChartSchool — Pivot Points](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/pivot-points) — What a daily pivot ladder is; documents Standard (H+L+C)/3, not Woodie-open
 
 **Docs**
 
@@ -930,6 +955,11 @@ After confirm, if price dips into the retest band near the reference without clo
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Price Channels (Donchian)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/price-channels) — Close above the N-period high is the channel breakout
+- [Investopedia — Breakout](https://www.investopedia.com/terms/b/breakout.asp)
+
 **Docs**
 
 - `docs/patterns/breakout.md`
@@ -1139,6 +1169,11 @@ Price dips a little, then a closed bar finishes back above the floor → Failed 
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Price Channels (Donchian)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/price-channels) — Close below the N-period low is the channel breakdown
+- [Investopedia — Breakdown](https://www.investopedia.com/terms/b/breakdown.asp)
+
 **Docs**
 
 - `docs/patterns/breakdown.md`
@@ -1323,6 +1358,12 @@ If the box never expands before max_duration_candles, the instance can end as Fa
 - [Breakout](./breakout.md) (`pattern/breakout`)
 
 ## Sources
+
+**Textbook / online**
+
+- [StockCharts ChartSchool — Rectangle](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/rectangle) — Multi-bar congestion / trading range
+- [StockCharts ChartSchool — Bollinger Band Squeeze](https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/bollinger-band-squeeze) — Volatility compression before expansion
+- [StockCharts ChartSchool — Narrow Range Day (NR7)](https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/narrow-range-day-nr7) — Related compression idea; TIP uses ATR-normalized multi-bar range, not NR7
 
 **Docs**
 
@@ -1519,6 +1560,12 @@ Two different “no win” stories: (1) equity bar detects then fails through st
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Relative Volume (RVOL)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/relative-volume-rvol) — Unusual volume vs a lookback average
+- [StockCharts ChartSchool — On Balance Volume](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/on-balance-volume-obv) — Volume confirms price commitment (Elder / Granville lineage)
+- [Investopedia — Volume](https://www.investopedia.com/terms/v/volume.asp)
+
 **Docs**
 
 - `docs/patterns/volume-breakout.md`
@@ -1714,6 +1761,12 @@ After detect, a closed bar finishes under the pin low → Failed. MFE may still 
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Hammer](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-pattern-dictionary#hammer) — Long lower shadow; close well above the session low
+- [StockCharts ChartSchool — Bullish reversal candlesticks](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-bullish-reversal-patterns)
+- [Investopedia — Hammer](https://www.investopedia.com/terms/h/hammer.asp)
+
 **Docs**
 
 - `docs/patterns/hammer-shooting-star.md`
@@ -1905,6 +1958,12 @@ After detect, price rips back through the stop above the star → Failed.
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Shooting Star](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-pattern-dictionary#shooting_star) — Long upper shadow; close near the open after a failed rally
+- [StockCharts ChartSchool — Bearish reversal candlesticks](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-bearish-reversal-patterns)
+- [Investopedia — Shooting Star](https://www.investopedia.com/terms/s/shootingstar.asp)
+
 **Docs**
 
 - `docs/patterns/hammer-shooting-star.md`
@@ -2092,6 +2151,12 @@ After detect, price closes back under the stop region → Failed.
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Engulfing Pattern](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-pattern-dictionary#engulfing_pattern) — Body engulfs prior body (not necessarily the full high–low range)
+- [StockCharts ChartSchool — Bullish reversal candlesticks](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-bullish-reversal-patterns)
+- [Investopedia — Bullish Engulfing](https://www.investopedia.com/terms/b/bullishengulfingpattern.asp)
+
 **Docs**
 
 - `docs/patterns/engulfing.md`
@@ -2275,6 +2340,12 @@ Price closes back above the stop region → Failed short.
 - [Shooting star](./shooting_star.md) (`pattern/shooting_star`)
 
 ## Sources
+
+**Textbook / online**
+
+- [StockCharts ChartSchool — Engulfing Pattern](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-pattern-dictionary#engulfing_pattern) — Body engulfs prior body (not necessarily the full high–low range)
+- [StockCharts ChartSchool — Bearish reversal candlesticks](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-bearish-reversal-patterns)
+- [Investopedia — Bearish Engulfing](https://www.investopedia.com/terms/b/bearishengulfingp.asp)
 
 **Docs**
 
@@ -2467,6 +2538,11 @@ After a long detect, price closes back through the mother low → Failed.
 
 ## Sources
 
+**Textbook / online**
+
+- [Investopedia — Inside Day](https://www.investopedia.com/terms/i/inside-day.asp) — High and low contained in the prior bar’s range (mother–inside)
+- [StockCharts ChartSchool — Narrow Range Day (NR7)](https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/narrow-range-day-nr7) — Related compression-then-expansion idea; TIP fires on a close through the mother, not NR7 rank
+
 **Docs**
 
 - `docs/patterns/inside-bar.md`
@@ -2655,6 +2731,12 @@ After detect, price closes through the prior swing-low stop region → Failed.
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Alligator (Bill Williams)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/alligator) — Williams fractals: a high/low that is the extreme of the surrounding N bars
+- [StockCharts ChartSchool — Swing Charting](https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/swing-charting)
+- [Investopedia — Fractal (Williams)](https://www.investopedia.com/terms/f/fractal.asp) — Five-bar fractal (width 2) is the default Williams definition; TIP default width is also 2
+
 **Docs**
 
 - `docs/patterns/hh-ll.md`
@@ -2839,6 +2921,12 @@ After detect, price closes back above the structure stop → Failed short.
 - [ATR (14)](./../indicators/atr-14.md) (`indicator/atr-14`)
 
 ## Sources
+
+**Textbook / online**
+
+- [StockCharts ChartSchool — Alligator (Bill Williams)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/alligator) — Williams fractals: a high/low that is the extreme of the surrounding N bars
+- [StockCharts ChartSchool — Swing Charting](https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/swing-charting)
+- [Investopedia — Fractal (Williams)](https://www.investopedia.com/terms/f/fractal.asp) — Five-bar fractal (width 2) is the default Williams definition; TIP default width is also 2
 
 **Docs**
 
@@ -3035,6 +3123,13 @@ Same W detects; a later close below 99.70 fails. A close back under 108 that sta
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Double Bottom Reversal](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/double-bottom-reversal) — W geometry; pattern is not complete until the intervening peak breaks; measured-move target
+- [Bulkowski — Double Bottom types](https://thepatternsite.com/DoubleBottomTypes.html) — Encyclopedia of Chart Patterns identification
+- [Bulkowski — Double Bottom setup](https://thepatternsite.com/dbsetup.html) — Confirms when price closes above the intervening peak (confirmation line)
+- [Investopedia — Double Bottom](https://www.investopedia.com/terms/d/doublebottom.asp)
+
 **Docs**
 
 - `docs/patterns/double-bottom.md`
@@ -3217,6 +3312,12 @@ Detect short, later close above the higher peak fails.
 - [ATR (14)](./../indicators/atr-14.md) (`indicator/atr-14`)
 
 ## Sources
+
+**Textbook / online**
+
+- [StockCharts ChartSchool — Double Top Reversal](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/double-top-reversal) — M geometry; not complete until the intervening trough breaks; measured-move target
+- [Bulkowski — Adam and Eve double tops](https://thepatternsite.com/AdamEvePatterns.html) — Encyclopedia of Chart Patterns identification
+- [Investopedia — Double Top](https://www.investopedia.com/terms/d/doubletop.asp)
 
 **Docs**
 
@@ -3401,6 +3502,12 @@ A close back above the frozen neckline does not fail v1. Fail is a close above t
 - [ATR (14)](./../indicators/atr-14.md) (`indicator/atr-14`)
 
 ## Sources
+
+**Textbook / online**
+
+- [StockCharts ChartSchool — Head and Shoulders Top](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/head-and-shoulders-top) — LS–head–RS + neckline; sloping neckline allowed; height projected from the break
+- [Bulkowski — Head-and-Shoulders Tops](https://thepatternsite.com/hst.html) — Confirms on a close through the neckline (or right armpit when the neckline slopes down)
+- [Investopedia — Head and Shoulders](https://www.investopedia.com/terms/h/head-shoulders.asp)
 
 **Docs**
 
@@ -3590,6 +3697,12 @@ Wick below the neckline with close still above it does not detect. After detect,
 - [ATR (14)](./../indicators/atr-14.md) (`indicator/atr-14`)
 
 ## Sources
+
+**Textbook / online**
+
+- [StockCharts ChartSchool — Head and Shoulders Bottom](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/head-and-shoulders-bottom) — Inverted H&S; neckline through reaction highs; measured-move target
+- [Bulkowski — Head-and-Shoulders Bottoms](https://thepatternsite.com/hsb.html) — Encyclopedia of Chart Patterns identification
+- [Investopedia — Inverse Head and Shoulders](https://www.investopedia.com/terms/i/inverseheadandshoulders.asp)
 
 **Docs**
 

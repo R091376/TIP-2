@@ -1,6 +1,7 @@
 import { LONG_TRADE_RULES_VS_MEASUREMENTS } from '../../exampleBlocks'
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
+import { VOLUME_BREAKOUT_SOURCES } from '../learnSources'
 
 export const volumeBreakout: LearnTopic = {
   kind: 'pattern',
@@ -179,6 +180,7 @@ export const volumeBreakout: LearnTopic = {
   patternTypeId: 'volume_breakout',
   sourceDocs: ['docs/patterns/volume-breakout.md'],
   sourceCode: ['backend/app/patterns/volume_breakout.py'],
+  externalSources: VOLUME_BREAKOUT_SOURCES,
   lastReviewed: '2026-08-04',
   detectorVersionHint: 'volume-breakout-v1',
 }

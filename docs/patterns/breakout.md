@@ -7,6 +7,7 @@
 | **Code** | `com.tip.patterns.breakout` (`BreakoutDetector`, `BreakoutLifecycle`, `BreakoutBarEvaluator`) |
 | **Rules base** | `Pattern-Definitions-v1.0-Final.md` + design divergences (PI-7) |
 | **Status** | **Implemented end-to-end** (pure domain + Spring evaluator + journal + REST/WS when Postgres) |
+| **Sources** | Richard Donchian price channels / turtle-style N-bar high; [StockCharts ChartSchool — Price Channels](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/price-channels); [Investopedia — Breakout](https://www.investopedia.com/terms/b/breakout.asp) |
 
 ## Purpose
 
@@ -136,3 +137,17 @@ Multiple open breakouts allowed; new Detected only if `ref > max(open.reference_
 - `docs/indicators/atr-14.md`, `docs/indicators/donchian-20.md`
 - `docs/modules/journal.md`
 - `Pattern-Intelligence-Design-v1.0.md`
+
+## Trusted-source geometry
+
+| Rule | Source | TIP v1 |
+|---|---|---|
+| Break of the N-period high | Donchian / ChartSchool Price Channels | First **close** above prior-20 high (signal bar excluded from the window) |
+| Volume confirms the break | Murphy; ChartSchool RVOL | Optional (`confirmation_mode`); recorded as `volume_ok_at_detect` |
+| Return to broken resistance | Classic breakout throwback | Retested stage (ATR band around frozen reference) |
+| Invalidation | Close back through the breakout level | Close below frozen Donchian reference |
+
+## Online sources
+
+- [StockCharts ChartSchool — Price Channels (Donchian)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/price-channels)
+- [Investopedia — Breakout](https://www.investopedia.com/terms/b/breakout.asp)

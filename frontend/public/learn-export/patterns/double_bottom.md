@@ -176,6 +176,13 @@ Same W detects; a later close below 99.70 fails. A close back under 108 that sta
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Double Bottom Reversal](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/double-bottom-reversal) — W geometry; pattern is not complete until the intervening peak breaks; measured-move target
+- [Bulkowski — Double Bottom types](https://thepatternsite.com/DoubleBottomTypes.html) — Encyclopedia of Chart Patterns identification
+- [Bulkowski — Double Bottom setup](https://thepatternsite.com/dbsetup.html) — Confirms when price closes above the intervening peak (confirmation line)
+- [Investopedia — Double Bottom](https://www.investopedia.com/terms/d/doublebottom.asp)
+
 **Docs**
 
 - `docs/patterns/double-bottom.md`

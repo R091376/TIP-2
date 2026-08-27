@@ -906,7 +906,7 @@ Four topics following `frontend/src/learn/content/patterns/higher_high.ts` / `br
 | `head_shoulders` | Head and shoulders | `structure` | `short` |
 | `inverse_head_shoulders` | Inverse head and shoulders | `structure` | `long` |
 
-Each must include: `plainEnglish`, `howWeCalculate`, formulas, success + fail `workedExample.scenarios` with `LearnDiagram` candles, `tipParameters` covering **all** keys in the family bucket (catalog completeness test), `lifecycle` bullets, `closedCandleOnly: true`, `sourceDocs`, `sourceCode`, `detectorVersionHint`.
+Each must include: `plainEnglish`, `howWeCalculate`, formulas, success + fail `workedExample.scenarios` with `LearnDiagram` candles, `tipParameters` covering **all** keys in the family bucket (catalog completeness test), `lifecycle` bullets, `closedCandleOnly: true`, `sourceDocs`, `sourceCode`, `externalSources` (ChartSchool + Bulkowski + Investopedia URLs), `detectorVersionHint`.
 
 Gold-standard operator docs (in addition to Learn):
 
@@ -1116,6 +1116,8 @@ Treat Detected as “W complete” and Confirmed as neckline break.
 
 ## References
 
+### Internal
+
 - `docs/design-patterns-stack-and-filtered-stats.md` §3.1–3.3 (sketch)
 - `docs/patterns/breakout.md` (lifecycle, PI-21, PI-22, confirmation modes)
 - `docs/patterns/hh-ll.md` (fractal width, non-repaint)
@@ -1130,6 +1132,24 @@ Treat Detected as “W complete” and Confirmed as neckline break.
 - `backend/db/migration/V4__pattern_types_classic.sql` (CHECK precedent)
 - `frontend/src/utils/patternOverlay.ts`, `frontend/src/chart/usePatternOverlay.js`
 - `frontend/src/learn/topicBuckets.ts`, `catalog.ts`, `catalog.test.ts`
+
+### Textbook and online sources
+
+Geometry (W/M, H&S, neckline, measured move, close-through confirmation) follows these public references. TIP v1 is a closed-candle, non-repainting detector — it does **not** require a prior trend, 3% equality, or volume expansion. Per-pattern mapping tables live in `docs/patterns/double-bottom.md` and `docs/patterns/head-shoulders.md`.
+
+- Edwards, Robert D. and Magee, John. *Technical Analysis of Stock Trends* (1948; later eds.). Original Western source for head-and-shoulders, double top/bottom, and the measuring formula.
+- Murphy, John J. *Technical Analysis of the Financial Markets*. Reversal-pattern chapter (W/M and H&S).
+- Bulkowski, Thomas N. *Encyclopedia of Chart Patterns*. Empirical identification; **close** through the confirmation/neckline.
+  - Double bottoms: https://thepatternsite.com/DoubleBottomTypes.html · setup https://thepatternsite.com/dbsetup.html
+  - Double tops: https://thepatternsite.com/AdamEvePatterns.html
+  - Head-and-shoulders tops: https://thepatternsite.com/hst.html
+  - Head-and-shoulders bottoms: https://thepatternsite.com/hsb.html
+- StockCharts ChartSchool (operator-facing identification):
+  - Double bottom: https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/double-bottom-reversal
+  - Double top: https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/double-top-reversal
+  - Head and shoulders top: https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/head-and-shoulders-top
+  - Head and shoulders bottom: https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/head-and-shoulders-bottom
+- Investopedia primers: [double bottom](https://www.investopedia.com/terms/d/doublebottom.asp), [double top](https://www.investopedia.com/terms/d/doubletop.asp), [head and shoulders](https://www.investopedia.com/terms/h/head-shoulders.asp), [inverse H&S](https://www.investopedia.com/terms/i/inverseheadandshoulders.asp)
 
 ---
 

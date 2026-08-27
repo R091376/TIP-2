@@ -5,7 +5,7 @@
 | **Type** | `consolidation` |
 | **Code** | `com.tip.patterns.consolidation` |
 | **Status** | Implemented |
-| **Sources** | John Murphy, *Technical Analysis of the Financial Markets* (congestion / trading ranges, expansion after contraction); ATR-normalized range (TIP / common volatility yardstick); related ideas: Bollinger/Keltner “squeeze”, NR-style compression |
+| **Sources** | John Murphy, *Technical Analysis of the Financial Markets* (congestion / trading ranges, expansion after contraction); [StockCharts ChartSchool — Rectangle](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/rectangle); related: [Bollinger Band Squeeze](https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/bollinger-band-squeeze), [NR7](https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/narrow-range-day-nr7) |
 
 ## Why it adds value
 
@@ -60,3 +60,17 @@ No Retested / Confirmed required (flags stay false unless strengthened).
 | `max-duration-candles` | 30 |
 | `tighten-ratio` | 0.85 |
 | `detector-version` | consolidation-v1 |
+
+## Trusted-source geometry
+
+| Rule | Source | TIP v1 |
+|---|---|---|
+| Multi-bar congestion / trading range | Murphy; ChartSchool Rectangle | Window of M closed bars whose range is small vs ATR |
+| Compression precedes expansion | ChartSchool Bollinger Squeeze; NR7 | Regime flag, not a Bollinger/%B or NR7 detector |
+| Break of the range is the trade | Rectangle | TIP journals the **compression itself**; expansion is Succeeded/Failed vs ATR, not a Donchian break |
+
+## Online sources
+
+- [StockCharts ChartSchool — Rectangle](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/rectangle)
+- [StockCharts ChartSchool — Bollinger Band Squeeze](https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/bollinger-band-squeeze)
+- [StockCharts ChartSchool — Narrow Range Day (NR7)](https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/narrow-range-day-nr7)

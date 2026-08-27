@@ -5,7 +5,7 @@
 | **Types** | `higher_high` (long), `lower_low` (short) |
 | **Code** | `com.tip.patterns.structure` |
 | **Status** | Implemented |
-| **Sources** | Bill Williams fractals (width \(N\)); John Murphy swing structure; TIP deferred note (fractal width default **2**) |
+| **Sources** | Bill Williams fractals (width \(N\)); John Murphy swing structure; [StockCharts ChartSchool — Alligator](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/alligator); [Investopedia — Fractal](https://www.investopedia.com/terms/f/fractal.asp) |
 
 ## Swing definition (fractal width \(N=2\))
 
@@ -34,3 +34,18 @@ On each closed bar, let \(i = n - 1 - N\) (candidate pivot just confirmed):
 | Fail | close &lt; stop | close &gt; stop |
 
 Anti-spam: one open HH **or** LL per symbol×TF (shared structure slot).
+
+## Trusted-source geometry
+
+| Rule | Source | TIP v1 |
+|---|---|---|
+| Pivot high = strict max of surrounding bars | Williams five-bar fractal (width 2) | Same formula, width \(N\) configurable (default **2**) |
+| Confirmed only after the right-hand bars close | Williams (fractals lag by N bars) | Confirmed at bar \(i+N\) — no repaint |
+| Higher high / lower low vs prior swing | Murphy swing structure | Nearest prior confirmed pivot of the same kind |
+| Williams usually pairs fractals with Alligator | ChartSchool Alligator | **Not used** — HH/LL is structure-only |
+
+## Online sources
+
+- [StockCharts ChartSchool — Alligator (Bill Williams)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/alligator)
+- [StockCharts ChartSchool — Swing Charting](https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/swing-charting)
+- [Investopedia — Fractal (Williams)](https://www.investopedia.com/terms/f/fractal.asp)

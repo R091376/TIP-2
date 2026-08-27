@@ -1,5 +1,6 @@
 import { tipParam } from '../../tipParam'
 import type { LearnTopic } from '../../types'
+import { ATR_SOURCES } from '../learnSources'
 
 export const atr14: LearnTopic = {
   kind: 'indicator',
@@ -152,5 +153,6 @@ export const atr14: LearnTopic = {
   ],
   sourceDocs: ['docs/indicators/atr-14.md'],
   sourceCode: ['backend/app/indicators/atr.py'],
+  externalSources: ATR_SOURCES,
   lastReviewed: '2026-08-04',
 }

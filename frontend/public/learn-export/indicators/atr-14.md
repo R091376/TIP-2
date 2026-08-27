@@ -136,6 +136,11 @@ When Breakout detects, it freezes atr_at_detect. That single number drives retes
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Average True Range (ATR)](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/average-true-range-atr) — Wilder 1978; TR = max(H−L, |H−prior C|, |L−prior C|); default period 14; Wilder smoothing
+- [Investopedia — Average True Range (ATR)](https://www.investopedia.com/terms/a/atr.asp)
+
 **Docs**
 
 - `docs/indicators/atr-14.md`

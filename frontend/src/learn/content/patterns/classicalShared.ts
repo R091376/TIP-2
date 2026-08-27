@@ -16,6 +16,7 @@ type Spec = {
   sourceDocs: string[]
   sourceCode: string[]
   relatedSlug: { slug: string; label: string }
+  externalSources?: { label: string; url: string; note?: string }[]
   success: WorkedScenario
   fail: WorkedScenario
   lifecycle: string[]
@@ -57,6 +58,7 @@ export function classicalPatternTopic(spec: Spec): LearnTopic {
     patternTypeId: spec.slug,
     sourceDocs: spec.sourceDocs,
     sourceCode: spec.sourceCode,
+    externalSources: spec.externalSources,
     lastReviewed: '2026-08-27',
     detectorVersionHint: spec.detectorVersionHint,
     questionsItSolves: [

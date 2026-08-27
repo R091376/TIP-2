@@ -164,6 +164,12 @@ A close back above the frozen neckline does not fail v1. Fail is a close above t
 
 ## Sources
 
+**Textbook / online**
+
+- [StockCharts ChartSchool — Head and Shoulders Top](https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-patterns/head-and-shoulders-top) — LS–head–RS + neckline; sloping neckline allowed; height projected from the break
+- [Bulkowski — Head-and-Shoulders Tops](https://thepatternsite.com/hst.html) — Confirms on a close through the neckline (or right armpit when the neckline slopes down)
+- [Investopedia — Head and Shoulders](https://www.investopedia.com/terms/h/head-shoulders.asp)
+
 **Docs**
 
 - `docs/patterns/head-shoulders.md`

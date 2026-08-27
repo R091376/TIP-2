@@ -225,6 +225,14 @@ Later a 5m hammer detects at 6.2 with ATR = 1. Nearest named level is S2 (6.5). 
 
 ## Sources
 
+**Textbook / online**
+
+- [MyPivots — Woodie Pivot Points](https://www.mypivots.com/dictionary/definition/228/woodie-pivot-points) — PP = (H + L + 2 × today’s open) / 4 — the open-weighted formula TIP uses
+- [Sierra Chart — Pivot Points (Formula Type 3)](https://www.sierrachart.com/index.php?page=doc/PivotPoints.html) — PP = (yesterday H + L + current open + current open) / 4
+- [eSignal — Woodie_Pivots.efs](https://efs.kb.esignal.com/hc/en-us/articles/6362892232987-Woodie-Pivots-efs) — PP = (yesterday H + yesterday L + (today open × 2)) / 4
+- [thinkorswim — WoodiesPivots (Ken Wood)](https://toslc.thinkorswim.com/center/reference/Tech-Indicators/studies-library/V-Z/WoodiesPivots)
+- [StockCharts ChartSchool — Pivot Points](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/pivot-points) — What a daily pivot ladder is; documents Standard (H+L+C)/3, not Woodie-open
+
 **Docs**
 
 - `docs/design-woodie-sr.md`
