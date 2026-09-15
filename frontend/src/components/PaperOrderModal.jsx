@@ -6,7 +6,11 @@ import {
   parsePaperApiError,
   placePaperOrder,
 } from '../services/paperApi'
-import { PAPER_ORDER_TYPES, PAPER_PRODUCTS } from '../utils/paperOrderConstants'
+import {
+  PAPER_ORDER_TYPES,
+  isCncOpenShort,
+  paperProductsForOpenSide,
+} from '../utils/paperOrderConstants'
 
 function money(n) {
   if (n == null || Number.isNaN(n)) return '—'
@@ -20,9 +24,21 @@ function money(n) {
  * Backend-parity client validation for paper place body.
  * Returns error string or '' when valid.
  */
-export function validatePaperOrderFields({ side, orderType, qty, price, trigger }) {
+export function validatePaperOrderFields({
+  side,
+  orderType,
+  qty,
+  price,
+  trigger,
+  product,
+  closeLotId,
+}) {
   const q = Number(qty)
   if (!Number.isInteger(q) || q < 1) return 'Quantity must be an integer ≥ 1'
+
+  if (isCncOpenShort(side, product, closeLotId)) {
+    return 'CNC cannot open a short — use MIS (intraday), or close a delivery long'
+  }
 
   const ot = (orderType || '').toUpperCase()
   const hasPrice = price !== '' && price != null
@@ -72,7 +88,8 @@ export default function PaperOrderModal({
   const dialogRef = useRef(null)
   const firstFieldRef = useRef(null)
   const submittingRef = useRef(false)
-  const [product, setProduct] = useState('MIS')
+  const productChoices = paperProductsForOpenSide(side)
+  const [product, setProduct] = useState(() => paperProductsForOpenSide(side)[0])
   const [orderType, setOrderType] = useState('MARKET')
   const [qty, setQty] = useState('1')
   const [price, setPrice] = useState('')
@@ -120,6 +137,13 @@ export default function PaperOrderModal({
     })
     return () => cancelAnimationFrame(t)
   }, [])
+
+  // Chart ticket never sends closeLotId; CNC sell (open short) is not offered.
+  useEffect(() => {
+    if (!productChoices.includes(product)) {
+      setProduct(productChoices[0])
+    }
+  }, [productChoices, product])
 
   // Esc — block while place in-flight; Tab cycles within dialog (light focus trap)
   useEffect(() => {
@@ -237,6 +261,7 @@ export default function PaperOrderModal({
       qty,
       price: needsPrice ? price : '',
       trigger: needsTrigger ? trigger : '',
+      product,
     })
     if (err) {
       setFieldError(err)
@@ -345,9 +370,9 @@ export default function PaperOrderModal({
                 ref={firstFieldRef}
                 value={product}
                 onChange={(e) => setProduct(e.target.value)}
-                disabled={submitting}
+                disabled={submitting || productChoices.length < 2}
               >
-                {PAPER_PRODUCTS.map((p) => (
+                {productChoices.map((p) => (
                   <option key={p} value={p}>
                     {p === 'MIS' ? 'MIS (intraday)' : 'CNC (overnight)'}
                   </option>
@@ -423,6 +448,12 @@ export default function PaperOrderModal({
                 required
               />
             </label>
+          ) : null}
+
+          {side === 'SELL' ? (
+            <p className="paper-order-modal__hint">
+              Shorts are MIS only. Close a CNC long from Positions.
+            </p>
           ) : null}
 
           {fieldError ? (

@@ -201,6 +201,16 @@ class PaperTradingService:
         close_id = UUID(close_lot_id) if close_lot_id else None
         client_id = (client_order_id or "").strip() or None
 
+        # NSE cash CNC cannot open a short. SELL CNC is close-only (closeLotId).
+        if product_e == Product.CNC and side_e == Side.SELL and close_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "CNC_SHORT_NOT_ALLOWED",
+                    "message": "CNC cannot open a short; sell CNC only to close a delivery long",
+                },
+            )
+
         # eligibility for opens
         entry = self._watchlist.find_by_symbol_id(instrument_key)
         if close_id is None:

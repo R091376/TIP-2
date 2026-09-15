@@ -295,3 +295,106 @@ def test_reject_index(monkeypatch, wl):
         )
     assert ei.value.status_code == 400
     svc.stop()
+
+
+def _mem_svc(wl):
+    uid = uuid4()
+    balances = {uid: Decimal("100000")}
+    svc = PaperTradingService(
+        Settings(paper_enabled=True, paper_allow_memory=True),
+        wl,
+        session_factory=None,
+        user_cash_provider=lambda u: balances.get(u, Decimal("0")),
+        user_cash_writer=lambda u, bal, _led: balances.__setitem__(u, bal),
+    )
+    return svc, uid
+
+
+def test_cnc_open_short_rejected(monkeypatch, wl):
+    monkeypatch.setattr("app.paper.service.phase_from_clock", lambda: MarketPhase.OPEN)
+    monkeypatch.setattr("app.paper.service.phase_at", lambda *a, **k: MarketPhase.OPEN)
+    from fastapi import HTTPException
+
+    svc, uid = _mem_svc(wl)
+    svc.start()
+    with pytest.raises(HTTPException) as ei:
+        svc.place_order(
+            uid,
+            instrument_key="NSE_EQ|RELIANCE",
+            side="SELL",
+            order_type="LIMIT",
+            product="CNC",
+            qty=1,
+            price=100.0,
+        )
+    assert ei.value.status_code == 400
+    assert ei.value.detail["code"] == "CNC_SHORT_NOT_ALLOWED"
+    svc.stop()
+
+
+def test_mis_open_short_still_allowed(monkeypatch, wl):
+    monkeypatch.setattr("app.paper.service.phase_from_clock", lambda: MarketPhase.OPEN)
+    monkeypatch.setattr("app.paper.service.phase_at", lambda *a, **k: MarketPhase.OPEN)
+    svc, uid = _mem_svc(wl)
+    svc.start()
+    got = svc.place_order(
+        uid,
+        instrument_key="NSE_EQ|RELIANCE",
+        side="SELL",
+        order_type="LIMIT",
+        product="MIS",
+        qty=1,
+        price=100.0,
+    )
+    assert got["status"] in ("OPEN", "PENDING", "TRIGGER_PENDING")
+    assert got["side"] == "SELL"
+    assert got["product"] == "MIS"
+    svc.stop()
+
+
+def test_cnc_sell_closes_existing_long(monkeypatch, wl):
+    monkeypatch.setattr("app.paper.service.phase_from_clock", lambda: MarketPhase.OPEN)
+    monkeypatch.setattr("app.paper.service.phase_at", lambda *a, **k: MarketPhase.OPEN)
+    svc, uid = _mem_svc(wl)
+    svc.start()
+    key = "NSE_EQ|RELIANCE"
+    import time
+
+    svc.enqueue_tick(Tick(instrument_key=key, price=100.0, volume_traded_today=1, timestamp_ms=1))
+    time.sleep(0.12)
+
+    buy = svc.place_order(
+        uid,
+        instrument_key=key,
+        side="BUY",
+        order_type="MARKET",
+        product="CNC",
+        qty=2,
+        trading_enabled=True,
+    )
+    svc.enqueue_tick(Tick(instrument_key=key, price=100.0, volume_traded_today=2, timestamp_ms=2))
+    time.sleep(0.2)
+    buy = svc.get_order(uid, UUID(buy["id"]))
+    assert buy["status"] == "FILLED"
+    lots = svc.list_positions(uid, open_only=True)
+    assert len(lots) == 1
+    lot_id = lots[0]["id"]
+    assert lots[0]["product"] == "CNC"
+    assert lots[0]["side"] == "LONG"
+
+    close = svc.place_order(
+        uid,
+        instrument_key=key,
+        side="SELL",
+        order_type="MARKET",
+        product="CNC",
+        qty=2,
+        close_lot_id=lot_id,
+        trading_enabled=True,
+    )
+    svc.enqueue_tick(Tick(instrument_key=key, price=101.0, volume_traded_today=3, timestamp_ms=3))
+    time.sleep(0.25)
+    close = svc.get_order(uid, UUID(close["id"]))
+    assert close["status"] == "FILLED"
+    assert svc.list_positions(uid, open_only=True) == []
+    svc.stop()

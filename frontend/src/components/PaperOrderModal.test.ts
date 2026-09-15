@@ -193,4 +193,49 @@ describe('validatePaperOrderFields', () => {
       validatePaperOrderFields({ side: 'BUY', orderType: 'MARKET', qty: '10' }),
     ).toBe('')
   })
+
+  it('rejects CNC SELL without closeLotId (open short)', () => {
+    expect(
+      validatePaperOrderFields({
+        side: 'SELL',
+        orderType: 'MARKET',
+        qty: 1,
+        product: 'CNC',
+      }),
+    ).toMatch(/CNC cannot open a short/i)
+  })
+
+  it('allows CNC SELL when closing a lot', () => {
+    expect(
+      validatePaperOrderFields({
+        side: 'SELL',
+        orderType: 'MARKET',
+        qty: 1,
+        product: 'CNC',
+        closeLotId: 'lot-1',
+      }),
+    ).toBe('')
+  })
+
+  it('allows MIS SELL open short', () => {
+    expect(
+      validatePaperOrderFields({
+        side: 'SELL',
+        orderType: 'MARKET',
+        qty: 1,
+        product: 'MIS',
+      }),
+    ).toBe('')
+  })
+
+  it('allows CNC BUY', () => {
+    expect(
+      validatePaperOrderFields({
+        side: 'BUY',
+        orderType: 'MARKET',
+        qty: 1,
+        product: 'CNC',
+      }),
+    ).toBe('')
+  })
 })
