@@ -7,19 +7,24 @@ import { isAdminLearnEnabled } from '../../config/featureFlags'
 /** @typedef {'dashboard'|'charts'|'watchlist'|'orders'|'positions'|'alerts'|'admin'|'learn'} NavId */
 
 /**
- * @param {{ isAdmin?: boolean }} opts
+ * @param {{ isAdmin?: boolean, isAuthenticated?: boolean }} opts
  * @returns {Array<{ id: NavId, label: string, to: string, panel?: 'watchlist'|'alerts', icon: string, adminOnly?: boolean }>}
  */
-export function getNavItems({ isAdmin = false } = {}) {
+export function getNavItems({ isAdmin = false, isAuthenticated = false } = {}) {
   const items = [
     { id: 'dashboard', label: 'Stats', to: '/patterns/stats', icon: 'dashboard' },
     { id: 'charts', label: 'Charts', to: '/', icon: 'charts' },
     { id: 'watchlist', label: 'Watchlist', to: '/?panel=watchlist', panel: 'watchlist', icon: 'watchlist' },
-    { id: 'orders', label: 'Orders', to: '/paper/orders', icon: 'orders' },
-    { id: 'positions', label: 'Positions', to: '/paper', icon: 'positions' },
-    { id: 'alerts', label: 'Alerts', to: '/?panel=alerts', panel: 'alerts', icon: 'alerts' },
   ]
-  // Learn is public education — available to every signed-in role when flag is on
+  if (isAuthenticated) {
+    items.push(
+      { id: 'orders', label: 'Orders', to: '/paper/orders', icon: 'orders' },
+      { id: 'positions', label: 'Positions', to: '/paper', icon: 'positions' },
+    )
+  }
+  items.push(
+    { id: 'alerts', label: 'Alerts', to: '/?panel=alerts', panel: 'alerts', icon: 'alerts' },
+  )
   if (isAdminLearnEnabled()) {
     items.push({ id: 'learn', label: 'Learn', to: '/learn', icon: 'learn' })
   }

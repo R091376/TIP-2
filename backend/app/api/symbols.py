@@ -4,7 +4,6 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from app.api.deps import AuthUser
 from app.patterns.research_filters import today_ist
 from app.watchlist.models import SymbolBootstrapStatus
 
@@ -26,7 +25,6 @@ def _candle_dto(c) -> dict:
 def get_candles(
     symbol_id: str,
     request: Request,
-    _user: AuthUser,
     timeframe: str | None = None,
     from_: int | None = Query(None, alias="from"),
     to: int | None = None,
@@ -70,7 +68,6 @@ def get_candles(
 def get_daily_sr(
     symbol_id: str,
     request: Request,
-    _user: AuthUser,
     from_: date | None = Query(None, alias="from"),
     to: date | None = None,
 ):
@@ -135,7 +132,6 @@ def _sr_dto(session_date: date, lv, freeze_source: str) -> dict:
 def get_patterns(
     symbol_id: str,
     request: Request,
-    _user: AuthUser,
     status: str | None = "active",
     timeframe: str | None = None,
     instanceId: str | None = None,
@@ -179,7 +175,6 @@ def get_patterns(
 def get_statistics(
     symbol_id: str,
     request: Request,
-    _user: AuthUser,
     patternType: str | None = "breakout",
     timeframe: str | None = None,
 ):

@@ -38,7 +38,7 @@ export function isChartPaperTradeEnabled(): boolean {
   )
 }
 
-/** Broker-style app shell — default ON (shell is the only authenticated layout). */
+/** Broker-style app shell — default ON (public market desk + private trading routes). */
 export function isAppShellEnabled(): boolean {
   return envTruthy(
     import.meta.env.VITE_FEATURE_APP_SHELL as string | undefined,

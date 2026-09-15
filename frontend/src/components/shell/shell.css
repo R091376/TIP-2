@@ -63,6 +63,7 @@
   background: var(--tip-bg-sidebar, #0c1020);
   border-right: 1px solid var(--tip-border-subtle, #1e293b);
   z-index: 50;
+  overflow: visible;
   transition: width 0.15s ease;
 }
 
@@ -164,7 +165,7 @@
   gap: 8px;
   align-items: stretch;
   overflow: visible;
-  z-index: 20;
+  z-index: 80;
 }
 
 .app-sidebar__footer .user-account {
@@ -179,6 +180,100 @@
 .app-sidebar--collapsed .app-sidebar__footer {
   align-items: center;
   padding: 10px 8px 14px;
+}
+
+.app-sidebar--collapsed .header-auth__label {
+  display: none;
+}
+
+.app-sidebar--collapsed .header-auth__trigger {
+  width: 36px;
+  padding: 8px;
+  justify-content: center;
+}
+
+/* ── Sidebar-footer login ──────────────────────────────────────────── */
+
+.header-auth {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.app-sidebar__footer .header-auth {
+  width: 100%;
+}
+
+.header-auth__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--tip-border-subtle, #1e293b);
+  border-radius: 8px;
+  background: var(--tip-bg-panel, #12182a);
+  color: var(--tip-text-primary, #e2e8f0);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.header-auth__trigger:hover {
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.header-auth__trigger:focus-visible {
+  outline: 2px solid var(--tip-focus-ring, #38bdf8);
+  outline-offset: 1px;
+}
+
+.header-auth__icon {
+  display: inline-flex;
+}
+
+.app-sidebar__footer .header-auth__trigger {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.header-auth__popover {
+  position: absolute;
+  z-index: 90;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid #2a3144;
+  background: #0f1117;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  /* Open to the right of the sidebar so a 280px panel is not clipped off-screen. */
+  left: 100%;
+  right: auto;
+  top: auto;
+  bottom: 0;
+  margin-left: 8px;
+}
+
+.header-auth__full-link {
+  margin: 0;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.header-auth__full-link a {
+  color: #a5b4fc;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.header-auth__full-link a:hover {
+  color: #c7d2fe;
+  text-decoration: underline;
 }
 
 .app-sidebar__toggle {
@@ -362,9 +457,17 @@
     display: flex;
   }
 
-  .app-main--chart .app-main__mobile-bar {
-    /* Chart already dense; keep hamburger accessible */
-    display: flex;
+  .app-sidebar--collapsed .header-auth__label {
+    display: inline;
+  }
+
+  /* Drawer is already wide; keep the form inside it (don't fly out off-screen). */
+  .app-sidebar__footer .header-auth__popover {
+    left: 0;
+    right: 0;
+    width: auto;
+    margin-left: 0;
+    bottom: calc(100% + 6px);
   }
 }
 
@@ -374,13 +477,20 @@
   }
 
   .app-sidebar:not(.app-sidebar--force-expanded) .app-sidebar__brand-text,
-  .app-sidebar:not(.app-sidebar--force-expanded) .app-sidebar__link-label {
+  .app-sidebar:not(.app-sidebar--force-expanded) .app-sidebar__link-label,
+  .app-sidebar:not(.app-sidebar--force-expanded) .header-auth__label {
     display: none;
   }
 
-  .app-sidebar:not(.app-sidebar--force-expanded) .app-sidebar__link {
+  .app-sidebar:not(.app-sidebar--force-expanded) .app-sidebar__link,
+  .app-sidebar:not(.app-sidebar--force-expanded) .header-auth__trigger {
     justify-content: center;
     padding: 12px 8px;
+  }
+
+  .app-sidebar:not(.app-sidebar--force-expanded) .header-auth__trigger {
+    width: 36px;
+    padding: 8px;
   }
 }
 

@@ -9,11 +9,11 @@ describe('navConfig learn / admin active split', () => {
   it('includes Learn for all roles when flag on; Admin only for admins', async () => {
     vi.stubEnv('VITE_FEATURE_ADMIN_LEARN', 'true')
     const { getNavItems, isNavItemActive } = await import('./navConfig.js')
-    const adminItems = getNavItems({ isAdmin: true })
+    const adminItems = getNavItems({ isAdmin: true, isAuthenticated: true })
     expect(adminItems.some((i) => i.id === 'learn')).toBe(true)
     expect(adminItems.some((i) => i.id === 'admin')).toBe(true)
 
-    const userItems = getNavItems({ isAdmin: false })
+    const userItems = getNavItems({ isAdmin: false, isAuthenticated: true })
     expect(userItems.some((i) => i.id === 'learn')).toBe(true)
     expect(userItems.some((i) => i.id === 'admin')).toBe(false)
 
@@ -28,8 +28,46 @@ describe('navConfig learn / admin active split', () => {
   it('omits Learn when flag off', async () => {
     vi.stubEnv('VITE_FEATURE_ADMIN_LEARN', 'false')
     const { getNavItems } = await import('./navConfig.js')
-    const items = getNavItems({ isAdmin: true })
+    const items = getNavItems({ isAdmin: true, isAuthenticated: true })
     expect(items.some((i) => i.id === 'admin')).toBe(true)
     expect(items.some((i) => i.id === 'learn')).toBe(false)
+  })
+
+  it('guest mobile five is Stats, Charts, Watchlist, Alerts, Learn', async () => {
+    vi.stubEnv('VITE_FEATURE_ADMIN_LEARN', 'true')
+    const { getNavItems } = await import('./navConfig.js')
+    const ids = getNavItems({ isAuthenticated: false }).map((i) => i.id)
+    expect(ids).toEqual(['dashboard', 'charts', 'watchlist', 'alerts', 'learn'])
+    expect(ids.slice(0, 5)).toEqual(['dashboard', 'charts', 'watchlist', 'alerts', 'learn'])
+  })
+
+  it('authenticated non-admin first five stays Stats, Charts, Watchlist, Orders, Positions', async () => {
+    vi.stubEnv('VITE_FEATURE_ADMIN_LEARN', 'true')
+    const { getNavItems } = await import('./navConfig.js')
+    const ids = getNavItems({ isAuthenticated: true, isAdmin: false }).map((i) => i.id)
+    expect(ids.slice(0, 5)).toEqual([
+      'dashboard',
+      'charts',
+      'watchlist',
+      'orders',
+      'positions',
+    ])
+    expect(ids).toContain('alerts')
+    expect(ids).toContain('learn')
+  })
+
+  it('admin adds admin after Learn; first five unchanged', async () => {
+    vi.stubEnv('VITE_FEATURE_ADMIN_LEARN', 'true')
+    const { getNavItems } = await import('./navConfig.js')
+    const ids = getNavItems({ isAuthenticated: true, isAdmin: true }).map((i) => i.id)
+    expect(ids.slice(0, 5)).toEqual([
+      'dashboard',
+      'charts',
+      'watchlist',
+      'orders',
+      'positions',
+    ])
+    expect(ids[ids.length - 1]).toBe('admin')
+    expect(ids).toContain('learn')
   })
 })

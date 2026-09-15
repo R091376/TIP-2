@@ -54,6 +54,8 @@ class LiveSubscription:
 
 
 class LiveWebSocketHub:
+    """Anonymous live fan-out. Watch ``session_count`` after public-desk launch."""
+
     def __init__(self) -> None:
         self._sessions: dict[int, WebSocket] = {}
         self._subs: dict[int, LiveSubscription] = {}
@@ -223,6 +225,7 @@ def _candle_dict(c) -> dict:
 
 @router.websocket("/ws/live")
 async def live_ws(websocket: WebSocket):
+    """Token-optional candle/pattern feed. Subscribe is watchlist-bounded."""
     container = websocket.app.state.container
     hub: LiveWebSocketHub = container.ws_hub
     sid = await hub.connect(websocket)

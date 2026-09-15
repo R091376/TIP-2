@@ -13,6 +13,8 @@ def test_status(client):
     body = r.json()
     assert "marketPhase" in body
     assert "bootstrapStatus" in body
+    assert "liveFeedConnected" in body
+    assert "liveFeed" not in body
 
 
 def test_watchlist_seeded(client):

@@ -11,6 +11,7 @@ function pageTitle(pathname) {
 
 /**
  * Main content region — fill height for chart, scrollable padding for desk pages.
+ * Mobile-only top bar (hamburger + title). Login lives in the sidebar footer.
  */
 export default function AppMain({ drawerOpen, onOpenDrawer }) {
   const location = useLocation()

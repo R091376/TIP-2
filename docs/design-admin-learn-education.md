@@ -5,7 +5,7 @@
 | **Document** | Admin Education UI (calculations behind indicators & patterns) |
 | **Author** | _TBD_ |
 | **Date** | 2026-08-03 |
-| **Status** | Draft (revised after design review) |
+| **Status** | Draft (revised after design review). **Access update 2026-09-15:** Learn is **public** in `AppShell` (no login). Historical ADMIN-only routing in this doc is superseded by `docs/design-public-market-desk.md`. Flag `VITE_FEATURE_ADMIN_LEARN` still gates the surface. |
 | **Product** | TIP-2 trading app |
 | **Related** | `docs/indicators/*`, `docs/patterns/*`, `frontend/src/pages/AdminUsersPage.jsx`, `backend/app/indicators/`, `backend/app/patterns/`, `frontend/src/config/featureFlags.ts` |
 

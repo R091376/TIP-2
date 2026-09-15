@@ -11,6 +11,7 @@ Blueprint file: [`render.yaml`](../render.yaml) at repo root.
 - **No session cookies** — works on mobile with split `tip2-web` / `tip2-api`.
 - No refresh token: after 8h the user logs in again.
 - Logout is client-side (discard token); server does not revoke JWTs.
+- **Public market desk:** unauthenticated `GET /api/watchlist`, `/api/market/*`, `/api/symbols/{id}/*`, `/api/pattern-alerts`, `/api/pattern-statistics`, and **`/ws/live`** are allowed. `GET /api/auth/me`, `/api/paper/*`, `/api/admin/*`, watchlist writes, instrument search, and research query still require JWT.
 
 ## Services
 
@@ -82,9 +83,11 @@ On **tip2-api** Environment:
 - [ ] Health UP
 - [ ] Login returns `accessToken` + `user`
 - [ ] `/api/auth/me` with Bearer → 200
-- [ ] Without Bearer → 401
+- [ ] `/api/auth/me` without Bearer → 401
+- [ ] Incognito `/` shows charts (no login wall); `GET /api/watchlist` without Bearer → 200
+- [ ] `/paper` while logged out → `/login?next=`
 - [ ] Mobile login works (no cookie dependency)
-- [ ] Watchlist + candles + live WS
+- [ ] Watchlist + candles + live WS as a guest
 
 ## If login fails on mobile
 

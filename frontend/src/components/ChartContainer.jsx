@@ -69,8 +69,8 @@ export default function ChartContainer() {
   /** Mobile dock: chart | alerts | watchlist (CSS shows dock ≤768px) */
   const [mobilePanel, setMobilePanel] = useState('chart')
 
-  /** Chart paper trade chrome (flag-gated; ChartHeader always mounts). */
-  const chartPaperTradeOn = isChartPaperTradeEnabled()
+  /** Chart paper trade chrome (flag + signed-in). Guests must not mount the strip. */
+  const chartPaperTradeOn = isChartPaperTradeEnabled() && Boolean(user)
   /** @type {[null | { side: 'BUY'|'SELL', instrumentKey: string, tradingSymbol: string }, Function]} */
   const [orderModal, setOrderModal] = useState(null)
   const [placeInFlight, setPlaceInFlight] = useState(false)

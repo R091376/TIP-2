@@ -5,7 +5,7 @@
 | **Document** | TIP-2 App Shell & Desk Layout Design |
 | **Author** | _(TBD)_ |
 | **Date** | 2026-07-30 |
-| **Status** | Draft (rev 3 — panel no-op + residual fixes) |
+| **Status** | Draft (rev 4 — public market desk: shell is public; login in header) |
 | **Scope** | Frontend layout/visual redesign; paper APIs stable |
 | **Reference mock** | `C:\Users\Khasim\Desktop\tradingapp\TIP-2\blxiF.jpg` |
 | **Related** | `docs/PRODUCT-DECISIONS.md`, Chart Paper Trade design, Manual Paper Trading design |
@@ -85,7 +85,7 @@ This design is **frontend-first**: reuse existing paper REST endpoints (`paperAp
 
 | # | Decision | Rationale |
 |---|----------|-----------|
-| K1 | **AppShell wraps authenticated routes** via nested React Router layout route; login stays **outside** shell as a sibling route | Single chrome source of truth; `RequireAuth` at layout boundary only |
+| K1 | **AppShell wraps the public market desk** (charts, stats, Learn) **and** private routes. `RequireAuth` is per-route on `/paper`, `/paper/orders`, `/admin/users` only. Dedicated `/login` stays a sibling; **header Login popover** is in-shell. Unknown routes → `/`. | Guests land on charts; same chrome for everyone. See `docs/design-public-market-desk.md` |
 | K2 | **Sidebar primary nav** maps: Dashboard→Pattern Stats (**provisional**); Charts→`/`; Watchlist→`/?panel=watchlist`; Orders→`/paper/orders`; Positions→`/paper`; Alerts→`/?panel=alerts` | Matches mock labels without inventing empty pages; Watchlist/Alerts remain chart-context (see [Panel deep-link contract](#panel-deep-link-contract)) |
 | K3 | **Chart height contract ships with shell (PR1)** — `.chart-page--in-shell` uses `height:100%` of main, never `100svh` under shell | Avoids shipping broken double-viewport layout; ResizeObserver alone is not sufficient |
 | K4 | **Positions become a dense table**; cards removed as primary layout | Mock + trading-desk density; Close action column |

@@ -70,15 +70,45 @@ def _ensure_regular_user(client: TestClient) -> dict:
     return {"username": "trader1", "password": "pass1234"}
 
 
-def test_unauthenticated_api_returns_401(secure_app):
+def test_public_market_desk_allows_unauthenticated_get(secure_app):
+    """Guest chart/watchlist/alerts/stats must not 401 (200 or 404/503 ok)."""
     client = secure_app
-    for path in (
+    paths = (
         "/api/watchlist",
         "/api/market/status",
         "/api/market/timeframes",
         "/api/market/symbol",
+        "/api/market/candles",
+        "/api/symbols/NSE_INDEX%7CNifty%2050/candles",
+        "/api/symbols/NSE_INDEX%7CNifty%2050/sr",
+        "/api/symbols/NSE_INDEX%7CNifty%2050/patterns",
+        "/api/symbols/NSE_INDEX%7CNifty%2050/statistics?patternType=breakout&timeframe=5m",
+        "/api/pattern-alerts",
+        "/api/pattern-statistics",
+        "/api/health",
+    )
+    for path in paths:
+        r = client.get(path)
+        assert r.status_code != 401, f"{path} must not 401, got {r.status_code}: {r.text}"
+
+    status = client.get("/api/market/status")
+    assert status.status_code == 200, status.text
+    body = status.json()
+    assert "liveFeed" not in body
+    assert "liveFeedConnected" in body
+
+
+def test_unauthenticated_private_api_returns_401(secure_app):
+    client = secure_app
+    for path in (
         "/api/auth/me",
         "/api/admin/users",
+        "/api/paper/account",
+        "/api/paper/orders",
+        "/api/paper/positions",
+        "/api/paper/ltp/NSE_EQ%7CX",
+        "/api/pattern-statistics/query",
+        "/api/instruments/search?q=REL",
     ):
         r = client.get(path)
         assert r.status_code == 401, f"{path} expected 401 got {r.status_code}: {r.text}"
@@ -178,7 +208,7 @@ def test_logout_is_stateless(secure_app):
     assert client.post("/api/auth/logout").status_code == 200
     assert client.get("/api/auth/me", headers=headers).status_code == 200
     assert client.get("/api/auth/me").status_code == 401
-    assert client.get("/api/watchlist").status_code == 401
+    assert client.get("/api/watchlist").status_code == 200
 
 
 def test_health_and_login_permit_all(secure_app):

@@ -50,6 +50,7 @@ export function paperTradeDisabledReason(
   user?: PaperTradableUser,
 ): string {
   if (!entry?.symbolId) return 'Select a symbol'
+  if (user == null) return 'Log in to paper trade'
   if (user?.tradingEnabled === false) return 'Trading disabled for your account'
   if (entry.active === false) return 'Symbol not active'
   if (normalizeStatus(entry.bootstrapStatus) === 'REMOVING') return 'Symbol not active'

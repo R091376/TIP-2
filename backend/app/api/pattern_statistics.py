@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from app.api.deps import AdminUser, AuthUser
+from app.api.deps import AdminUser
 
 router = APIRouter(prefix="/api/pattern-statistics", tags=["patterns"])
 
@@ -10,7 +10,6 @@ router = APIRouter(prefix="/api/pattern-statistics", tags=["patterns"])
 @router.get("")
 def bulk_statistics(
     request: Request,
-    _user: AuthUser,
     patternType: str | None = None,
     timeframe: str | None = None,
 ):

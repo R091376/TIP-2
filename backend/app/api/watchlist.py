@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel
 
-from app.api.deps import AdminUser, AuthUser
+from app.api.deps import AdminUser
 from app.market.session_policy import session_payload
 
 router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
@@ -28,7 +28,7 @@ def _entry_dto(e, cas_enabled: bool) -> dict:
 
 
 @router.get("")
-def list_watchlist(request: Request, _user: AuthUser):
+def list_watchlist(request: Request):
     c = request.app.state.container
     cas_on = bool(getattr(getattr(c, "settings", None), "cas_session_enabled", True))
     entries = c.watchlist_service.list_active()

@@ -7,8 +7,6 @@ from datetime import date, datetime
 from fastapi import APIRouter, HTTPException, Query, Request
 from zoneinfo import ZoneInfo
 
-from app.api.deps import AuthUser
-
 router = APIRouter(prefix="/api/pattern-alerts", tags=["patterns"])
 _IST = ZoneInfo("Asia/Kolkata")
 
@@ -16,7 +14,6 @@ _IST = ZoneInfo("Asia/Kolkata")
 @router.get("")
 def list_pattern_alerts(
     request: Request,
-    _user: AuthUser,
     day: str | None = Query(
         None,
         description="IST calendar day YYYY-MM-DD (default: today Asia/Kolkata)",

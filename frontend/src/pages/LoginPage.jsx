@@ -1,14 +1,14 @@
 import { useState } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
+import { resolveLoginNext } from '../auth/paths'
 import StartupStatus from '../auth/StartupStatus'
-import { isAdminLearnEnabled } from '../config/featureFlags'
-import { LEARN_INDEX_PATH } from '../learn/routing'
+import LoginForm from '../components/shell/LoginForm'
 import './authPages.css'
 
 /**
- * After login always land on the chart (`/`).
- * Do not restore /admin from location.state — that caused a flash of admin then chart.
+ * Dedicated login for deep-links and private-route recovery.
+ * Honor ?next= (and state.from) on both the already-signed-in branch and submit.
  */
 export default function LoginPage() {
   const {
@@ -21,13 +21,15 @@ export default function LoginPage() {
     clearError,
   } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const next = resolveLoginNext(searchParams.get('next'), location.state?.from)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const displayError = error || sessionError
 
-  // Feature-flagged readiness gate (API → Postgres → session) before login form.
   if (blocking && startup?.enabled) {
     return (
       <StartupStatus
@@ -39,9 +41,8 @@ export default function LoginPage() {
     )
   }
 
-  // Already signed in → chart only (never bounce through admin).
   if (!loading && user) {
-    return <Navigate to="/" replace />
+    return <Navigate to={next} replace />
   }
 
   function dismissErrors() {
@@ -55,7 +56,7 @@ export default function LoginPage() {
     dismissErrors()
     try {
       await login(username.trim(), password)
-      navigate('/', { replace: true })
+      navigate(next, { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
@@ -69,51 +70,26 @@ export default function LoginPage() {
         <h1 className="auth-card__title">TIP Login</h1>
         <p className="auth-card__hint">Paper trading platform — sign in to continue.</p>
 
-        <label className="auth-field">
-          <span>Username</span>
-          <input
-            autoComplete="username"
-            value={username}
-            onChange={(e) => {
-              setUsername(e.target.value)
-              if (displayError) dismissErrors()
-            }}
-            required
-            minLength={3}
-          />
-        </label>
+        <LoginForm
+          username={username}
+          password={password}
+          onUsername={(v) => {
+            setUsername(v)
+            if (displayError) dismissErrors()
+          }}
+          onPassword={(v) => {
+            setPassword(v)
+            if (displayError) dismissErrors()
+          }}
+          error={displayError}
+          submitting={submitting}
+          disabled={loading}
+          idPrefix="page-login"
+        />
 
-        <label className="auth-field">
-          <span>Password</span>
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value)
-              if (displayError) dismissErrors()
-            }}
-            required
-            minLength={4}
-          />
-        </label>
-
-        {displayError && (
-          <div className="auth-error" role="alert">
-            {displayError}
-          </div>
-        )}
-
-        <button type="submit" className="auth-submit" disabled={submitting || loading}>
-          {submitting ? 'Signing in…' : 'Sign in'}
-        </button>
-
-        {isAdminLearnEnabled() && (
-          <p className="auth-card__footer-link">
-            <Link to={LEARN_INDEX_PATH}>Browse Learn</Link>
-            <span> — how TIP calculates patterns &amp; indicators (no account needed)</span>
-          </p>
-        )}
+        <p className="auth-card__footer-link">
+          <Link to="/">Home</Link>
+        </p>
       </form>
     </div>
   )

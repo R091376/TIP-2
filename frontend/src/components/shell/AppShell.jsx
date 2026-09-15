@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../auth/useAuth'
+import { isPrivatePath } from '../../auth/paths'
+import StartupStatus from '../../auth/StartupStatus'
 import { ToastProvider } from '../../hooks/useToasts'
 import { getNavItems, isNavItemActive } from './navConfig'
 import NavIcon from './NavIcon'
 import AppMain from './AppMain'
 import AppSidebar from './AppSidebar'
+import '../../pages/authPages.css'
 import './shell.css'
 
 const LS_EXPANDED = 'tip.shell.sidebarExpanded'
@@ -26,14 +29,18 @@ function readExpandedDefault() {
 }
 
 /**
- * Authenticated app chrome: left sidebar + main outlet.
+ * Public app chrome: left sidebar + main outlet. Private pages nest RequireAuth.
  */
 export default function AppShell() {
-  const { user, isAdmin, logout } = useAuth()
+  const { user, isAdmin, logout, loading, blocking, startup } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const [expanded, setExpanded] = useState(readExpandedDefault)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const mobileNav = getNavItems({ isAdmin }).filter((n) => !n.adminOnly || isAdmin)
+  const mobileNav = getNavItems({
+    isAdmin,
+    isAuthenticated: Boolean(user),
+  }).filter((n) => !n.adminOnly || isAdmin)
 
   const toggleExpanded = useCallback(() => {
     setExpanded((prev) => {
@@ -49,6 +56,13 @@ export default function AppShell() {
 
   const closeDrawer = useCallback(() => setDrawerOpen(false), [])
   const openDrawer = useCallback(() => setDrawerOpen(true), [])
+
+  const handleLogout = useCallback(async () => {
+    if (isPrivatePath(location.pathname)) {
+      navigate('/', { replace: true })
+    }
+    await logout?.()
+  }, [location.pathname, logout, navigate])
 
   useEffect(() => {
     if (!drawerOpen) return undefined
@@ -85,6 +99,26 @@ export default function AppShell() {
     }
   }, [])
 
+  if (blocking || loading) {
+    if (startup?.enabled && blocking) {
+      return (
+        <StartupStatus
+          steps={startup.steps}
+          lastError={startup.lastError}
+          timedOut={startup.timedOut}
+          onRetry={startup.retry}
+        />
+      )
+    }
+    return (
+      <div className="auth-page">
+        <div className="auth-card">
+          <p className="auth-card__hint">Checking session…</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <ToastProvider>
       <div
@@ -100,7 +134,7 @@ export default function AppShell() {
         <AppSidebar
           user={user}
           isAdmin={isAdmin}
-          onLogout={() => logout?.()}
+          onLogout={handleLogout}
           expanded={expanded}
           onToggleExpanded={toggleExpanded}
           drawerOpen={drawerOpen}

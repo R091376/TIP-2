@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from app.api.deps import AuthUser
 from app.market.nse_clock import BootstrapStatus
 from app.market.session_policy import session_payload
 from app.watchlist.models import SymbolBootstrapStatus
@@ -22,7 +21,7 @@ def _candle_dto(c) -> dict:
 
 
 @router.get("/timeframes")
-def get_timeframes(request: Request, _user: AuthUser):
+def get_timeframes(request: Request):
     s = request.app.state.container.settings
     return {
         "defaultTimeframe": s.default_timeframe,
@@ -31,7 +30,7 @@ def get_timeframes(request: Request, _user: AuthUser):
 
 
 @router.get("/symbol")
-def get_symbol(request: Request, _user: AuthUser):
+def get_symbol(request: Request):
     c = request.app.state.container
     cas_on = bool(getattr(getattr(c, "settings", None), "cas_session_enabled", True))
     primary = c.watchlist_repo.find_primary()
@@ -67,7 +66,7 @@ def get_symbol(request: Request, _user: AuthUser):
 
 
 @router.get("/status")
-def get_status(request: Request, _user: AuthUser):
+def get_status(request: Request):
     c = request.app.state.container
     status = c.market_status.get_bootstrap_status()
     error = c.market_status.get_bootstrap_error()
@@ -82,7 +81,9 @@ def get_status(request: Request, _user: AuthUser):
             error = None
 
     last = c.market_status.get_last_seeded_at()
-    body = {
+    # Public market-desk endpoint: do not attach feed.diagnostics() (hasAccessToken,
+    # lastError, lastTickInstrument). Ops dump stays on GET /api/health.
+    return {
         "marketPhase": c.market_status.get_market_phase().value,
         "bootstrapStatus": status.value if isinstance(status, BootstrapStatus) else status,
         "bootstrapError": error,
@@ -90,19 +91,11 @@ def get_status(request: Request, _user: AuthUser):
         "liveFeedConnected": c.market_status.is_live_feed_connected(),
         "candleCount": c.market_status.get_seeded_candle_count(),
     }
-    feed = getattr(c, "feed_client", None)
-    if feed is not None and hasattr(feed, "diagnostics"):
-        try:
-            body["liveFeed"] = feed.diagnostics()
-        except Exception:
-            pass
-    return body
 
 
 @router.get("/candles")
 def get_candles(
     request: Request,
-    _user: AuthUser,
     from_: int | None = Query(None, alias="from"),
     to: int | None = None,
 ):

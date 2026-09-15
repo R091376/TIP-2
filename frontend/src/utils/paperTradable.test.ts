@@ -89,9 +89,13 @@ describe('paperTradeDisabledReason', () => {
     ).toBe(msg)
   })
 
+  it('guest with a symbol → Log in to paper trade', () => {
+    expect(paperTradeDisabledReason(eqReady, null)).toBe('Log in to paper trade')
+    expect(paperTradeDisabledReason(eqReady)).toBe('Log in to paper trade')
+  })
+
   it('valid EQ active READY → empty (enabled)', () => {
     expect(paperTradeDisabledReason(eqReady, { tradingEnabled: true })).toBe('')
-    expect(paperTradeDisabledReason(eqReady)).toBe('')
     expect(
       paperTradeDisabledReason(
         { ...eqReady, instrumentType: 'BE', bootstrapStatus: 'PENDING' },

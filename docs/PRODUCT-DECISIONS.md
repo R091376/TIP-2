@@ -1,6 +1,6 @@
 # Product decisions (review before each implementation phase)
 
-Last updated: 2026-07-29. Revisit when starting last-day replay or strategy bots.
+Last updated: 2026-09-15. Revisit when starting last-day replay or strategy bots.
 
 ## Market candles (NSE cash)
 
@@ -21,12 +21,12 @@ Last updated: 2026-07-29. Revisit when starting last-day replay or strategy bots
 |----------|--------|
 | Roles | `ADMIN` (you), `USER` (paper traders) |
 | Signup | Admin creates users (no public self-signup v1) |
-| Auth | JWT Bearer access token (8h), stored in browser. No OAuth. No session cookies. |
+| Auth | JWT Bearer access token (8h), stored in browser. No OAuth. No session cookies. **Public-read** market desk (watchlist GET, candles, alerts, stats, `/ws/live`) works without JWT. Paper, admin, `/me`, watchlist writes, instrument search, research query still require JWT. |
 | Admin powers | Create users, set passwords, seed cash, reset cash (wipes paper), enable/disable trading, deactivate |
 | Default admin | `admin` / `TIP_ADMIN_PASSWORD` (default `admin`) |
 | Starting cash | ₹100,000 INR (configurable `tip.users.default-seed-cash`) |
 | Storage | PostgreSQL `app_users` + `cash_ledger` |
-| **Learn education** | Standalone desk at `/learn` (sidebar **Learn**, not nested under Admin). Still **ADMIN-only** access. Beginner explanations of indicators/patterns. **Operator UX**, not ACL of proprietary math. Flag: `VITE_FEATURE_ADMIN_LEARN` (default ON). Design: `docs/design-admin-learn-education.md` |
+| **Learn education** | Standalone desk at `/learn` (sidebar **Learn**, not nested under Admin). **Public** (no login). Beginner explanations of indicators/patterns. Flag: `VITE_FEATURE_ADMIN_LEARN` (default ON). Design: `docs/design-admin-learn-education.md`. Historical admin-only draft superseded by `docs/design-public-market-desk.md` |
 
 ## Watchlist
 
@@ -34,7 +34,7 @@ Last updated: 2026-07-29. Revisit when starting last-day replay or strategy bots
 |----------|--------|
 | Scope | **Shared global** watchlist |
 | Mutate | **ADMIN only** (add/remove) |
-| Read | Any authenticated user |
+| Read | **Anyone** (guests included) |
 
 ## Paper trading (manual OMS) — v1
 
@@ -49,7 +49,7 @@ Last updated: 2026-07-29. Revisit when starting last-day replay or strategy bots
 | Fills | **Live Upstox ticks**; market fills on **next matcher tick** after accept |
 | Positions | **Separate lots** (no netting); close via `closeLotId` |
 | Product | **MIS** (force-flat 15:20 IST) / **CNC** (overnight) per order |
-| Side | Long and short |
+| Side | Long and short; **CNC cannot open a short** (SELL CNC requires `closeLotId`) |
 | Universe | Watchlist **NSE_EQ** equities only (EQ/BE); **no index** |
 | Capital | 1× cash lock; free = balance − locks; funding cap at fill |
 | Costs | **Zero** v1 |
@@ -62,8 +62,8 @@ Last updated: 2026-07-29. Revisit when starting last-day replay or strategy bots
 
 | Decision | Choice |
 |----------|--------|
-| Chrome | Left **sidebar** app shell for all authenticated routes; login stays outside shell |
-| Nav | Stats → Pattern Stats; Charts → `/`; Watchlist/Alerts → `/?panel=…` (chart rail); Orders → `/paper/orders`; Positions → `/paper` |
+| Chrome | Left **sidebar** app shell for the **public market desk** and private trading/admin. Login lives in the **sidebar footer** (popover opens to the right) plus dedicated `/login?next=`. Default landing is `/` (charts), not `/login`. Design: `docs/design-public-market-desk.md` |
+| Nav | Stats → Pattern Stats; Charts → `/`; Watchlist/Alerts → `/?panel=…` (chart rail). **Orders / Positions hidden until login.** Admin ADMIN-only. |
 | Positions UI | Three metric cards (Today P&L, Total P&L, closed-lot Win Rate) + dense table + Close |
 | Orders UI | Open Orders / Order History panel, client filters, Buy/Sell pills, Working residual qty, Cancel |
 | Flag | **`VITE_FEATURE_APP_SHELL`** (default **ON**); shell is the only authenticated layout |

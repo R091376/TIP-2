@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import UserAccountMenu from '../UserAccountMenu'
 import NavIcon from './NavIcon'
+import HeaderAuthControl from './HeaderAuthControl'
 import { buildPanelHref, getNavItems, isNavItemActive } from './navConfig'
 
 /**
@@ -17,7 +17,7 @@ export default function AppSidebar({
 }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const items = getNavItems({ isAdmin })
+  const items = getNavItems({ isAdmin, isAuthenticated: Boolean(user) })
 
   function handleNavClick(e, item) {
     if (item.panel) {
@@ -72,7 +72,12 @@ export default function AppSidebar({
         >
           {expanded ? '«' : '»'}
         </button>
-        <UserAccountMenu user={user} onLogout={onLogout} placement="top" />
+        <HeaderAuthControl
+          user={user}
+          onLogout={onLogout}
+          compact={!expanded}
+          placement="top"
+        />
       </div>
     </aside>
   )

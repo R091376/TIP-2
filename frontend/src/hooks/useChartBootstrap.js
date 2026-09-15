@@ -252,8 +252,8 @@ export function useChartBootstrap({
         setLoading(false)
       } catch (err) {
         if (!isStale()) {
-          // 401 is handled globally (clear session → RequireAuth → login).
-          // Avoid leaving a cryptic JSON/object banner on an empty chart shell.
+          // Public market GETs should not 401. If they do, http.ts still
+          // clears a stale Bearer; do not replace the chart with a JSON banner.
           if (!isUnauthorizedError(err)) {
             const msg =
               err instanceof Error

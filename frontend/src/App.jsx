@@ -4,8 +4,8 @@ import RequireAuth from './auth/RequireAuth'
 import ChartContainer from './components/ChartContainer'
 import ErrorBoundary from './components/ErrorBoundary'
 import AppShell from './components/shell/AppShell'
-import LearnLayout from './components/shell/LearnLayout'
 import { legacyAdminLearnToStandalone } from './learn/routing'
+import { isAdminLearnEnabled } from './config/featureFlags'
 import AdminUsersPage from './pages/AdminUsersPage'
 import LearnDetailPage from './pages/LearnDetailPage'
 import LearnIndexPage from './pages/LearnIndexPage'
@@ -24,6 +24,11 @@ function LegacyAdminLearnRedirect() {
   return <Navigate to={to} replace />
 }
 
+function RequireLearnFlag({ children }) {
+  if (!isAdminLearnEnabled()) return <Navigate to="/" replace />
+  return children
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -32,33 +37,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
 
-            {/* Public Learn — no login required (shareable / AI tools / login CTA) */}
-            <Route element={<LearnLayout />}>
-              <Route
-                path="learn"
-                element={
-                  <ErrorBoundary>
-                    <LearnIndexPage key="learn-index" />
-                  </ErrorBoundary>
-                }
-              />
-              <Route
-                path="learn/:kind/:slug"
-                element={
-                  <ErrorBoundary>
-                    <LearnDetailPage key="learn-detail" />
-                  </ErrorBoundary>
-                }
-              />
-            </Route>
-
-            <Route
-              element={
-                <RequireAuth>
-                  <AppShell />
-                </RequireAuth>
-              }
-            >
+            <Route element={<AppShell />}>
               <Route
                 index
                 element={
@@ -68,27 +47,51 @@ function App() {
                 }
               />
               <Route
-                path="paper"
-                element={
-                  <ErrorBoundary>
-                    <PaperTradingPage key="paper-trading" />
-                  </ErrorBoundary>
-                }
-              />
-              <Route
-                path="paper/orders"
-                element={
-                  <ErrorBoundary>
-                    <PaperOrdersPage key="paper-orders" />
-                  </ErrorBoundary>
-                }
-              />
-              <Route
                 path="patterns/stats"
                 element={
                   <ErrorBoundary>
                     <PatternStatsPage key="pattern-stats" />
                   </ErrorBoundary>
+                }
+              />
+              <Route
+                path="learn"
+                element={
+                  <RequireLearnFlag>
+                    <ErrorBoundary>
+                      <LearnIndexPage key="learn-index" />
+                    </ErrorBoundary>
+                  </RequireLearnFlag>
+                }
+              />
+              <Route
+                path="learn/:kind/:slug"
+                element={
+                  <RequireLearnFlag>
+                    <ErrorBoundary>
+                      <LearnDetailPage key="learn-detail" />
+                    </ErrorBoundary>
+                  </RequireLearnFlag>
+                }
+              />
+              <Route
+                path="paper"
+                element={
+                  <RequireAuth>
+                    <ErrorBoundary>
+                      <PaperTradingPage key="paper-trading" />
+                    </ErrorBoundary>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="paper/orders"
+                element={
+                  <RequireAuth>
+                    <ErrorBoundary>
+                      <PaperOrdersPage key="paper-orders" />
+                    </ErrorBoundary>
+                  </RequireAuth>
                 }
               />
               <Route
@@ -107,7 +110,7 @@ function App() {
             {/* Old nested URLs after Learn was moved out of Admin */}
             <Route path="/admin/learn/*" element={<LegacyAdminLearnRedirect />} />
             <Route path="/admin/learn" element={<LegacyAdminLearnRedirect />} />
-            <Route path="*" element={<Navigate to="/login" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

@@ -1,4 +1,7 @@
-"""Live WebSocket subscribe validation edge cases."""
+"""Live WebSocket subscribe validation edge cases.
+
+Anonymous connect is intentional (public market desk). Subscribe is watchlist-bounded.
+"""
 
 from __future__ import annotations
 

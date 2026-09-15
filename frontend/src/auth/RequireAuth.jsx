@@ -1,5 +1,6 @@
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './useAuth'
+import { loginUrl } from './paths'
 import StartupStatus from './StartupStatus'
 import '../pages/authPages.css'
 
@@ -30,7 +31,8 @@ export default function RequireAuth({ children, adminOnly = false }) {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace state={{ from: location }} />
+    const next = `${location.pathname}${location.search}`
+    return <Navigate to={loginUrl(next)} replace state={{ from: next }} />
   }
 
   if (adminOnly && !isAdmin) {
