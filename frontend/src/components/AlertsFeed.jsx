@@ -6,6 +6,8 @@
 
 import { useMemo, useState } from 'react'
 import { ALERTS_MAX, filterVisibleAlerts } from '../utils/alertList'
+import { PATTERN_TYPE_IDS, formatPatternTypeLabel } from '../utils/patternCatalog'
+import { getDefaultTimeframes } from '../services/marketApi'
 
 const MAX_VISIBLE = ALERTS_MAX
 const ALL = ''
@@ -62,11 +64,6 @@ function shortSymbol(symbolId, displayName) {
   return pipe >= 0 ? symbolId.slice(pipe + 1) : symbolId
 }
 
-function formatPatternLabel(patternType) {
-  if (!patternType) return 'Pattern'
-  return String(patternType).replace(/_/g, ' ')
-}
-
 function sortTf(a, b) {
   const order = { '1m': 1, '5m': 5, '15m': 15, '1h': 60, '4h': 240, '1d': 1440 }
   const da = order[a] ?? 9999
@@ -94,6 +91,9 @@ export default function AlertsFeed({
 
   const symbolOptions = useMemo(() => {
     const map = new Map()
+    for (const [id, label] of Object.entries(symbolLabels || {})) {
+      if (id) map.set(id, label || shortSymbol(id))
+    }
     for (const a of visibleAlerts) {
       if (!a?.symbolId || map.has(a.symbolId)) continue
       map.set(
@@ -107,7 +107,7 @@ export default function AlertsFeed({
   }, [visibleAlerts, symbolLabels])
 
   const timeframeOptions = useMemo(() => {
-    const set = new Set()
+    const set = new Set(getDefaultTimeframes())
     for (const a of visibleAlerts) {
       if (a?.timeframe) set.add(a.timeframe)
     }
@@ -115,12 +115,12 @@ export default function AlertsFeed({
   }, [visibleAlerts])
 
   const patternOptions = useMemo(() => {
-    const set = new Set()
+    const set = new Set(PATTERN_TYPE_IDS)
     for (const a of visibleAlerts) {
       if (a?.patternType) set.add(a.patternType)
     }
     return [...set].sort((a, b) =>
-      formatPatternLabel(a).localeCompare(formatPatternLabel(b)),
+      formatPatternTypeLabel(a).localeCompare(formatPatternTypeLabel(b)),
     )
   }, [visibleAlerts])
 
@@ -202,8 +202,7 @@ export default function AlertsFeed({
         </div>
       </div>
 
-      {total > 0 && (
-        <div className="alerts-feed__filters" aria-label="Filter alerts">
+      <div className="alerts-feed__filters" aria-label="Filter alerts">
           <label className="alerts-feed__filter">
             <span className="alerts-feed__filter-label">Symbol</span>
             <select
@@ -246,7 +245,7 @@ export default function AlertsFeed({
               <option value={ALL}>All</option>
               {patternOptions.map((p) => (
                 <option key={p} value={p}>
-                  {formatPatternLabel(p)}
+                  {formatPatternTypeLabel(p)}
                 </option>
               ))}
             </select>
@@ -263,9 +262,8 @@ export default function AlertsFeed({
             </button>
           )}
         </div>
-      )}
 
-      {total === 0 ? (
+      {total === 0 && !filtersActive ? (
         <p className="alerts-feed__empty">
           Live pattern events appear here while the app is open. Requires Postgres
           patterns enabled on the backend. Click an alert to show the full instance
@@ -273,7 +271,9 @@ export default function AlertsFeed({
         </p>
       ) : items.length === 0 ? (
         <p className="alerts-feed__empty">
-          No alerts match the current filters.
+          {total === 0
+            ? 'No matching alerts yet — waiting for this filter.'
+            : 'No alerts match the current filters.'}
           <button
             type="button"
             className="alerts-feed__empty-reset"
@@ -334,7 +334,7 @@ export default function AlertsFeed({
                   <div className="alerts-feed__row-main">
                     <span className="alerts-feed__symbol">{label}</span>
                     <span className="alerts-feed__pattern">
-                      {formatPatternLabel(a.patternType)}
+                      {formatPatternTypeLabel(a.patternType)}
                       {a.direction ? ` · ${a.direction}` : ''}
                     </span>
                   </div>

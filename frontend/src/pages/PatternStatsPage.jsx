@@ -10,6 +10,7 @@ import {
   fetchPatternStatistics,
   fetchResearchStatistics,
 } from '../services/patternStatisticsApi'
+import { PATTERN_TYPE_IDS } from '../utils/patternCatalog'
 import {
   BUILTIN_STACK_PRESETS,
   DEFAULT_MAX_RISK_R,
@@ -31,25 +32,9 @@ const TIMEFRAMES = isTimeframe1mEnabled()
   ? ['all', '1m', '5m', '15m', '1h', '4h', '1d']
   : ['all', '5m', '15m', '1h', '4h', '1d']
 const RESEARCH_TFS = ['5m', '15m', '1h', '4h', '1d']
-const RESEARCH_TYPES = [
-  'breakout',
-  'breakdown',
-  'volume_breakout',
-  'consolidation',
-  'hammer',
-  'shooting_star',
-  'bullish_engulfing',
-  'bearish_engulfing',
-  'inside_bar',
-  'higher_high',
-  'lower_low',
-  'double_bottom',
-  'double_top',
-  'head_shoulders',
-  'inverse_head_shoulders',
-]
-/** Base options; live types from data are merged in. */
-const BASE_PATTERN_TYPES = ['all', 'breakout', 'breakdown']
+const RESEARCH_TYPES = [...PATTERN_TYPE_IDS]
+/** Full catalog — do not derive from filtered rows or the dropdown collapses. */
+const DASHBOARD_PATTERN_TYPES = ['all', ...RESEARCH_TYPES]
 
 const SORT_OPTIONS = [
   { value: 'expectedR', label: 'Expected R (WR × plan R:R − loss)' },
@@ -352,17 +337,6 @@ export default function PatternStatsPage() {
     }
   }, [mode, loadResearch, loadDashboard])
 
-  const patternTypeOptions = useMemo(() => {
-    const fromData = new Set(
-      items.map((i) => i.patternType).filter(Boolean).map((t) => String(t).toLowerCase()),
-    )
-    const merged = [...BASE_PATTERN_TYPES]
-    for (const t of fromData) {
-      if (!merged.includes(t)) merged.push(t)
-    }
-    return merged
-  }, [items])
-
   const filtered = useMemo(() => {
     const q = symbolQuery.trim().toLowerCase()
     let rows = items
@@ -520,9 +494,9 @@ export default function PatternStatsPage() {
             <label>
               Pattern
               <select value={patternType} onChange={(e) => setPatternType(e.target.value)}>
-                {patternTypeOptions.map((p) => (
+                {DASHBOARD_PATTERN_TYPES.map((p) => (
                   <option key={p} value={p}>
-                    {p === 'all' ? 'All' : p}
+                    {p === 'all' ? 'All' : p.replace(/_/g, ' ')}
                   </option>
                 ))}
               </select>
