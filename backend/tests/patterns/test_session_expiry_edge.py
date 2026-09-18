@@ -61,6 +61,8 @@ def test_4h_expires_at_max_sessions():
 
 def test_phase_changed_only_expires_on_closed():
     settings = Settings()
+    # Global CLOSED only expires when CAS per-symbol CTS is off.
+    object.__setattr__(settings, "cas_session_enabled", False)
     store = ActiveInstanceStore()
     journal = InMemoryPatternJournal()
     rec = SessionExpiryReconciler(settings, store, journal, CandleEngine())

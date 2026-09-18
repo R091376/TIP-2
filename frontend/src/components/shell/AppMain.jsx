@@ -5,6 +5,7 @@ function pageTitle(pathname) {
   if (pathname === '/paper' || pathname === '/paper/') return 'Positions'
   if (pathname.startsWith('/patterns/stats')) return 'Stats'
   if (pathname === '/learn' || pathname.startsWith('/learn/')) return 'Learn'
+  if (pathname.startsWith('/backtest')) return 'Backtest'
   if (pathname.startsWith('/admin')) return 'Admin'
   return 'Charts'
 }

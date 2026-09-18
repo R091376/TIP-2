@@ -12,6 +12,7 @@ export type PatternInstanceDto = {
   status?: string
   flagConfirmed?: boolean
   flagRetested?: boolean
+  flagReclaimed?: boolean
   flagStrengthened?: boolean
   referenceLevel?: number
   lookbackHigh?: number

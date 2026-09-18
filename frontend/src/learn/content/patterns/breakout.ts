@@ -13,25 +13,27 @@ export const breakout: LearnTopic = {
   plottedOnChart: false,
   plainEnglish: [
     'A breakout means price closed above a recent ceiling — the highest high of the previous 20 bars (not including the breakout bar itself).',
-    'TIP then watches whether volume and/or later closes confirm the move, whether price retests the breakout level, and whether a virtual long reaches a target or fails.',
+    'TIP then watches whether volume and/or later closes confirm the move, whether price retests the breakout level, whether it reclaims the detect close, and whether a virtual long reaches a target or fails.',
     'This is a long-only setup. Everything runs on closed candles only (no mid-bar repaint).',
   ],
   howWeCalculate: [
     'On each closed bar, compute the prior Donchian high over 20 bars before this bar.',
     'If close > that reference, ATR is available, and anti-spam allows it, emit Detected and freeze the reference.',
     'Confirmation (default both): detect-bar volume ≥ 1.5 × prior volume SMA, and a later bar still closes above reference.',
-    'Retest: a later low comes within 0.25×ATR of reference without closing below it.',
+    'Retest: a later low comes within 0.25×ATR of reference without closing below it. Does not need confirmation.',
+    'Reclaim: after a retest, a later bar closes above the detect-bar entry. Same bar as the retest counts as reclaim only if it is bullish and closes above entry; a bearish same-bar is retest only.',
     'Strengthen: price extends about 1×ATR beyond reference.',
-    'Succeeded: price reaches the target (retest-based or 2×ATR without retest). Failed: close back below reference.',
+    'Succeeded: price reaches the detect-time target (about 2×ATR above reference). Failed: close back below reference. Retest and reclaim are flags only — they do not move entry, stop, or target.',
   ],
   formulaPlain:
-    'Reference = max high of the prior 20 bars. Detected when close > reference. Target with retest uses about 2× the risk from retest floor; without retest, about 2×ATR above reference.',
+    'Reference = max high of the prior 20 bars. Detected when close > reference. Target and entry stay frozen at detect. A later retest / reclaim only set flags.',
   formulaFormal:
     'reference = max(high_{t−20} … high_{t−1})\n' +
     'Detected when close_t > reference (ATR available)\n' +
     'volume ok: vol_t ≥ 1.5 × prior_SMA20(volume)\n' +
-    'retest: low ≤ reference + 0.25×ATR and close ≥ reference\n' +
-    'target (no retest) ≈ reference + 2×ATR',
+    'retest: after detect, low ≤ reference + 0.25×ATR and close ≥ reference (flag only; no confirm required)\n' +
+    'reclaim: after retest, close > detect entry; same-bar reclaim only if bullish\n' +
+    'target ≈ reference + 2×ATR (frozen at detect)',
   workedExample: {
     narrative:
       'Prior ceiling 100, ATR 2, detect close 101. Success hits target 104; fail closes back under 100. Both paths track MFE and MAE.',
@@ -39,7 +41,7 @@ export const breakout: LearnTopic = {
       { label: 'Prior Donchian high (reference)', value: '100' },
       { label: 'ATR at detect', value: '2' },
       { label: 'Detect close / high / low', value: '101 / 101.5 / 100.2' },
-      { label: 'No-retest target', value: '100 + 2×2 = 104' },
+      { label: 'Target', value: '100 + 2×2 = 104' },
     ],
     steps: [
       'Detect freezes entry 101, stop 100, target 104, ATR 2',
@@ -195,42 +197,76 @@ export const breakout: LearnTopic = {
       },
       {
         id: 'retest-target',
-        title: 'Optional: retest can rewrite the target',
+        title: 'Retest is a quality flag — target stays frozen',
         narrative:
-          'After confirm, if price dips into the retest band near the reference without closing below it, TIP may set a measured target from the retest floor.',
+          'After detect (confirmation not required), if price dips into the retest band near the reference without closing below it, TIP sets flag_retested and records the retest floor. The take-profit stays the detect-time ATR target.',
         setup: [
           { label: 'Reference', value: '100' },
           { label: 'ATR', value: '2' },
+          { label: 'Detect target', value: '100 + 2×2 = 104' },
           { label: 'Retest band (0.25×ATR)', value: '100 + 0.5 = up to 100.5 zone' },
           { label: 'Example retest floor (low)', value: '99.5 (still close ≥ 100)' },
-          { label: 'Risk', value: '100 − 99.5 = 0.5' },
-          { label: 'New target (success_rr = 2)', value: '100 + 2×0.5 = 101' },
         ],
         diagram: {
           type: 'candles',
-          title: 'Retest rewrites target 104 → 101',
+          title: 'Retest flags the setup; target stays 104',
           caption:
-            'After detect, a retest dips to floor 99.5 while close stays ≥ 100. Measured target becomes ref + 2× risk = 101 (green). Old ATR target 104 is no longer the active success line.',
+            'After detect, a retest dips to floor 99.5 while close stays ≥ 100. flag_retested turns on. Success is still high ≥ 104.',
           candles: [
             { o: 100.5, h: 101.5, l: 100.2, c: 101, label: 'Detect', emphasis: true },
             { o: 101, h: 102, l: 100.8, c: 101.2, label: 'Hold' },
             { o: 101, h: 101.2, l: 99.5, c: 100.2, label: 'Retest' },
-            { o: 100.5, h: 101.5, l: 100.3, c: 101.3, label: 'New tgt' },
+            { o: 100.5, h: 101.5, l: 100.3, c: 101.3, label: 'Still 104' },
           ],
           levels: [
-            { price: 104, label: 'Old tgt', kind: 'other' },
-            { price: 101, label: 'New tgt', kind: 'target' },
+            { price: 104, label: 'Target', kind: 'target' },
             { price: 100, label: 'Ref/Stop', kind: 'reference' },
             { price: 99.5, label: 'Retest fl', kind: 'stop' },
           ],
         },
         steps: [
-          'Initial no-retest target was 104; after a valid retest with floor under reference, target becomes reference + 2× risk.',
-          'MFE/MAE continue updating from highs/lows independently of that rewrite.',
-          'Success still means price reaches whatever the current target is.',
+          'Detect freezes target at 104. A valid retest only sets flag_retested and retest_floor.',
+          'MFE/MAE continue updating from highs/lows independently of the flag.',
+          'Success still means price reaches the original target.',
         ],
         result:
-          'Retest changes the success rule (target), not the definition of MFE/MAE.',
+          'Require-retest filters which setups you take. It never moves the rails.',
+      },
+      {
+        id: 'reclaim',
+        title: 'Reclaim is a later close through detect entry',
+        narrative:
+          'Entry stays the detect close. After a retest, a later close back above that entry is Reclaimed. If one bar both tags the retest band and closes above entry, a bullish candle is reclaim; a bearish candle is retest only.',
+        setup: [
+          { label: 'Reference', value: '100' },
+          { label: 'Detect entry', value: '101' },
+          { label: 'ATR', value: '2' },
+          { label: 'Retest band', value: 'up to 100.5' },
+        ],
+        diagram: {
+          type: 'candles',
+          title: 'Retest then reclaim — entry stays 101',
+          caption:
+            'Bar 2 dips to the retest band and closes near the reference (retest only). Bar 3 is bullish and closes above 101 → reclaim. Rails do not move.',
+          candles: [
+            { o: 100.5, h: 101.5, l: 100.2, c: 101, label: 'Detect', emphasis: true },
+            { o: 101, h: 102, l: 100.8, c: 101.2, label: 'Hold' },
+            { o: 101, h: 101.2, l: 99.8, c: 100.2, label: 'Retest' },
+            { o: 100.4, h: 101.8, l: 100.3, c: 101.4, label: 'Reclaim' },
+          ],
+          levels: [
+            { price: 104, label: 'Target', kind: 'target' },
+            { price: 101, label: 'Entry', kind: 'entry' },
+            { price: 100, label: 'Ref/Stop', kind: 'reference' },
+          ],
+        },
+        steps: [
+          'Detect freezes entry at 101. Retest and reclaim never rewrite it.',
+          'A bearish dip into the band that closes under entry is retest only.',
+          'A later close above 101 is reclaim. Same-bar reclaim needs a bullish close above entry.',
+        ],
+        result:
+          'Reclaim is a quality stage (chart marker RCL). The virtual trade still uses the detect-time entry.',
       },
     ],
   },
@@ -239,17 +275,18 @@ export const breakout: LearnTopic = {
     tipParam('breakout.volume_avg_period', 'Bars in prior volume average'),
     tipParam('breakout.confirmation_mode', 'volume | close | both | close_fallback'),
     tipParam('breakout.volume_multiplier', 'Detect volume must be ≥ this × prior SMA'),
-    tipParam('breakout.retest_atr_mult', 'How close a dip to reference counts as retest'),
+    tipParam('breakout.retest_atr_mult', 'How close a dip to reference counts as retest (flag only)'),
     tipParam('breakout.strengthen_atr_mult', 'Extension beyond reference for Strengthened'),
-    tipParam('breakout.success_rr', 'Reward multiple vs risk after retest'),
-    tipParam('breakout.success_atr_mult_without_retest', 'Target distance in ATR if no retest'),
+    tipParam('breakout.success_rr', 'Unused. Retest is a flag only and never rewrites target'),
+    tipParam('breakout.success_atr_mult_without_retest', 'Target distance in ATR, frozen at detect'),
     tipParam('breakout.detector_version', 'Journal / support version tag', { advanced: true }),
     tipParam('atr_period', 'ATR length used for bands and R-unit'),
   ],
   lifecycle: [
     'Detected: close above prior 20-high; reference frozen',
     'Confirmed: volume and/or later close still above reference (mode-dependent)',
-    'Retested: dip near reference without closing below',
+    'Retested: dip near reference without closing below (no confirm required)',
+    'Reclaimed: after retest, close above the detect entry (same-bar only if bullish)',
     'Strengthened: extension about 1×ATR beyond reference',
     'Succeeded: target reached on a closed bar',
     'Failed: close back below reference',
@@ -269,6 +306,6 @@ export const breakout: LearnTopic = {
   sourceDocs: ['docs/patterns/breakout.md'],
   sourceCode: ['backend/app/patterns/breakout.py'],
   externalSources: BREAKOUT_SOURCES,
-  lastReviewed: '2026-08-04',
+  lastReviewed: '2026-09-18',
   detectorVersionHint: 'breakout-v1',
 }

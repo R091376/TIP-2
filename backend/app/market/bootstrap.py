@@ -69,9 +69,13 @@ class MarketBootstrapService:
         self._instruments = instruments
         self._close_by_key: dict[str, int] = {}
         self._daily_sr = None
+        self._warehouse = None
 
     def set_daily_sr_service(self, svc) -> None:
         self._daily_sr = svc
+
+    def set_warehouse(self, warehouse) -> None:
+        self._warehouse = warehouse
 
     def _cas_enabled(self) -> bool:
         return bool(getattr(self._settings, "cas_session_enabled", True))
@@ -184,6 +188,15 @@ class MarketBootstrapService:
                 self._engine.seed(
                     symbol_id, timeframe, seed_candles, close_minutes=close
                 )
+                if seed_candles and self._warehouse is not None:
+                    try:
+                        self._warehouse.upsert_many(
+                            symbol_id, timeframe, seed_candles, source="historical"
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Warehouse seed upsert failed %s %s", symbol_id, timeframe
+                        )
                 if not seed_candles:
                     errors.append(f"{timeframe}: empty seed (no candles)")
                     logger.warning(

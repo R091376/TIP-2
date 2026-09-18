@@ -15,7 +15,8 @@ def current_user(request: Request):
     Public market-desk GETs (watchlist list, market, symbols candles/sr/patterns/
     statistics, pattern-alerts, bulk pattern-statistics) do **not** use this
     dependency. Keep AuthUser on /api/auth/me, /api/paper/*, instrument search.
-    Keep AdminUser on /api/admin/users, watchlist mutate, research query.
+    Keep AdminUser on /api/admin/users, watchlist mutate, research query,
+    /api/backtests.
     """
     settings = request.app.state.container.settings
     if settings.is_memory_profile:

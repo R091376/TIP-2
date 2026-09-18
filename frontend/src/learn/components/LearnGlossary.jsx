@@ -48,6 +48,16 @@ const PATTERN_TERMS = [
     gloss:
       'volume = busy volume on detect bar; close = later bar still beyond level; both = both (default); close_fallback = volume unusable so close-only.',
   },
+  {
+    term: 'Retest',
+    gloss:
+      'After detect, a later bar tags the ATR band around the frozen reference without closing back through it. Independent of confirmation. Chart marker: RT.',
+  },
+  {
+    term: 'Reclaim',
+    gloss:
+      'After a retest, a close back through the detect-bar entry. Same bar as the retest only counts if the candle is in trade direction (bullish long / bearish short). Does not move entry, stop, or target. Chart marker: RCL.',
+  },
 ]
 
 const STATS_TERMS = [
@@ -134,7 +144,7 @@ const STATS_TERMS = [
   {
     term: 'Planned rails',
     gloss:
-      'The frozen trade offer at detect (or after rail rewrites): entry, stop, and target. From these TIP computes risk, reward, and plan R:R. Consolidation is not a classic long/short offer and is excluded from rails averages.',
+      'The frozen trade offer at detect: entry, stop, and target. Retest is a quality flag and does not move the target. From these TIP computes risk, reward, and plan R:R. Consolidation is not a classic long/short offer and is excluded from rails averages.',
   },
   {
     term: 'Risk (R) / avgRiskR',

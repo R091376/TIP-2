@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import (
     admin_users,
     auth,
+    backtests,
     health,
     instruments,
     market,
@@ -97,6 +98,7 @@ def create_app() -> FastAPI:
     app.include_router(instruments.router)
     app.include_router(pattern_statistics.router)
     app.include_router(pattern_alerts.router)
+    app.include_router(backtests.router)
     if settings.paper_enabled:
         app.include_router(paper.router)
     app.include_router(live_ws.router)

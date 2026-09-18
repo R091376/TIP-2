@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from app.patterns.models import PatternDirection, PatternStage, PatternStageEvent, PatternType, new_pattern
 from app.patterns.planned_rails import (
     compute_planned_rails,
+    passes_max_risk_r,
     passes_min_risk_r,
     planned_rails_from_pattern,
 )
@@ -147,6 +148,33 @@ def test_passes_min_risk_r_threshold():
         atr_at_detect=1.0,
     )
     assert passes_min_risk_r(boundary, 0.3) is True
+
+
+def test_passes_max_risk_r_threshold():
+    wide = new_pattern(
+        pattern_type=PatternType.BREAKOUT,
+        symbol_id="X",
+        timeframe="5m",
+        direction=PatternDirection.LONG,
+        entry_price=102.0,
+        stop_level=100.0,
+        target_level=106.0,
+        atr_at_detect=1.0,
+    )
+    ok = new_pattern(
+        pattern_type=PatternType.BREAKOUT,
+        symbol_id="X",
+        timeframe="5m",
+        direction=PatternDirection.LONG,
+        entry_price=101.0,
+        stop_level=100.0,
+        target_level=104.0,
+        atr_at_detect=1.0,
+    )
+    assert passes_max_risk_r(wide, 1.5) is False  # 2.0 ATR
+    assert passes_max_risk_r(ok, 1.5) is True
+    assert passes_max_risk_r(wide, None) is True
+    assert passes_max_risk_r(wide, 0) is True
 
 
 def test_passes_min_risk_consolidation_always():

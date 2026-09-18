@@ -23,7 +23,7 @@ export type ConfigKnob = { key: string; value: string; label: string }
 /** Human labels for common detector knobs shown in the inspect panel. */
 const KNOB_LABELS: Record<string, string> = {
   success_atr_mult: 'Target ATR mult',
-  success_atr_mult_without_retest: 'Target ATR mult (no retest)',
+  success_atr_mult_without_retest: 'Target ATR mult',
   success_rr: 'Success R:R',
   retest_atr_mult: 'Retest band (×ATR)',
   strengthen_atr_mult: 'Strengthen (×ATR)',
@@ -57,7 +57,6 @@ export function patternConfigKnobs(patternType: string | null | undefined): Conf
   const preferred = [
     'success_atr_mult',
     'success_atr_mult_without_retest',
-    'success_rr',
     'retest_atr_mult',
     'strengthen_atr_mult',
     'min_range_atr_mult',

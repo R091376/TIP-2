@@ -106,6 +106,17 @@ export function isWoodieSrOverlayEnabled(): boolean {
   )
 }
 
+/**
+ * VITE_FEATURE_BACKTEST — admin Backtest page (pattern replay + simulated trades).
+ * Default ON. Backend TIP_BACKTEST_ENABLED is the API source of truth.
+ */
+export function isBacktestEnabled(): boolean {
+  return envTruthy(
+    import.meta.env.VITE_FEATURE_BACKTEST as string | undefined,
+    true,
+  )
+}
+
 /** Max time to wait for API + Postgres before showing Retry (ms). */
 export const STARTUP_READY_TIMEOUT_MS = 180_000
 

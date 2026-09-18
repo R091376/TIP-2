@@ -7,7 +7,7 @@ from app.indicators.atr import AtrIndicator
 from app.indicators.donchian import DonchianIndicator
 from app.indicators.volume_sma import VolumeSmaIndicator
 from app.market.models import Candle
-from app.patterns.lifecycle_support import stage_event
+from app.patterns.lifecycle_support import apply_retest_reclaim, stage_event
 from app.patterns.models import (
     ActivePattern,
     BarEvaluation,
@@ -102,6 +102,8 @@ def lifecycle_breakout(
         events.append(stage_event(instance, PatternStage.FAILED, candle, now))
         return events
 
+    apply_retest_reclaim(instance, candle, config, now, events)
+
     if candle.high >= instance.target_level:
         instance.mark_terminal(
             FinalOutcome.SUCCEEDED, PatternStage.SUCCEEDED, "price_target", candle.close
@@ -113,16 +115,6 @@ def lifecycle_breakout(
         instance.flag_confirmed = True
         instance.confirmed_at = now
         events.append(stage_event(instance, PatternStage.CONFIRMED, candle, now))
-
-    if instance.flag_confirmed and not instance.flag_retested:
-        retest_band = ref + float(config.get("retest_atr_mult", 0.25)) * atr
-        if candle.low <= retest_band and candle.close >= ref:
-            instance.flag_retested = True
-            instance.retest_floor = candle.low
-            if candle.low < ref:
-                risk = ref - candle.low
-                instance.target_level = ref + float(config.get("success_rr", 2.0)) * risk
-            events.append(stage_event(instance, PatternStage.RETESTED, candle, now))
 
     if instance.flag_confirmed and not instance.flag_strengthened:
         if candle.high >= ref + float(config.get("strengthen_atr_mult", 1.0)) * atr:

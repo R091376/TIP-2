@@ -625,3 +625,37 @@ def test_geometry_round_trip_and_fill_if_null(journal):
         assert row is not None
         assert row.geometry_json == geo
 
+
+def test_persist_reclaimed_stays_open(journal):
+    j, sf = journal
+    p = _pattern()
+    now = datetime.now(timezone.utc)
+    p.flag_retested = True
+    p.flag_reclaimed = True
+    p.refresh_display_status()
+    j.persist_lifecycle(
+        p,
+        [
+            PatternStageEvent(p.id, PatternStage.DETECTED, p.detect_candle_time, 101.0, now),
+            PatternStageEvent(p.id, PatternStage.RETESTED, p.detect_candle_time + 300, 100.2, now),
+            PatternStageEvent(p.id, PatternStage.RECLAIMED, p.detect_candle_time + 600, 101.4, now),
+        ],
+    )
+    open_list = j.find_open("NSE_EQ|TEST", "5m")
+    assert len(open_list) == 1
+    assert open_list[0].flag_reclaimed is True
+    assert open_list[0].flag_retested is True
+    assert open_list[0].status == PatternStage.RECLAIMED
+    with sf() as s:
+        row = s.get(PatternInstanceRow, p.id)
+        assert row is not None
+        assert row.flag_reclaimed is True
+        types = {
+            e.event_type
+            for e in s.scalars(
+                select(PatternEventRow).where(PatternEventRow.pattern_instance_id == p.id)
+            ).all()
+        }
+        assert "reclaimed" in types
+        assert "retested" in types
+

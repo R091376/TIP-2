@@ -5,7 +5,7 @@ import ChartContainer from './components/ChartContainer'
 import ErrorBoundary from './components/ErrorBoundary'
 import AppShell from './components/shell/AppShell'
 import { legacyAdminLearnToStandalone } from './learn/routing'
-import { isAdminLearnEnabled } from './config/featureFlags'
+import { isAdminLearnEnabled, isBacktestEnabled } from './config/featureFlags'
 import AdminUsersPage from './pages/AdminUsersPage'
 import LearnDetailPage from './pages/LearnDetailPage'
 import LearnIndexPage from './pages/LearnIndexPage'
@@ -13,6 +13,7 @@ import LoginPage from './pages/LoginPage'
 import PaperOrdersPage from './pages/PaperOrdersPage'
 import PaperTradingPage from './pages/PaperTradingPage'
 import PatternStatsPage from './pages/PatternStatsPage'
+import BacktestPage from './pages/BacktestPage'
 import './App.css'
 import './pages/authPages.css'
 import './styles/tokens.css'
@@ -92,6 +93,20 @@ function App() {
                       <PaperOrdersPage key="paper-orders" />
                     </ErrorBoundary>
                   </RequireAuth>
+                }
+              />
+              <Route
+                path="backtest"
+                element={
+                  isBacktestEnabled() ? (
+                    <RequireAuth adminOnly>
+                      <ErrorBoundary>
+                        <BacktestPage key="backtest" />
+                      </ErrorBoundary>
+                    </RequireAuth>
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
                 }
               />
               <Route

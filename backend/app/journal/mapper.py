@@ -13,7 +13,7 @@ from app.patterns.models import (
     new_pattern,
 )
 
-OPEN_STATUSES = frozenset({"detected", "confirmed", "retested", "strengthened"})
+OPEN_STATUSES = frozenset({"detected", "confirmed", "retested", "reclaimed", "strengthened"})
 CLOSED_STATUSES = frozenset({"succeeded", "failed", "expired"})
 
 
@@ -35,6 +35,7 @@ def to_new_row(p: ActivePattern, now: datetime) -> PatternInstanceRow:
         status=p.status.value,
         flag_confirmed=p.flag_confirmed,
         flag_retested=p.flag_retested,
+        flag_reclaimed=p.flag_reclaimed,
         flag_strengthened=p.flag_strengthened,
         volume_ok_at_detect=p.volume_ok_at_detect,
         reference_level=p.reference_level,
@@ -73,6 +74,7 @@ def copy_mutable(p: ActivePattern, row: PatternInstanceRow, now: datetime) -> No
     row.status = p.status.value
     row.flag_confirmed = p.flag_confirmed
     row.flag_retested = p.flag_retested
+    row.flag_reclaimed = p.flag_reclaimed
     row.flag_strengthened = p.flag_strengthened
     row.target_level = p.target_level
     row.retest_floor = p.retest_floor
@@ -134,6 +136,7 @@ def to_domain(row: PatternInstanceRow) -> ActivePattern:
         status=status,
         flag_confirmed=row.flag_confirmed,
         flag_retested=row.flag_retested,
+        flag_reclaimed=getattr(row, "flag_reclaimed", False),
         flag_strengthened=row.flag_strengthened,
         volume_ok_at_detect=row.volume_ok_at_detect,
         confirmation_mode_used=parse_confirmation_mode(row.confirmation_mode_used),

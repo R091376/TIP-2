@@ -29,6 +29,8 @@ describe('stageColors / stageShortLabel', () => {
     expect(stageColors('succeeded').line).toBe('#22c55e')
     expect(stageShortLabel('succeeded')).toBe('WIN')
     expect(stageShortLabel('detected')).toBe('DET')
+    expect(stageShortLabel('reclaimed')).toBe('RCL')
+    expect(stageShortLabel('retested')).toBe('RT')
     expect(stageShortLabel('unknown')).toBe('EVT')
   })
 })

@@ -68,6 +68,15 @@ export default function NavIcon({ name, className = '' }) {
           <path d="M5 19c1.5-3 4-4.5 7-4.5S17.5 16 19 19" />
         </svg>
       )
+    case 'backtest':
+      return (
+        <svg {...common}>
+          <path d="M4 19V5" />
+          <path d="M4 19h16" />
+          <path d="M7 15l3-4 3 2 5-7" />
+          <circle cx="18" cy="6" r="1.2" fill="currentColor" stroke="none" />
+        </svg>
+      )
     case 'learn':
       return (
         <svg {...common}>

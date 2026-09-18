@@ -12,6 +12,7 @@ function flagList(inst) {
   const bits = []
   if (inst?.flagConfirmed) bits.push('Confirmed')
   if (inst?.flagRetested) bits.push('Retested')
+  if (inst?.flagReclaimed) bits.push('Reclaimed')
   if (inst?.flagStrengthened) bits.push('Strengthened')
   if (inst?.terminal) bits.push('Terminal')
   return bits

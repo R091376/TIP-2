@@ -11,7 +11,7 @@
 
 ## Purpose
 
-Detect price closing above a prior Donchian high, track confirmation / retest / extension, and journal a virtual long outcome (Succeeded / Failed / Expired) with R-based MFE/MAE.
+Detect price closing above a prior Donchian high, track confirmation / retest / reclaim / extension, and journal a virtual long outcome (Succeeded / Failed / Expired) with R-based MFE/MAE.
 
 ## Indicators used
 
@@ -63,9 +63,19 @@ Evaluation is **closed-candle only** (non-repainting).
 
 | | |
 |---|---|
-| **Enter** | After DETECTED (typically after CONFIRMED path in practice): a closed bar has `low` within `0.25 × ATR` of `reference` (i.e. `low <= reference + 0.25×ATR`) and **close >= reference** (did not close back below). |
+| **Enter** | After the detect bar (confirmation **not** required): a closed bar has `low` within `0.25 × ATR` of `reference` (i.e. `low <= reference + 0.25×ATR`) and **close >= reference** (did not close back below). The detect bar itself never sets retest. |
 | **Emit** | Once (`flag_retested`). May fire after STRENGTHENED as an event; **display status never demotes** (PI-22). |
-| **Side effect** | Set `retest_floor` (min low in retest zone rules); update measured target when floor `< reference`. |
+| **Side effect** | Set `retest_floor` (min low in retest zone). **Do not rewrite entry, stop, or target.** |
+
+### RECLAIMED
+
+| | |
+|---|---|
+| **Enter** | After a retest: a closed bar **closes above** the frozen detect `entry_price`. |
+| **Same bar as retest** | Bullish (`close > open`) and `close > entry` → reclaim (and retest). Bearish / doji → **retest only**, even if `close > entry`. |
+| **Later bar** | Any color; `close > entry` is enough. |
+| **Emit** | Once (`flag_reclaimed`). |
+| **Side effect** | None on rails. Entry stays detect close. |
 
 ### STRENGTHENED
 
@@ -101,7 +111,7 @@ Evaluation is **closed-candle only** (non-repainting).
 ## Display status (PI-22)
 
 - If terminal: that terminal.
-- Else highest ordinal among flags: `STRENGTHENED > RETESTED > CONFIRMED > DETECTED`.
+- Else highest ordinal among flags: `STRENGTHENED > RECLAIMED > RETESTED > CONFIRMED > DETECTED`.
 - Status **never demotes**.
 
 ## MFE / MAE (R)

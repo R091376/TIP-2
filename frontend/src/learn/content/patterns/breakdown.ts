@@ -13,22 +13,24 @@ export const breakdown: LearnTopic = {
   plottedOnChart: false,
   plainEnglish: [
     'A breakdown is the short-side twin of breakout: price closes below the lowest low of the previous 20 bars (signal bar excluded).',
-    'TIP tracks confirmation, retest of the floor from below, extension, and virtual short success/fail the same way as breakout, but mirrored.',
+    'TIP tracks confirmation, retest of the floor from below, reclaim of the detect close, extension, and virtual short success/fail the same way as breakout, but mirrored.',
     'Closed candles only; reference is frozen at detect.',
   ],
   howWeCalculate: [
     'Compute prior Donchian low over 20 bars before the signal bar.',
     'Detected when close < that reference (ATR available, anti-spam OK).',
     'Confirmation mirrors breakout: volume and/or later close still below reference.',
-    'Retest: high comes within 0.25×ATR of reference without closing back above it.',
-    'Succeeded toward a downside target; Failed if close returns above reference.',
+    'Retest: high comes within 0.25×ATR of reference without closing back above it. Does not need confirmation.',
+    'Reclaim: after a retest, a later bar closes below the detect-bar entry. Same bar as the retest counts as reclaim only if it is bearish and closes below entry; a bullish same-bar is retest only.',
+    'Succeeded toward a downside target; Failed if close returns above reference. Retest and reclaim do not move entry, stop, or target.',
   ],
   formulaPlain:
     'Reference = min low of the prior 20 bars. Detected when close < reference. Targets and retests use ATR multiples like breakout, flipped for shorts.',
   formulaFormal:
     'reference = min(low_{t−20} … low_{t−1})\n' +
     'Detected when close_t < reference\n' +
-    'retest: high ≥ reference − 0.25×ATR and close ≤ reference',
+    'retest: after detect, high ≥ reference − 0.25×ATR and close ≤ reference (no confirm required)\n' +
+    'reclaim: after retest, close < detect entry; same-bar reclaim only if bearish',
   workedExample: {
     narrative:
       'Prior floor 50, ATR 2, detect close 49. Short target without retest ≈ 46. Success pushes lower; fail reclaims above 50.',
@@ -36,7 +38,7 @@ export const breakdown: LearnTopic = {
       { label: 'Prior Donchian low', value: '50' },
       { label: 'ATR', value: '2' },
       { label: 'Detect close', value: '49' },
-      { label: 'No-retest target', value: '50 − 2×2 = 46' },
+      { label: 'Target', value: '50 − 2×2 = 46' },
     ],
     steps: [
       'Detect freezes short entry 49, stop 50, target 46',
@@ -179,17 +181,18 @@ export const breakdown: LearnTopic = {
     tipParam('breakdown.volume_avg_period', 'Bars in prior volume average'),
     tipParam('breakdown.confirmation_mode', 'volume | close | both | close_fallback'),
     tipParam('breakdown.volume_multiplier', 'Volume threshold multiple'),
-    tipParam('breakdown.retest_atr_mult', 'Retest band in ATR'),
+    tipParam('breakdown.retest_atr_mult', 'Retest band in ATR (flag only; does not move target)'),
     tipParam('breakdown.strengthen_atr_mult', 'Extension multiple for Strengthened'),
-    tipParam('breakdown.success_rr', 'Reward multiple after retest'),
-    tipParam('breakdown.success_atr_mult_without_retest', 'Target in ATR without retest'),
+    tipParam('breakdown.success_rr', 'Unused. Retest is a flag only and never rewrites target'),
+    tipParam('breakdown.success_atr_mult_without_retest', 'Target distance in ATR, frozen at detect'),
     tipParam('breakdown.detector_version', 'Journal version tag', { advanced: true }),
     tipParam('atr_period', 'ATR length'),
   ],
   lifecycle: [
     'Detected: close below prior 20-low',
     'Confirmed: volume and/or later close still below reference',
-    'Retested: bounce near floor without reclaim',
+    'Retested: bounce near floor (no confirm required)',
+    'Reclaimed: after retest, close below the detect entry (same-bar only if bearish)',
     'Strengthened: extension about 1×ATR beyond floor',
     'Succeeded / Failed / Expired: mirrored short outcomes',
   ],
@@ -205,6 +208,6 @@ export const breakdown: LearnTopic = {
   sourceDocs: ['docs/patterns/breakdown.md'],
   sourceCode: ['backend/app/patterns/breakdown.py'],
   externalSources: BREAKDOWN_SOURCES,
-  lastReviewed: '2026-08-04',
+  lastReviewed: '2026-09-18',
   detectorVersionHint: 'breakdown-v1',
 }

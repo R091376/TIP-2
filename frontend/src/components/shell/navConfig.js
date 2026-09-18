@@ -2,9 +2,9 @@
  * App sidebar navigation config (mock → product mapping).
  */
 
-import { isAdminLearnEnabled } from '../../config/featureFlags'
+import { isAdminLearnEnabled, isBacktestEnabled } from '../../config/featureFlags'
 
-/** @typedef {'dashboard'|'charts'|'watchlist'|'orders'|'positions'|'alerts'|'admin'|'learn'} NavId */
+/** @typedef {'dashboard'|'charts'|'watchlist'|'orders'|'positions'|'alerts'|'admin'|'learn'|'backtest'} NavId */
 
 /**
  * @param {{ isAdmin?: boolean, isAuthenticated?: boolean }} opts
@@ -27,6 +27,15 @@ export function getNavItems({ isAdmin = false, isAuthenticated = false } = {}) {
   )
   if (isAdminLearnEnabled()) {
     items.push({ id: 'learn', label: 'Learn', to: '/learn', icon: 'learn' })
+  }
+  if (isAdmin && isBacktestEnabled()) {
+    items.push({
+      id: 'backtest',
+      label: 'Backtest',
+      to: '/backtest',
+      icon: 'backtest',
+      adminOnly: true,
+    })
   }
   if (isAdmin) {
     items.push({ id: 'admin', label: 'Admin', to: '/admin/users', icon: 'admin', adminOnly: true })
@@ -51,6 +60,7 @@ export function isNavItemActive(id, loc) {
   if (id === 'orders') return path.startsWith('/paper/orders')
   if (id === 'dashboard') return path.startsWith('/patterns/stats')
   if (id === 'learn') return path === '/learn' || path.startsWith('/learn/')
+  if (id === 'backtest') return path.startsWith('/backtest')
   if (id === 'admin') return path.startsWith('/admin')
   return false
 }

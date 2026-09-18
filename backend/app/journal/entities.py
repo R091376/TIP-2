@@ -70,6 +70,7 @@ class PatternInstanceRow(Base):
     status: Mapped[str] = mapped_column(Text, nullable=False)
     flag_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     flag_retested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    flag_reclaimed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     flag_strengthened: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     volume_ok_at_detect: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     reference_level: Mapped[float] = mapped_column(Float, nullable=False)

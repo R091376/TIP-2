@@ -47,6 +47,7 @@ class PatternStage(str, Enum):
     DETECTED = "detected"
     CONFIRMED = "confirmed"
     RETESTED = "retested"
+    RECLAIMED = "reclaimed"
     STRENGTHENED = "strengthened"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
@@ -90,6 +91,7 @@ class ActivePattern:
     status: PatternStage = PatternStage.DETECTED
     flag_confirmed: bool = False
     flag_retested: bool = False
+    flag_reclaimed: bool = False
     flag_strengthened: bool = False
     volume_ok_at_detect: bool = False
     confirmation_mode_used: ConfirmationMode = ConfirmationMode.BOTH
@@ -150,6 +152,8 @@ class ActivePattern:
             return
         if self.flag_strengthened:
             self.status = PatternStage.STRENGTHENED
+        elif self.flag_reclaimed:
+            self.status = PatternStage.RECLAIMED
         elif self.flag_retested:
             self.status = PatternStage.RETESTED
         elif self.flag_confirmed:
@@ -197,6 +201,7 @@ class ActivePattern:
             "status": self.status.value,
             "flagConfirmed": self.flag_confirmed,
             "flagRetested": self.flag_retested,
+            "flagReclaimed": self.flag_reclaimed,
             "flagStrengthened": self.flag_strengthened,
             "referenceLevel": self.reference_level,
             "lookbackHigh": self.lookback_high,
@@ -242,6 +247,7 @@ def new_pattern(**kwargs) -> ActivePattern:
         status=kwargs.get("status", PatternStage.DETECTED),
         flag_confirmed=kwargs.get("flag_confirmed", False),
         flag_retested=kwargs.get("flag_retested", False),
+        flag_reclaimed=kwargs.get("flag_reclaimed", False),
         flag_strengthened=kwargs.get("flag_strengthened", False),
         volume_ok_at_detect=kwargs.get("volume_ok_at_detect", False),
         confirmation_mode_used=kwargs.get("confirmation_mode_used", ConfirmationMode.BOTH),

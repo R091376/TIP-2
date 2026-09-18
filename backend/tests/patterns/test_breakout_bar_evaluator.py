@@ -100,6 +100,39 @@ def test_fail_when_close_below_reference():
     assert any(ev.stage == PatternStage.FAILED for ev in e2.events)
 
 
+def test_retest_sets_flag_but_does_not_rewrite_target():
+    series = rising_series(25, 100)
+    e1 = evaluate_breakout_bar("S", "5m", [], series, False, _cfg(), NOW)
+    live = e1.still_open[0]
+    frozen = live.target_level
+    last = series[-1]
+    confirm_close = last.close + 0.1
+    series = list(series) + [
+        Candle(
+            last.time + 1,
+            confirm_close,
+            confirm_close + 0.05,
+            max(live.reference_level + 0.01, confirm_close - 0.05),
+            confirm_close,
+            2000,
+        )
+    ]
+    e2 = evaluate_breakout_bar(
+        "S", "5m", [live], series, False, _cfg(success_rr=1.0), NOW + timedelta(seconds=300)
+    )
+    assert e2.still_open[0].flag_confirmed is True
+    ref = live.reference_level
+    retest = Candle(series[-1].time + 1, ref + 0.2, ref + 0.4, ref - 0.5, ref + 0.1, 1500)
+    series = list(series) + [retest]
+    e3 = evaluate_breakout_bar(
+        "S", "5m", [live], series, False, _cfg(success_rr=1.0), NOW + timedelta(seconds=600)
+    )
+    assert e3.still_open, "retest must not terminate the setup"
+    assert live.flag_retested is True
+    assert live.retest_floor == retest.low
+    assert live.target_level == frozen
+
+
 def test_index_segment_close_fallback_volume_ignored():
     series = rising_series(25, 100)
     # zero volume on breakout bar would fail BOTH mode without fallback
@@ -122,3 +155,142 @@ def test_index_segment_close_fallback_volume_ignored():
     )
     assert len(e1.newly_detected) == 1
     assert e1.newly_detected[0].confirmation_mode_used.value == "close_fallback"
+
+
+def test_detect_bar_does_not_retest_or_reclaim():
+    series = rising_series(25, 100)
+    e1 = evaluate_breakout_bar("S", "5m", [], series, False, _cfg(), NOW)
+    live = e1.still_open[0]
+    assert live.flag_retested is False
+    assert live.flag_reclaimed is False
+    assert any(ev.stage == PatternStage.DETECTED for ev in e1.events)
+    assert not any(ev.stage == PatternStage.RETESTED for ev in e1.events)
+
+
+def test_retest_and_reclaim_without_confirmation():
+    series = rising_series(25, 100)
+    det = series[-1]
+    series[-1] = Candle(det.time, det.open, det.high, det.low, det.close, 1)
+    e1 = evaluate_breakout_bar(
+        "S", "5m", [], series, False, _cfg(confirmation_mode="both"), NOW
+    )
+    live = e1.still_open[0]
+    assert live.flag_confirmed is False
+    frozen_entry = live.entry_price
+    ref = live.reference_level
+    last = series[-1]
+    retest = Candle(last.time + 1, ref + 0.2, ref + 0.3, ref - 0.4, ref, 1500)
+    series = list(series) + [retest]
+    e2 = evaluate_breakout_bar(
+        "S", "5m", [live], series, False, _cfg(confirmation_mode="both"), NOW + timedelta(seconds=300)
+    )
+    assert live.flag_retested is True
+    assert live.flag_reclaimed is False
+    assert live.flag_confirmed is False
+    assert live.entry_price == frozen_entry
+    assert live.status == PatternStage.RETESTED
+    assert any(ev.stage == PatternStage.RETESTED for ev in e2.events)
+
+    reclaim = Candle(
+        retest.time + 1,
+        frozen_entry - 0.2,
+        frozen_entry + 1.0,
+        frozen_entry - 0.1,
+        frozen_entry + 0.4,
+        1600,
+    )
+    series = list(series) + [reclaim]
+    e3 = evaluate_breakout_bar(
+        "S", "5m", [live], series, False, _cfg(confirmation_mode="both"), NOW + timedelta(seconds=600)
+    )
+    assert live.flag_reclaimed is True
+    assert live.flag_confirmed is False
+    assert live.entry_price == frozen_entry
+    assert live.status == PatternStage.RECLAIMED
+    assert any(ev.stage == PatternStage.RECLAIMED for ev in e3.events)
+
+
+def test_same_bar_bullish_retest_is_reclaim():
+    series = rising_series(25, 100)
+    e1 = evaluate_breakout_bar("S", "5m", [], series, False, _cfg(), NOW)
+    live = e1.still_open[0]
+    entry = live.entry_price
+    ref = live.reference_level
+    last = series[-1]
+    bar = Candle(last.time + 1, ref + 0.2, entry + 1.0, ref - 0.3, entry + 0.4, 1500)
+    assert bar.close > bar.open
+    assert bar.close > entry
+    series = list(series) + [bar]
+    e2 = evaluate_breakout_bar(
+        "S", "5m", [live], series, False, _cfg(), NOW + timedelta(seconds=300)
+    )
+    assert live.flag_retested is True
+    assert live.flag_reclaimed is True
+    assert live.entry_price == entry
+    stages = [ev.stage for ev in e2.events]
+    assert PatternStage.RETESTED in stages
+    assert PatternStage.RECLAIMED in stages
+    assert stages.index(PatternStage.RETESTED) < stages.index(PatternStage.RECLAIMED)
+
+
+def test_same_bar_bearish_close_above_entry_is_retest_only():
+    series = rising_series(25, 100)
+    e1 = evaluate_breakout_bar("S", "5m", [], series, False, _cfg(), NOW)
+    live = e1.still_open[0]
+    entry = live.entry_price
+    ref = live.reference_level
+    last = series[-1]
+    bar = Candle(last.time + 1, entry + 1.0, entry + 1.2, ref - 0.3, entry + 0.2, 1500)
+    assert bar.close < bar.open
+    assert bar.close > entry
+    series = list(series) + [bar]
+    evaluate_breakout_bar(
+        "S", "5m", [live], series, False, _cfg(), NOW + timedelta(seconds=300)
+    )
+    assert live.flag_retested is True
+    assert live.flag_reclaimed is False
+    assert live.status == PatternStage.RETESTED
+
+
+def test_continuation_without_retest_is_not_reclaim():
+    series = rising_series(25, 100)
+    e1 = evaluate_breakout_bar("S", "5m", [], series, False, _cfg(), NOW)
+    live = e1.still_open[0]
+    entry = live.entry_price
+    band = live.reference_level + 0.25 * live.atr_at_detect
+    last = series[-1]
+    hold = Candle(last.time + 1, entry + 0.2, entry + 0.8, max(band + 0.05, entry - 0.05), entry + 0.5, 1500)
+    series = list(series) + [hold]
+    evaluate_breakout_bar(
+        "S", "5m", [live], series, False, _cfg(), NOW + timedelta(seconds=300)
+    )
+    assert live.flag_retested is False
+    assert live.flag_reclaimed is False
+
+
+def test_target_bar_after_retest_still_sets_reclaim():
+    series = rising_series(25, 100)
+    e1 = evaluate_breakout_bar("S", "5m", [], series, False, _cfg(), NOW)
+    live = e1.still_open[0]
+    entry = live.entry_price
+    ref = live.reference_level
+    tgt = live.target_level
+    last = series[-1]
+    retest = Candle(last.time + 1, ref + 0.2, ref + 0.3, ref - 0.4, ref, 1500)
+    series = list(series) + [retest]
+    evaluate_breakout_bar(
+        "S", "5m", [live], series, False, _cfg(), NOW + timedelta(seconds=300)
+    )
+    assert live.flag_retested is True
+    assert live.flag_reclaimed is False
+    win = Candle(retest.time + 1, entry - 0.2, tgt + 0.5, entry - 0.1, entry + 0.4, 1600)
+    series = list(series) + [win]
+    e3 = evaluate_breakout_bar(
+        "S", "5m", [live], series, False, _cfg(), NOW + timedelta(seconds=600)
+    )
+    assert live.flag_reclaimed is True
+    assert live.is_terminal()
+    assert live.status == PatternStage.SUCCEEDED
+    stages = [ev.stage for ev in e3.events]
+    assert PatternStage.RECLAIMED in stages
+    assert PatternStage.SUCCEEDED in stages

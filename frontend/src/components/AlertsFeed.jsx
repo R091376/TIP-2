@@ -24,6 +24,7 @@ const STAGE_TONE = {
   detected: 'info',
   confirmed: 'info',
   retested: 'warn',
+  reclaimed: 'warn',
   strengthened: 'warn',
   succeeded: 'success',
   failed: 'danger',

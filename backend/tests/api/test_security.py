@@ -109,6 +109,7 @@ def test_unauthenticated_private_api_returns_401(secure_app):
         "/api/paper/ltp/NSE_EQ%7CX",
         "/api/pattern-statistics/query",
         "/api/instruments/search?q=REL",
+        "/api/backtests",
     ):
         r = client.get(path)
         assert r.status_code == 401, f"{path} expected 401 got {r.status_code}: {r.text}"
@@ -119,6 +120,10 @@ def test_unauthenticated_watchlist_mutations_401(secure_app):
     r = client.post("/api/watchlist", json={"symbol": "RELIANCE"})
     assert r.status_code == 401
     r = client.delete("/api/watchlist/NSE_EQ%7CX")
+    assert r.status_code == 401
+    r = client.post("/api/backtests", json={"symbols": ["NSE_EQ|X"]})
+    assert r.status_code == 401
+    r = client.delete("/api/backtests")
     assert r.status_code == 401
 
 

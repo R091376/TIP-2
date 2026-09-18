@@ -12,7 +12,7 @@ Close above the prior 20-bar high, then track confirmation, retest, and targets.
 ## Plain English
 
 - A breakout means price closed above a recent ceiling — the highest high of the previous 20 bars (not including the breakout bar itself).
-- TIP then watches whether volume and/or later closes confirm the move, whether price retests the breakout level, and whether a virtual long reaches a target or fails.
+- TIP then watches whether volume and/or later closes confirm the move, whether price retests the breakout level, whether it reclaims the detect close, and whether a virtual long reaches a target or fails.
 - This is a long-only setup. Everything runs on closed candles only (no mid-bar repaint).
 
 ## How TIP calculates it
@@ -20,13 +20,14 @@ Close above the prior 20-bar high, then track confirmation, retest, and targets.
 - On each closed bar, compute the prior Donchian high over 20 bars before this bar.
 - If close > that reference, ATR is available, and anti-spam allows it, emit Detected and freeze the reference.
 - Confirmation (default both): detect-bar volume ≥ 1.5 × prior volume SMA, and a later bar still closes above reference.
-- Retest: a later low comes within 0.25×ATR of reference without closing below it.
+- Retest: a later low comes within 0.25×ATR of reference without closing below it. Does not need confirmation.
+- Reclaim: after a retest, a later bar closes above the detect-bar entry. Same bar as the retest counts as reclaim only if it is bullish and closes above entry; a bearish same-bar is retest only.
 - Strengthen: price extends about 1×ATR beyond reference.
-- Succeeded: price reaches the target (retest-based or 2×ATR without retest). Failed: close back below reference.
+- Succeeded: price reaches the detect-time target (about 2×ATR above reference). Failed: close back below reference. Retest and reclaim are flags only — they do not move entry, stop, or target.
 
 ## Formula (plain)
 
-Reference = max high of the prior 20 bars. Detected when close > reference. Target with retest uses about 2× the risk from retest floor; without retest, about 2×ATR above reference.
+Reference = max high of the prior 20 bars. Detected when close > reference. Target and entry stay frozen at detect. A later retest / reclaim only set flags.
 
 ## Formula (formal)
 
@@ -34,15 +35,17 @@ Reference = max high of the prior 20 bars. Detected when close > reference. Targ
 reference = max(high_{t−20} … high_{t−1})
 Detected when close_t > reference (ATR available)
 volume ok: vol_t ≥ 1.5 × prior_SMA20(volume)
-retest: low ≤ reference + 0.25×ATR and close ≥ reference
-target (no retest) ≈ reference + 2×ATR
+retest: after detect, low ≤ reference + 0.25×ATR and close ≥ reference (flag only; no confirm required)
+reclaim: after retest, close > detect entry; same-bar reclaim only if bullish
+target ≈ reference + 2×ATR (frozen at detect)
 ```
 
 ## Lifecycle
 
 - Detected: close above prior 20-high; reference frozen
 - Confirmed: volume and/or later close still above reference (mode-dependent)
-- Retested: dip near reference without closing below
+- Retested: dip near reference without closing below (no confirm required)
+- Reclaimed: after retest, close above the detect entry (same-bar only if bullish)
 - Strengthened: extension about 1×ATR beyond reference
 - Succeeded: target reached on a closed bar
 - Failed: close back below reference
@@ -59,7 +62,7 @@ Prior ceiling 100, ATR 2, detect close 101. Success hits target 104; fail closes
 | Prior Donchian high (reference) | 100 |
 | ATR at detect | 2 |
 | Detect close / high / low | 101 / 101.5 / 100.2 |
-| No-retest target | 100 + 2×2 = 104 |
+| Target | 100 + 2×2 = 104 |
 
 **Steps**
 
@@ -178,9 +181,9 @@ Same detect rails. Price goes a little in favor, then a closed bar finishes belo
 
 **Result:** TIP marks Failed with both MFE and MAE filled in. Fail does not mean “only MAE matters.”
 
-### Optional: retest can rewrite the target
+### Retest is a quality flag — target stays frozen
 
-After confirm, if price dips into the retest band near the reference without closing below it, TIP may set a measured target from the retest floor.
+After detect (confirmation not required), if price dips into the retest band near the reference without closing below it, TIP sets flag_retested and records the retest floor. The take-profit stays the detect-time ATR target.
 
 **Setup**
 
@@ -188,18 +191,38 @@ After confirm, if price dips into the retest band near the reference without clo
 | --- | --- |
 | Reference | 100 |
 | ATR | 2 |
+| Detect target | 100 + 2×2 = 104 |
 | Retest band (0.25×ATR) | 100 + 0.5 = up to 100.5 zone |
 | Example retest floor (low) | 99.5 (still close ≥ 100) |
-| Risk | 100 − 99.5 = 0.5 |
-| New target (success_rr = 2) | 100 + 2×0.5 = 101 |
 
 **Steps**
 
-- Initial no-retest target was 104; after a valid retest with floor under reference, target becomes reference + 2× risk.
-- MFE/MAE continue updating from highs/lows independently of that rewrite.
-- Success still means price reaches whatever the current target is.
+- Detect freezes target at 104. A valid retest only sets flag_retested and retest_floor.
+- MFE/MAE continue updating from highs/lows independently of the flag.
+- Success still means price reaches the original target.
 
-**Result:** Retest changes the success rule (target), not the definition of MFE/MAE.
+**Result:** Require-retest filters which setups you take. It never moves the rails.
+
+### Reclaim is a later close through detect entry
+
+Entry stays the detect close. After a retest, a later close back above that entry is Reclaimed. If one bar both tags the retest band and closes above entry, a bullish candle is reclaim; a bearish candle is retest only.
+
+**Setup**
+
+| | |
+| --- | --- |
+| Reference | 100 |
+| Detect entry | 101 |
+| ATR | 2 |
+| Retest band | up to 100.5 |
+
+**Steps**
+
+- Detect freezes entry at 101. Retest and reclaim never rewrite it.
+- A bearish dip into the band that closes under entry is retest only.
+- A later close above 101 is reclaim. Same-bar reclaim needs a bullish close above entry.
+
+**Result:** Reclaim is a quality stage (chart marker RCL). The virtual trade still uses the detect-time entry.
 
 ## TIP parameters (defaults)
 
@@ -209,10 +232,10 @@ After confirm, if price dips into the retest band near the reference without clo
 | volume_avg_period | 20 | `breakout.volume_avg_period` | Bars in prior volume average |
 | confirmation_mode | both | `breakout.confirmation_mode` | volume \| close \| both \| close_fallback |
 | volume_multiplier | 1.5 | `breakout.volume_multiplier` | Detect volume must be ≥ this × prior SMA |
-| retest_atr_mult | 0.25 | `breakout.retest_atr_mult` | How close a dip to reference counts as retest |
+| retest_atr_mult | 0.25 | `breakout.retest_atr_mult` | How close a dip to reference counts as retest (flag only) |
 | strengthen_atr_mult | 1 | `breakout.strengthen_atr_mult` | Extension beyond reference for Strengthened |
-| success_rr | 2 | `breakout.success_rr` | Reward multiple vs risk after retest |
-| success_atr_mult_without_retest | 2 | `breakout.success_atr_mult_without_retest` | Target distance in ATR if no retest |
+| success_rr | 2 | `breakout.success_rr` | Unused. Retest is a flag only and never rewrites target |
+| success_atr_mult_without_retest | 2 | `breakout.success_atr_mult_without_retest` | Target distance in ATR, frozen at detect |
 | detector_version | breakout-v1 | `breakout.detector_version` | Journal / support version tag |
 | atr_period | 14 | `atr_period` | ATR length used for bands and R-unit |
 
@@ -247,7 +270,7 @@ After confirm, if price dips into the retest band near the reference without clo
 
 - `backend/app/patterns/breakout.py`
 
-*Last reviewed: 2026-08-04*
+*Last reviewed: 2026-09-18*
 
 ---
 

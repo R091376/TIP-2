@@ -1,7 +1,7 @@
 """Planned reward/risk from entry, stop, and target rails.
 
 Used for pattern statistics (avg planned R:R, risk in ATR, reward in ATR).
-Computed from final rails at terminal time (includes breakout retest rewrites).
+Computed from rails frozen at detect (retest never rewrites target).
 """
 
 from __future__ import annotations
@@ -126,6 +126,35 @@ def passes_min_risk_r(pattern: Any, min_risk_r: float) -> bool:
         return False
     # Epsilon absorbs float noise on risk/atr (e.g. 0.3 ATR boundary)
     return float(rails.risk_r) + 1e-12 >= threshold
+
+
+def passes_max_risk_r(pattern: Any, max_risk_r: float | None) -> bool:
+    """Return True if planned stop distance is at or below ``max_risk_r`` ATR.
+
+    - ``max_risk_r`` None or ``<= 0`` disables the cap (always pass).
+    - Consolidation always passes.
+    - Trade patterns need valid rails and ``risk_r <= max_risk_r``.
+    """
+    if max_risk_r is None:
+        return True
+    try:
+        cap = float(max_risk_r)
+    except (TypeError, ValueError):
+        return True
+    if not (cap > 0):
+        return True
+
+    ptype = pattern.pattern_type
+    if hasattr(ptype, "value"):
+        ptype = ptype.value
+    ptype_s = str(ptype or "").strip().lower()
+    if ptype_s in _EXCLUDED_PATTERN_TYPES:
+        return True
+
+    rails = planned_rails_from_pattern(pattern)
+    if rails is None:
+        return False
+    return float(rails.risk_r) <= cap + 1e-12
 
 
 def _finite(x: float) -> bool:

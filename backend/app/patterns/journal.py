@@ -262,6 +262,10 @@ class InMemoryPatternJournal:
             items.sort(key=lambda p: p.detected_at, reverse=True)
             return items[: max(1, limit)]
 
+    def list_all(self) -> list[ActivePattern]:
+        with self._lock:
+            return list(self._instances.values())
+
     def find_by_id(self, pattern_id) -> ActivePattern | None:
         try:
             from uuid import UUID

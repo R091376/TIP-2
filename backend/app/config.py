@@ -302,6 +302,7 @@ class Settings(BaseSettings):
             "detected",
             "confirmed",
             "retested",
+            "reclaimed",
             "strengthened",
             "succeeded",
             "failed",
@@ -365,6 +366,11 @@ class Settings(BaseSettings):
     paper_max_fill_qty_per_tick: int | None = Field(
         default=None, alias="TIP_PAPER_MAX_FILL_QTY_PER_TICK"
     )
+
+    # Offline pattern replay (admin). Worker process / laptop CLI; not the live desk.
+    backtest_enabled: bool = Field(default=True, alias="TIP_BACKTEST_ENABLED")
+    backtest_max_symbols: int = Field(default=20, alias="TIP_BACKTEST_MAX_SYMBOLS")
+    backtest_max_range_days: int = Field(default=730, alias="TIP_BACKTEST_MAX_RANGE_DAYS")
 
 
     @property

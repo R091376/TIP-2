@@ -16,6 +16,7 @@ describe('navConfig learn / admin active split', () => {
     const userItems = getNavItems({ isAdmin: false, isAuthenticated: true })
     expect(userItems.some((i) => i.id === 'learn')).toBe(true)
     expect(userItems.some((i) => i.id === 'admin')).toBe(false)
+    expect(userItems.some((i) => i.id === 'backtest')).toBe(false)
 
     expect(isNavItemActive('admin', { pathname: '/admin/users' })).toBe(true)
     expect(isNavItemActive('admin', { pathname: '/learn' })).toBe(false)
@@ -58,7 +59,7 @@ describe('navConfig learn / admin active split', () => {
 
   it('admin adds admin after Learn; first five unchanged', async () => {
     vi.stubEnv('VITE_FEATURE_ADMIN_LEARN', 'true')
-    const { getNavItems } = await import('./navConfig.js')
+    const { getNavItems, isNavItemActive } = await import('./navConfig.js')
     const ids = getNavItems({ isAuthenticated: true, isAdmin: true }).map((i) => i.id)
     expect(ids.slice(0, 5)).toEqual([
       'dashboard',
@@ -69,5 +70,8 @@ describe('navConfig learn / admin active split', () => {
     ])
     expect(ids[ids.length - 1]).toBe('admin')
     expect(ids).toContain('learn')
+    expect(ids).toContain('backtest')
+    expect(isNavItemActive('backtest', { pathname: '/backtest' })).toBe(true)
+    expect(isNavItemActive('admin', { pathname: '/backtest' })).toBe(false)
   })
 })

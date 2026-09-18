@@ -12,7 +12,7 @@ Close below the prior 20-bar low — the short mirror of breakout.
 ## Plain English
 
 - A breakdown is the short-side twin of breakout: price closes below the lowest low of the previous 20 bars (signal bar excluded).
-- TIP tracks confirmation, retest of the floor from below, extension, and virtual short success/fail the same way as breakout, but mirrored.
+- TIP tracks confirmation, retest of the floor from below, reclaim of the detect close, extension, and virtual short success/fail the same way as breakout, but mirrored.
 - Closed candles only; reference is frozen at detect.
 
 ## How TIP calculates it
@@ -20,8 +20,9 @@ Close below the prior 20-bar low — the short mirror of breakout.
 - Compute prior Donchian low over 20 bars before the signal bar.
 - Detected when close < that reference (ATR available, anti-spam OK).
 - Confirmation mirrors breakout: volume and/or later close still below reference.
-- Retest: high comes within 0.25×ATR of reference without closing back above it.
-- Succeeded toward a downside target; Failed if close returns above reference.
+- Retest: high comes within 0.25×ATR of reference without closing back above it. Does not need confirmation.
+- Reclaim: after a retest, a later bar closes below the detect-bar entry. Same bar as the retest counts as reclaim only if it is bearish and closes below entry; a bullish same-bar is retest only.
+- Succeeded toward a downside target; Failed if close returns above reference. Retest and reclaim do not move entry, stop, or target.
 
 ## Formula (plain)
 
@@ -32,14 +33,16 @@ Reference = min low of the prior 20 bars. Detected when close < reference. Targe
 ```
 reference = min(low_{t−20} … low_{t−1})
 Detected when close_t < reference
-retest: high ≥ reference − 0.25×ATR and close ≤ reference
+retest: after detect, high ≥ reference − 0.25×ATR and close ≤ reference (no confirm required)
+reclaim: after retest, close < detect entry; same-bar reclaim only if bearish
 ```
 
 ## Lifecycle
 
 - Detected: close below prior 20-low
 - Confirmed: volume and/or later close still below reference
-- Retested: bounce near floor without reclaim
+- Retested: bounce near floor (no confirm required)
+- Reclaimed: after retest, close below the detect entry (same-bar only if bearish)
 - Strengthened: extension about 1×ATR beyond floor
 - Succeeded / Failed / Expired: mirrored short outcomes
 
@@ -54,7 +57,7 @@ Prior floor 50, ATR 2, detect close 49. Short target without retest ≈ 46. Succ
 | Prior Donchian low | 50 |
 | ATR | 2 |
 | Detect close | 49 |
-| No-retest target | 50 − 2×2 = 46 |
+| Target | 50 − 2×2 = 46 |
 
 **Steps**
 
@@ -167,10 +170,10 @@ Price dips a little, then a closed bar finishes back above the floor → Failed 
 | volume_avg_period | 20 | `breakdown.volume_avg_period` | Bars in prior volume average |
 | confirmation_mode | both | `breakdown.confirmation_mode` | volume \| close \| both \| close_fallback |
 | volume_multiplier | 1.5 | `breakdown.volume_multiplier` | Volume threshold multiple |
-| retest_atr_mult | 0.25 | `breakdown.retest_atr_mult` | Retest band in ATR |
+| retest_atr_mult | 0.25 | `breakdown.retest_atr_mult` | Retest band in ATR (flag only; does not move target) |
 | strengthen_atr_mult | 1 | `breakdown.strengthen_atr_mult` | Extension multiple for Strengthened |
-| success_rr | 2 | `breakdown.success_rr` | Reward multiple after retest |
-| success_atr_mult_without_retest | 2 | `breakdown.success_atr_mult_without_retest` | Target in ATR without retest |
+| success_rr | 2 | `breakdown.success_rr` | Unused. Retest is a flag only and never rewrites target |
+| success_atr_mult_without_retest | 2 | `breakdown.success_atr_mult_without_retest` | Target distance in ATR, frozen at detect |
 | detector_version | breakdown-v1 | `breakdown.detector_version` | Journal version tag |
 | atr_period | 14 | `atr_period` | ATR length |
 
@@ -203,7 +206,7 @@ Price dips a little, then a closed bar finishes back above the floor → Failed 
 
 - `backend/app/patterns/breakdown.py`
 
-*Last reviewed: 2026-08-04*
+*Last reviewed: 2026-09-18*
 
 ---
 

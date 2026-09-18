@@ -30,6 +30,8 @@ export function stageColors(stage: string | null | undefined): StageColors {
       return { line: '#64748b', marker: '#94a3b8' }
     case 'confirmed':
       return { line: '#38bdf8', marker: '#38bdf8' }
+    case 'reclaimed':
+      return { line: '#2dd4bf', marker: '#5eead4' }
     case 'retested':
     case 'strengthened':
       return { line: '#f59e0b', marker: '#fbbf24' }
@@ -48,6 +50,8 @@ export function stageShortLabel(stage: string | null | undefined): string {
       return 'CNF'
     case 'retested':
       return 'RT'
+    case 'reclaimed':
+      return 'RCL'
     case 'strengthened':
       return 'STR'
     case 'succeeded':
@@ -82,10 +86,11 @@ const STAGE_ORDER: Record<string, number> = {
   detected: 1,
   confirmed: 2,
   retested: 3,
-  strengthened: 4,
-  succeeded: 5,
-  failed: 5,
-  expired: 5,
+  reclaimed: 4,
+  strengthened: 5,
+  succeeded: 6,
+  failed: 6,
+  expired: 6,
 }
 
 export type PatternAlertLike = {

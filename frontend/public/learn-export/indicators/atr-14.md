@@ -96,7 +96,7 @@ ATR is not a buy/sell signal. It is a size ruler. We use a tiny period so the ar
 
 ### How patterns use ATR
 
-When Breakout detects, it freezes atr_at_detect. That single number drives retest distance, strengthen distance, the no-retest target, and R for MFE/MAE.
+When Breakout detects, it freezes atr_at_detect. That single number drives retest distance, strengthen distance, the frozen target, and R for MFE/MAE.
 
 **Setup**
 
@@ -104,7 +104,7 @@ When Breakout detects, it freezes atr_at_detect. That single number drives retes
 | --- | --- |
 | Example frozen ATR | 2 |
 | Breakout reference | 100 |
-| No-retest target | 100 + 2×2 = 104 |
+| Target | 100 + 2×2 = 104 |
 | Retest band (0.25×ATR) | within 0.5 of reference |
 | If entry 101 and best high 104.3 | MFE(R) = (104.3−101)/2 = 1.65 R |
 

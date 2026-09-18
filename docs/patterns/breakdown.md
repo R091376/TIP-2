@@ -11,7 +11,7 @@
 
 ## Purpose
 
-Detect price closing below a prior Donchian low, track confirmation / retest / extension, and journal a virtual short outcome (Succeeded / Failed / Expired) with R-based MFE/MAE.
+Detect price closing below a prior Donchian low, track confirmation / retest / reclaim / extension, and journal a virtual short outcome (Succeeded / Failed / Expired) with R-based MFE/MAE.
 
 ## Indicators used
 
@@ -65,9 +65,19 @@ Evaluation is **closed-candle only** (non-repainting).
 
 | | |
 |---|---|
-| **Enter** | After CONFIRMED: a closed bar has `high` within `0.25 × ATR` of `reference` (i.e. `high >= reference - 0.25×ATR`) and **close ≤ reference** (did not close back above). |
+| **Enter** | After the detect bar (confirmation **not** required): a closed bar has `high` within `0.25 × ATR` of `reference` (i.e. `high >= reference - 0.25×ATR`) and **close ≤ reference** (did not close back above). The detect bar itself never sets retest. |
 | **Emit** | Once (`flag_retested`). May fire after STRENGTHENED as an event; **display status never demotes** (PI-22). |
-| **Side effect** | Set retest extreme (`retest_floor` field = bar high); update measured target when high `> reference`. |
+| **Side effect** | Set retest extreme (`retest_floor` field = bar high). **Do not rewrite entry, stop, or target.** |
+
+### RECLAIMED
+
+| | |
+|---|---|
+| **Enter** | After a retest: a closed bar **closes below** the frozen detect `entry_price`. |
+| **Same bar as retest** | Bearish (`close < open`) and `close < entry` → reclaim (and retest). Bullish / doji → **retest only**, even if `close < entry`. |
+| **Later bar** | Any color; `close < entry` is enough. |
+| **Emit** | Once (`flag_reclaimed`). |
+| **Side effect** | None on rails. Entry stays detect close. |
 
 ### STRENGTHENED
 
@@ -97,7 +107,7 @@ Same policy as Breakout (`docs/patterns/breakout.md`): session close for `1m`/`5
 
 ## Display status (PI-22)
 
-Identical to Breakout: terminal wins; else `STRENGTHENED > RETESTED > CONFIRMED > DETECTED`. Status **never demotes**.
+Identical to Breakout: terminal wins; else `STRENGTHENED > RECLAIMED > RETESTED > CONFIRMED > DETECTED`. Status **never demotes**.
 
 ## MFE / MAE (R)
 

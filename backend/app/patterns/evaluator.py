@@ -6,21 +6,12 @@ from datetime import datetime, timezone
 from app.config import Settings
 from app.events import CandleClosedEvent, EventBus, PatternStageEvent as BusPatternEvent
 from app.patterns.active_store import ActiveInstanceStore
-from app.patterns.breakout import evaluate_breakout_bar
-from app.patterns.breakdown import evaluate_breakdown_bar
-from app.patterns.consolidation import evaluate_consolidation_bar
-from app.patterns.double import evaluate_double_bar
-from app.patterns.engulfing import evaluate_engulfing_bar
+from app.patterns.bar_eval import evaluate_families_on_bar, gate_min_risk
 from app.patterns.expected_r import expected_r
-from app.patterns.head_shoulders import evaluate_hs_bar
-from app.patterns.inside_bar import evaluate_inside_bar
 from app.patterns.journal import PatternJournal
 from app.patterns.lifecycle_support import expire
-from app.patterns.models import ActivePattern, PatternStage, PatternType
-from app.patterns.pinbar import evaluate_pinbar_bar
+from app.patterns.models import ActivePattern, PatternStage
 from app.patterns.planned_rails import passes_min_risk_r, planned_rails_from_pattern
-from app.patterns.structure import evaluate_structure_bar
-from app.patterns.volume_breakout import evaluate_volume_breakout_bar
 
 logger = logging.getLogger(__name__)
 
@@ -313,96 +304,18 @@ class PatternEvaluator:
         now = datetime.now(timezone.utc)
         index = self._is_index(symbol_id)
         open_all = self._store.get_open(symbol_id, timeframe)
-        atr = self._settings.atr_period
-
-        # (open-filter, settings attr, evaluate_fn, needs_index_flag)
-        specs: list[tuple] = [
-            (
-                lambda p: p.pattern_type == PatternType.BREAKOUT,
-                "breakout",
-                evaluate_breakout_bar,
-                True,
-            ),
-            (
-                lambda p: p.pattern_type == PatternType.BREAKDOWN,
-                "breakdown",
-                evaluate_breakdown_bar,
-                True,
-            ),
-            (lambda p: p.pattern_type.is_pin_bar(), "pinbar", evaluate_pinbar_bar, False),
-            (
-                lambda p: p.pattern_type.is_engulfing(),
-                "engulfing",
-                evaluate_engulfing_bar,
-                False,
-            ),
-            (
-                lambda p: p.pattern_type == PatternType.INSIDE_BAR,
-                "inside_bar",
-                evaluate_inside_bar,
-                False,
-            ),
-            (
-                lambda p: p.pattern_type.is_structure(),
-                "structure",
-                evaluate_structure_bar,
-                False,
-            ),
-            (
-                lambda p: p.pattern_type == PatternType.CONSOLIDATION,
-                "consolidation",
-                evaluate_consolidation_bar,
-                False,
-            ),
-            (
-                lambda p: p.pattern_type == PatternType.VOLUME_BREAKOUT,
-                "volume_breakout",
-                evaluate_volume_breakout_bar,
-                True,
-            ),
-            (
-                lambda p: p.pattern_type.is_double(),
-                "double",
-                evaluate_double_bar,
-                True,
-            ),
-            (
-                lambda p: p.pattern_type.is_head_shoulders(),
-                "head_shoulders",
-                evaluate_hs_bar,
-                True,
-            ),
-        ]
-
-        still: list[ActivePattern] = []
-        for pred, cfg_attr, evaluate_fn, needs_index in specs:
-            cfg = {**getattr(self._settings, cfg_attr), "atr_period": atr}
-            family_on = True
-            if cfg_attr == "double":
-                family_on = bool(getattr(self._settings, "pattern_double_enabled", True))
-            elif cfg_attr == "head_shoulders":
-                family_on = bool(getattr(self._settings, "pattern_hs_enabled", True))
-            tf_map = cfg.get("enabled_timeframes")
-            tf_on = True if not isinstance(tf_map, dict) else bool(tf_map.get(timeframe, True))
-            cfg = {
-                **cfg,
-                "_new_detects": bool(cfg.get("enabled", True) and family_on and tf_on),
-            }
-            open_items = [p for p in open_all if pred(p)]
-            if needs_index:
-                ev = evaluate_fn(
-                    symbol_id, timeframe, open_items, closed, index, cfg, now
-                )
-            else:
-                ev = evaluate_fn(symbol_id, timeframe, open_items, closed, cfg, now)
-            advanced, newly, events, still_open = self._gate_min_risk(
-                ev.advanced, ev.newly_detected, ev.events, ev.still_open
-            )
-            if newly and self._sr_stamp_enabled():
-                self._stamp_sr(symbol_id, timeframe, closed, newly)
-            self._persist_eval(advanced, newly, events)
-            still.extend(still_open)
-
+        advanced, newly, events, still = evaluate_families_on_bar(
+            settings=self._settings,
+            symbol_id=symbol_id,
+            timeframe=timeframe,
+            closed=closed,
+            open_all=open_all,
+            now=now,
+            index=index,
+        )
+        if newly and self._sr_stamp_enabled():
+            self._stamp_sr(symbol_id, timeframe, closed, newly)
+        self._persist_eval(advanced, newly, events)
         self._store.replace_series(symbol_id, timeframe, still)
 
     def _sr_stamp_enabled(self) -> bool:
@@ -457,14 +370,9 @@ class PatternEvaluator:
         min_r = float(getattr(self._settings, "pattern_min_risk_r", 0.3) or 0.0)
         if min_r <= 0 or not newly:
             return advanced, newly, events, still_open
-
-        kept_newly: list[ActivePattern] = []
-        rejected: set = set()
         for p in newly:
             if passes_min_risk_r(p, min_r):
-                kept_newly.append(p)
                 continue
-            rejected.add(p.id)
             rails = planned_rails_from_pattern(p)
             risk_s = f"{rails.risk_r:.4f}" if rails else "n/a"
             logger.info(
@@ -476,14 +384,7 @@ class PatternEvaluator:
                 p.symbol_id,
                 p.timeframe,
             )
-
-        if not rejected:
-            return advanced, newly, events, still_open
-
-        advanced = [p for p in advanced if p.id not in rejected]
-        events = [e for e in events if getattr(e, "pattern_id", None) not in rejected]
-        still_open = [p for p in still_open if p.id not in rejected]
-        return advanced, kept_newly, events, still_open
+        return gate_min_risk(advanced, newly, events, still_open, min_r)
 
     def _persist_eval(
         self,

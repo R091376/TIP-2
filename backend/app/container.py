@@ -64,6 +64,9 @@ class AppContainer:
     postgres_init_error: str | None = None
     paper_service: object | None = None
     daily_sr_service: object | None = None
+    candle_warehouse: object | None = None
+    candle_ingest: object | None = None
+    backtest_jobs: object | None = None
     _bg_stop: threading.Event | None = None
     _bg_thread: threading.Thread | None = None
     _cts_finalized: set | None = None
@@ -76,6 +79,10 @@ class AppContainer:
             )
         self.event_bus.subscribe(CandleClosedEvent, self.broadcaster.on_candle_closed)
         self.event_bus.subscribe(CandleClosedEvent, self.pattern_service.on_candle_closed)
+        if self.candle_warehouse is not None:
+            self.event_bus.subscribe(
+                CandleClosedEvent, self.candle_warehouse.on_candle_closed
+            )
         self.event_bus.subscribe(PatternStageEvent, self.broadcaster.on_pattern_stage)
         # Finalize open intraday bars *before* session pattern expiry so the
         # last RTH bar publishes CandleClosed and evaluators see it first.
@@ -277,6 +284,12 @@ class AppContainer:
             self.market_provider.close()
         except Exception:
             pass
+        wh = getattr(self, "candle_warehouse", None)
+        if wh is not None and hasattr(wh, "shutdown"):
+            try:
+                wh.shutdown()
+            except Exception:
+                pass
 
 
 def build_container(settings: Settings | None = None) -> AppContainer:
@@ -432,6 +445,19 @@ def build_container(settings: Settings | None = None) -> AppContainer:
     daily_sr_service = DailySrService(settings, candle_engine, daily_sr_store)
     bootstrap.set_daily_sr_service(daily_sr_service)
 
+    from app.backtest.jobs import InMemoryBacktestJobStore, PostgresBacktestJobStore
+    from app.market.ingest import CandleIngestService
+    from app.market.warehouse import InMemoryCandleWarehouse, PostgresCandleWarehouse
+
+    if session_factory is not None:
+        candle_warehouse = PostgresCandleWarehouse(session_factory)
+        backtest_jobs = PostgresBacktestJobStore(session_factory)
+    else:
+        candle_warehouse = InMemoryCandleWarehouse()
+        backtest_jobs = InMemoryBacktestJobStore()
+    candle_ingest = CandleIngestService(settings, market_provider, candle_warehouse)
+    bootstrap.set_warehouse(candle_warehouse)
+
     active_store = ActiveInstanceStore()
     pattern_service = PatternEvaluator(
         settings,
@@ -481,6 +507,9 @@ def build_container(settings: Settings | None = None) -> AppContainer:
         postgres_init_error=postgres_init_error,
         paper_service=paper_service,
         daily_sr_service=daily_sr_service,
+        candle_warehouse=candle_warehouse,
+        candle_ingest=candle_ingest,
+        backtest_jobs=backtest_jobs,
     )
     container.wire_events()
     return container

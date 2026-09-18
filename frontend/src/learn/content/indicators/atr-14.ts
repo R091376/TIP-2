@@ -107,11 +107,11 @@ export const atr14: LearnTopic = {
         id: 'consume',
         title: 'How patterns use ATR',
         narrative:
-          'When Breakout detects, it freezes atr_at_detect. That single number drives retest distance, strengthen distance, the no-retest target, and R for MFE/MAE.',
+          'When Breakout detects, it freezes atr_at_detect. That single number drives retest distance, strengthen distance, the frozen target, and R for MFE/MAE.',
         setup: [
           { label: 'Example frozen ATR', value: '2' },
           { label: 'Breakout reference', value: '100' },
-          { label: 'No-retest target', value: '100 + 2×2 = 104' },
+          { label: 'Target', value: '100 + 2×2 = 104' },
           { label: 'Retest band (0.25×ATR)', value: 'within 0.5 of reference' },
           { label: 'If entry 101 and best high 104.3', value: 'MFE(R) = (104.3−101)/2 = 1.65 R' },
         ],
