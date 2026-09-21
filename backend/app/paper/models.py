@@ -6,7 +6,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
-from uuid import UUID
+from typing import TYPE_CHECKING
+from uuid import UUID, uuid4
+
+if TYPE_CHECKING:
+    from app.paper.charges import ChargeLine
 
 
 class Side(StrEnum):
@@ -148,6 +152,13 @@ class PaperFill:
     tick_ts_ms: int
     lot_id: UUID | None
     created_at: datetime
+    charges_total: Decimal = Decimal("0")
+    charges: tuple[ChargeLine, ...] = ()
+    schedule_id: str = "off"
+    schedule_version: int = 0
+    # Per-fill close/cover net delta; never the lot cumulative. None on entry.
+    realized_pnl: Decimal | None = None
+    allocated_entry_charges: Decimal | None = None
 
 
 @dataclass
@@ -162,6 +173,8 @@ class PositionLot:
     qty_closed: int = 0
     avg_entry_price: Decimal = Decimal("0")
     realized_pnl: Decimal = Decimal("0")
+    charges_entry: Decimal = Decimal("0")
+    charges_exit: Decimal = Decimal("0")
     status: LotStatus = LotStatus.OPEN
     entry_order_id: UUID | None = None
     opened_at: datetime | None = None
@@ -191,6 +204,7 @@ class LedgerEntry:
     amount: Decimal
     balance_after: Decimal
     note: str | None = None
+    id: UUID = field(default_factory=uuid4)
 
 
 @dataclass

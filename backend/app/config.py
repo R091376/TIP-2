@@ -366,6 +366,12 @@ class Settings(BaseSettings):
     paper_max_fill_qty_per_tick: int | None = Field(
         default=None, alias="TIP_PAPER_MAX_FILL_QTY_PER_TICK"
     )
+    paper_charges_enabled: bool = Field(default=False, alias="TIP_PAPER_CHARGES_ENABLED")
+    paper_charges_schedule_id: str = Field(
+        default="nse_eq_cash_v1", alias="TIP_PAPER_CHARGES_SCHEDULE_ID"
+    )
+    # Rate fields in the JSON MUST be decimal strings, not JSON numbers.
+    paper_charges_schedule_json: str = Field(default="", alias="TIP_PAPER_CHARGES_SCHEDULE_JSON")
 
     # Offline pattern replay (admin). Worker process / laptop CLI; not the live desk.
     backtest_enabled: bool = Field(default=True, alias="TIP_BACKTEST_ENABLED")

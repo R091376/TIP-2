@@ -1,0 +1,295 @@
+"""Pure NSE cash charge engine tests (worked examples + overlay)."""
+
+from __future__ import annotations
+
+from dataclasses import replace
+from decimal import Decimal
+
+from app.config import Settings
+from app.paper.charges import (
+    NSE_EQ_CASH_V1,
+    ChargeCode,
+    ChargeContext,
+    ChargeSchedule,
+    compute_charges,
+    load_charge_schedule,
+)
+from app.paper.models import Intent, Product, Side
+from app.user.service import money
+
+
+def _ctx(
+    *,
+    side: Side,
+    product: Product,
+    intent: Intent,
+    qty: int = 10,
+    price: Decimal = Decimal("100"),
+    dp_already_charged_today: bool = False,
+) -> ChargeContext:
+    px = Decimal(str(price))
+    return ChargeContext(
+        side=side,
+        product=product,
+        intent=intent,
+        qty=qty,
+        price=px,
+        notional=money(Decimal(qty) * px),
+        dp_already_charged_today=dp_already_charged_today,
+    )
+
+
+def _amt(bd, code: ChargeCode) -> Decimal:
+    for ln in bd.lines:
+        if ln.code == code:
+            return ln.amount
+    raise AssertionError(f"missing {code}")
+
+
+def test_open_long_mis_10_at_100_total_0_42():
+    ctx = _ctx(side=Side.BUY, product=Product.MIS, intent=Intent.OPEN_LONG)
+    bd = compute_charges(ctx, NSE_EQ_CASH_V1, enabled=True)
+    assert _amt(bd, ChargeCode.BROKERAGE) == money("0.30")
+    assert _amt(bd, ChargeCode.STT) == money("0")
+    assert _amt(bd, ChargeCode.EXCHANGE_TXN) == money("0.03")
+    assert _amt(bd, ChargeCode.SEBI) == money("0")
+    assert _amt(bd, ChargeCode.STAMP) == money("0.03")
+    assert _amt(bd, ChargeCode.GST) == money("0.06")
+    assert _amt(bd, ChargeCode.DP) == money("0")
+    assert bd.total == money("0.42")
+    assert bd.total == money(sum((ln.amount for ln in bd.lines), Decimal("0")))
+    assert bd.schedule_id == "nse_eq_cash_v1"
+    codes = {ln.code for ln in bd.persistable_lines()}
+    assert ChargeCode.STT not in codes
+    assert ChargeCode.SEBI not in codes
+    assert ChargeCode.DP not in codes
+
+
+def test_close_long_mis_10_at_105_total_0_67():
+    ctx = _ctx(
+        side=Side.SELL,
+        product=Product.MIS,
+        intent=Intent.CLOSE_LONG,
+        price=Decimal("105"),
+    )
+    bd = compute_charges(ctx, NSE_EQ_CASH_V1, enabled=True)
+    assert _amt(bd, ChargeCode.BROKERAGE) == money("0.32")
+    assert _amt(bd, ChargeCode.STT) == money("0.26")
+    assert _amt(bd, ChargeCode.EXCHANGE_TXN) == money("0.03")
+    assert _amt(bd, ChargeCode.STAMP) == money("0")
+    assert _amt(bd, ChargeCode.GST) == money("0.06")
+    assert bd.total == money("0.67")
+
+
+def test_cnc_vs_mis_stt():
+    mis_buy = compute_charges(
+        _ctx(side=Side.BUY, product=Product.MIS, intent=Intent.OPEN_LONG),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    cnc_buy = compute_charges(
+        _ctx(side=Side.BUY, product=Product.CNC, intent=Intent.OPEN_LONG),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    mis_sell = compute_charges(
+        _ctx(side=Side.SELL, product=Product.MIS, intent=Intent.CLOSE_LONG),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    cnc_sell = compute_charges(
+        _ctx(side=Side.SELL, product=Product.CNC, intent=Intent.CLOSE_LONG),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    open_short = compute_charges(
+        _ctx(side=Side.SELL, product=Product.MIS, intent=Intent.OPEN_SHORT),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    cover = compute_charges(
+        _ctx(side=Side.BUY, product=Product.MIS, intent=Intent.COVER_SHORT),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    assert _amt(mis_buy, ChargeCode.STT) == money("0")
+    assert _amt(cnc_buy, ChargeCode.STT) == money("1.00")
+    assert _amt(mis_sell, ChargeCode.STT) == money("0.25")
+    assert _amt(cnc_sell, ChargeCode.STT) == money("1.00")
+    assert _amt(open_short, ChargeCode.STT) == money("0.25")
+    assert _amt(cover, ChargeCode.STT) == money("0")
+
+
+def test_stamp_buy_only_delivery_vs_intraday():
+    mis_buy = compute_charges(
+        _ctx(side=Side.BUY, product=Product.MIS, intent=Intent.OPEN_LONG),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    cnc_buy = compute_charges(
+        _ctx(side=Side.BUY, product=Product.CNC, intent=Intent.OPEN_LONG),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    mis_sell = compute_charges(
+        _ctx(side=Side.SELL, product=Product.MIS, intent=Intent.CLOSE_LONG),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    cnc_sell = compute_charges(
+        _ctx(side=Side.SELL, product=Product.CNC, intent=Intent.CLOSE_LONG),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    cover = compute_charges(
+        _ctx(side=Side.BUY, product=Product.MIS, intent=Intent.COVER_SHORT),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    open_short = compute_charges(
+        _ctx(side=Side.SELL, product=Product.MIS, intent=Intent.OPEN_SHORT),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    assert _amt(mis_buy, ChargeCode.STAMP) == money("0.03")
+    assert _amt(cnc_buy, ChargeCode.STAMP) == money("0.15")
+    assert _amt(mis_sell, ChargeCode.STAMP) == money("0")
+    assert _amt(cnc_sell, ChargeCode.STAMP) == money("0")
+    assert _amt(cover, ChargeCode.STAMP) == money("0.03")
+    assert _amt(open_short, ChargeCode.STAMP) == money("0")
+
+
+def test_gst_base_excludes_stt_and_stamp():
+    # CNC buy: brokerage 0, exchange 0.03, stamp 0.15. GST on 0.03 → 0.01
+    # (including stamp would be 0.03).
+    cnc_buy = compute_charges(
+        _ctx(side=Side.BUY, product=Product.CNC, intent=Intent.OPEN_LONG),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    assert _amt(cnc_buy, ChargeCode.BROKERAGE) == money("0")
+    assert _amt(cnc_buy, ChargeCode.EXCHANGE_TXN) == money("0.03")
+    assert _amt(cnc_buy, ChargeCode.STAMP) == money("0.15")
+    assert _amt(cnc_buy, ChargeCode.GST) == money("0.01")
+
+
+def test_flag_off_and_qty_non_positive_zeros():
+    ctx = _ctx(side=Side.BUY, product=Product.MIS, intent=Intent.OPEN_LONG)
+    off = compute_charges(ctx, NSE_EQ_CASH_V1, enabled=False)
+    assert off.lines == ()
+    assert off.total == money("0")
+    assert off.schedule_id == "off"
+
+    zero_qty = _ctx(side=Side.BUY, product=Product.MIS, intent=Intent.OPEN_LONG, qty=0)
+    z = compute_charges(zero_qty, NSE_EQ_CASH_V1, enabled=True)
+    assert z.lines == ()
+    assert z.total == money("0")
+    assert z.schedule_id == "off"
+
+
+def test_brokerage_cap_and_zero_pct():
+    big = compute_charges(
+        _ctx(
+            side=Side.BUY,
+            product=Product.MIS,
+            intent=Intent.OPEN_LONG,
+            qty=10_000,
+            price=Decimal("100"),
+        ),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    assert _amt(big, ChargeCode.BROKERAGE) == money("20.00")
+
+    zero_pct = replace(NSE_EQ_CASH_V1, brokerage_pct=Decimal("0"))
+    z = compute_charges(
+        _ctx(side=Side.BUY, product=Product.MIS, intent=Intent.OPEN_LONG),
+        zero_pct,
+        enabled=True,
+    )
+    assert _amt(z, ChargeCode.BROKERAGE) == money("0")
+
+
+def test_dp_once_vs_second_sell():
+    sched = replace(NSE_EQ_CASH_V1, dp_flat=Decimal("13.50"))
+    first = compute_charges(
+        _ctx(side=Side.SELL, product=Product.CNC, intent=Intent.CLOSE_LONG),
+        sched,
+        enabled=True,
+    )
+    second = compute_charges(
+        _ctx(
+            side=Side.SELL,
+            product=Product.CNC,
+            intent=Intent.CLOSE_LONG,
+            dp_already_charged_today=True,
+        ),
+        sched,
+        enabled=True,
+    )
+    mis_sell = compute_charges(
+        _ctx(side=Side.SELL, product=Product.MIS, intent=Intent.CLOSE_LONG),
+        sched,
+        enabled=True,
+    )
+    assert _amt(first, ChargeCode.DP) == money("13.50")
+    assert _amt(second, ChargeCode.DP) == money("0")
+    assert _amt(mis_sell, ChargeCode.DP) == money("0")
+    # DP in GST base: 18% × (0 + 0.03 + 0 + 13.50) = 2.44
+    assert _amt(first, ChargeCode.GST) == money("2.44")
+    assert _amt(second, ChargeCode.GST) == money("0.01")
+
+
+def test_rounding_money_half_up_not_whole_rupee_stt():
+    assert money("0.005") == Decimal("0.01")
+    assert money("0.004") == Decimal("0.00")
+    # STT 0.025% × ₹100 = 0.025 → 0.03 paise, not rounded to ₹0 / ₹1.
+    bd = compute_charges(
+        _ctx(
+            side=Side.SELL,
+            product=Product.MIS,
+            intent=Intent.CLOSE_LONG,
+            qty=1,
+            price=Decimal("100"),
+        ),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    assert _amt(bd, ChargeCode.STT) == money("0.03")
+
+
+def test_overlay_decimal_string_applied():
+    s = Settings(paper_charges_schedule_json='{"nse_txn_pct": "0.0000297", "version": 2}')
+    sched = load_charge_schedule(s)
+    assert sched.nse_txn_pct == Decimal("0.0000297")
+    assert sched.version == 2
+    assert sched.id == "nse_eq_cash_v1"
+    assert sched.brokerage_pct == NSE_EQ_CASH_V1.brokerage_pct
+
+
+def test_overlay_json_number_rejected():
+    s = Settings(paper_charges_schedule_json='{"nse_txn_pct": 0.0000297}')
+    sched = load_charge_schedule(s)
+    assert sched.nse_txn_pct == NSE_EQ_CASH_V1.nse_txn_pct
+    assert sched.version == NSE_EQ_CASH_V1.version
+
+
+def test_overlay_invalid_json_and_unknown_id_fallback():
+    bad = load_charge_schedule(Settings(paper_charges_schedule_json="{not json"))
+    assert bad is NSE_EQ_CASH_V1 or bad == NSE_EQ_CASH_V1
+    unknown = load_charge_schedule(Settings(paper_charges_schedule_id="nope"))
+    assert unknown == NSE_EQ_CASH_V1
+    overlay_id = load_charge_schedule(
+        Settings(paper_charges_schedule_json='{"id": "other", "nse_txn_pct": "0.0000297"}')
+    )
+    assert overlay_id.nse_txn_pct == NSE_EQ_CASH_V1.nse_txn_pct
+
+
+def test_default_schedule_is_nse_eq_cash_v1():
+    s = Settings()
+    assert s.paper_charges_enabled is False
+    assert s.paper_charges_schedule_id == "nse_eq_cash_v1"
+    assert s.paper_charges_schedule_json == ""
+    sched = load_charge_schedule(s)
+    assert isinstance(sched, ChargeSchedule)
+    assert sched == NSE_EQ_CASH_V1

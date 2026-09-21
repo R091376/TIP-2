@@ -4,12 +4,19 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.paper.entities import PaperCashLockRow, PaperFillRow, PaperLotRow, PaperOrderRow
+from app.paper.charges import ChargeCode, ChargeLine
+from app.paper.entities import (
+    PaperCashLockRow,
+    PaperFillChargeRow,
+    PaperFillRow,
+    PaperLotRow,
+    PaperOrderRow,
+)
 from app.paper.models import (
     CashAccount,
     CashLock,
@@ -77,8 +84,26 @@ def insert_fill(sf: sessionmaker[Session], fill: PaperFill) -> None:
                 tick_ts_ms=fill.tick_ts_ms,
                 lot_id=fill.lot_id,
                 created_at=fill.created_at,
+                charges_total=fill.charges_total,
+                schedule_id=fill.schedule_id,
+                schedule_version=fill.schedule_version,
+                allocated_entry_charges=fill.allocated_entry_charges,
+                realized_pnl=fill.realized_pnl,
             )
         )
+        for ln in fill.charges:
+            if ln.amount <= 0:
+                continue
+            s.add(
+                PaperFillChargeRow(
+                    id=uuid4(),
+                    fill_id=fill.id,
+                    user_id=fill.user_id,
+                    code=str(ln.code),
+                    amount=ln.amount,
+                    created_at=fill.created_at,
+                )
+            )
         s.commit()
 
 
@@ -97,6 +122,8 @@ def upsert_lot(sf: sessionmaker[Session], lot: PositionLot) -> None:
         row.qty_closed = lot.qty_closed
         row.avg_entry_price = lot.avg_entry_price
         row.realized_pnl = lot.realized_pnl
+        row.charges_entry = lot.charges_entry
+        row.charges_exit = lot.charges_exit
         row.status = lot.status.value
         row.entry_order_id = lot.entry_order_id
         row.opened_at = lot.opened_at or datetime.now(timezone.utc)
@@ -129,6 +156,7 @@ def load_book(sf: sessionmaker[Session]) -> dict:
         lot_rows = list(s.scalars(select(PaperLotRow)).all())
         fill_rows = list(s.scalars(select(PaperFillRow)).all())
         lock_rows = list(s.scalars(select(PaperCashLockRow)).all())
+        charge_rows = list(s.scalars(select(PaperFillChargeRow)).all())
 
     orders: dict[UUID, PaperOrder] = {}
     for r in order_rows:
@@ -173,11 +201,19 @@ def load_book(sf: sessionmaker[Session]) -> dict:
             qty_closed=r.qty_closed,
             avg_entry_price=Decimal(str(r.avg_entry_price)),
             realized_pnl=money(r.realized_pnl),
+            charges_entry=money(r.charges_entry),
+            charges_exit=money(r.charges_exit),
             status=LotStatus(r.status),
             entry_order_id=r.entry_order_id,
             opened_at=r.opened_at,
             closed_at=r.closed_at,
             updated_at=r.updated_at,
+        )
+
+    charges_by_fill: dict[UUID, list[ChargeLine]] = {}
+    for cr in charge_rows:
+        charges_by_fill.setdefault(cr.fill_id, []).append(
+            ChargeLine(code=ChargeCode(cr.code), amount=money(cr.amount))
         )
 
     fills = [
@@ -193,6 +229,16 @@ def load_book(sf: sessionmaker[Session]) -> dict:
             tick_ts_ms=int(r.tick_ts_ms),
             lot_id=r.lot_id,
             created_at=r.created_at,
+            charges_total=money(r.charges_total),
+            charges=tuple(charges_by_fill.get(r.id, ())),
+            schedule_id=r.schedule_id,
+            schedule_version=int(r.schedule_version),
+            realized_pnl=money(r.realized_pnl) if r.realized_pnl is not None else None,
+            allocated_entry_charges=(
+                money(r.allocated_entry_charges)
+                if r.allocated_entry_charges is not None
+                else None
+            ),
         )
         for r in fill_rows
     ]

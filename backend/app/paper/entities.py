@@ -57,6 +57,11 @@ class PaperFillRow(Base):
     tick_ts_ms: Mapped[int] = mapped_column(BigInteger, nullable=False)
     lot_id: Mapped[UUID | None] = mapped_column(GUID(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    charges_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=0)
+    schedule_id: Mapped[str] = mapped_column(String(64), nullable=False, default="legacy")
+    schedule_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    allocated_entry_charges: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    realized_pnl: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
 
 
 class PaperLotRow(Base):
@@ -72,6 +77,8 @@ class PaperLotRow(Base):
     qty_closed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     avg_entry_price: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     realized_pnl: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=0)
+    charges_entry: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=0)
+    charges_exit: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     entry_order_id: Mapped[UUID | None] = mapped_column(
         GUID(), ForeignKey("paper_orders.id"), nullable=True
@@ -96,3 +103,18 @@ class PaperCashLockRow(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PaperFillChargeRow(Base):
+    __tablename__ = "paper_fill_charges"
+
+    id: Mapped[UUID] = mapped_column(GUID(), primary_key=True)
+    fill_id: Mapped[UUID] = mapped_column(
+        GUID(), ForeignKey("paper_fills.id", ondelete="CASCADE")
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        GUID(), ForeignKey("app_users.id", ondelete="CASCADE")
+    )
+    code: Mapped[str] = mapped_column(String(32), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
