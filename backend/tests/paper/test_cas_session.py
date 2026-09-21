@@ -6,10 +6,12 @@ import pytest
 from fastapi import HTTPException
 
 from app.config import Settings
+from app.market.models import Tick
 from app.market.nse_clock import MarketPhase
 from app.market.session_policy import SessionKind
-from app.paper.models import OrderSource
+from app.paper.models import LotSide, LotStatus, OrderSource, PositionLot, Product
 from app.paper.service import PaperTradingService
+from app.user.service import money
 from app.watchlist.models import SymbolBootstrapStatus, WatchlistEntry
 from app.watchlist.repository import InMemoryWatchlistRepository
 
@@ -34,7 +36,11 @@ def svc_wl():
     repo = InMemoryWatchlistRepository()
     repo.save(_entry("NSE_EQ|RELIANCE", "RELIANCE"))
     repo.save(_entry("NSE_EQ|FOOBAR", "FOOBAR"))
-    settings = Settings(paper_enabled=True, paper_allow_memory=True)
+    settings = Settings(
+        paper_enabled=True,
+        paper_allow_memory=True,
+        paper_charges_enabled=False,
+    )
     uid = uuid4()
     balances = {uid: Decimal("100000")}
 
@@ -133,3 +139,48 @@ def test_cas_cnc_expires_at_session_end_not_cts(monkeypatch, svc_wl):
     ended = svc.get_order(uid, oid)
     assert ended["status"] == "EXPIRED"
     assert ended.get("rejectReason") == "SESSION_END"
+
+
+def test_leftover_mis_force_creates_zero_charge_fill(svc_wl):
+    svc, _repo, uid = svc_wl
+    now = datetime.now(timezone.utc)
+    lot = PositionLot(
+        id=uuid4(),
+        user_id=uid,
+        instrument_key="NSE_EQ|RELIANCE",
+        trading_symbol="RELIANCE",
+        side=LotSide.LONG,
+        product=Product.MIS,
+        qty_open=5,
+        qty_closed=0,
+        avg_entry_price=Decimal("100"),
+        realized_pnl=money(0),
+        status=LotStatus.OPEN,
+        opened_at=now,
+        updated_at=now,
+    )
+    svc._lots[lot.id] = lot
+    svc._ltp.update(
+        Tick(instrument_key=lot.instrument_key, price=102.0, volume_traded_today=1, timestamp_ms=1)
+    )
+    before = svc.account_snapshot(uid)["cashBalance"]
+    svc._force_remaining_mis(date(2026, 8, 4), kinds={SessionKind.CAS_CASH})
+
+    fills = svc.list_fills(uid)
+    assert len(fills) == 1
+    assert fills[0]["qty"] == 5
+    assert fills[0]["side"] == "SELL"
+    raw = svc._fills[0]
+    assert raw.charges_total == money(0)
+    assert raw.schedule_id == "off"
+    orders = svc.list_orders(uid)
+    so = [o for o in orders if o["source"] == "SYSTEM_SQUARE_OFF"]
+    assert len(so) == 1
+    assert so[0]["closeLotId"] == str(lot.id)
+    assert so[0]["status"] == "FILLED"
+    assert so[0]["filledQty"] == 5
+    assert svc.list_positions(uid, open_only=True) == []
+    snap = svc.account_snapshot(uid)
+    assert snap["cashBalance"] == pytest.approx(before + 5 * 102, rel=1e-9)
+    acc = svc._account(uid)
+    assert [e.entry_type for e in acc.ledger] == ["SELL"]

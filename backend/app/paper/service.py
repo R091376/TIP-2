@@ -737,6 +737,7 @@ class PaperTradingService:
             return
         with self._user_lock(user_id):
             now = datetime.now(timezone.utc)
+            acc = self._account(user_id)
             for o in list(self._orders.values()):
                 if o.user_id == user_id and o.status in OPEN_STATUSES:
                     o.status = OrderStatus.CANCELLED
@@ -744,7 +745,8 @@ class PaperTradingService:
                     o.completed_at = now
                     o.updated_at = now
                     self._open_by_symbol.get(o.instrument_key, set()).discard(o.id)
-            acc = self._account(user_id)
+                    release_order_lock(acc, o.id, now)
+                    self._persist_order(o)
             for L in list(self._lots.values()):
                 if L.user_id == user_id and L.status == LotStatus.OPEN:
                     px = self._ltp.get_price(L.instrument_key) or L.avg_entry_price
@@ -1042,43 +1044,72 @@ class PaperTradingService:
             lot.closed_at = now
             return
         fq = lot.qty_open
-        if lot.side == LotSide.LONG:
-            notional = money(Decimal(fq) * price)
-            acc.cash_balance = money(acc.cash_balance + notional)
-            from app.paper.models import LedgerEntry
-
-            acc.ledger.append(
-                LedgerEntry("SQUARE_OFF", notional, acc.cash_balance, f"{reason} long")
+        side = Side.SELL if lot.side == LotSide.LONG else Side.BUY
+        # filled_qty stays 0 / OPEN so apply_fill_cash remaining-based lock math is non-zero.
+        order = PaperOrder(
+            id=uuid4(),
+            user_id=lot.user_id,
+            instrument_key=lot.instrument_key,
+            trading_symbol=lot.trading_symbol,
+            side=side,
+            order_type=OrderType.MARKET,
+            working_order_type=WorkingOrderType.MARKET,
+            product=lot.product,
+            qty=fq,
+            filled_qty=0,
+            status=OrderStatus.OPEN,
+            reject_reason=reason or None,
+            close_lot_id=lot.id,
+            source=OrderSource.SYSTEM_SQUARE_OFF,
+            accept_seq=self._next_accept_seq(),
+            accepted_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        result = apply_fill_cash(
+            acc,
+            order,
+            lot,
+            fq,
+            price,
+            now,
+            cancel_unfunded_market=False,
+        )
+        if result.fill_qty <= 0:
+            logger.warning("force-close fill_qty=0 lot=%s reason=%s", lot.id, reason)
+            return
+        fq = result.fill_qty
+        lot = self._apply_lot_fill(order, lot, fq, price, now)
+        order.filled_qty = fq
+        order.status = OrderStatus.FILLED
+        order.completed_at = now
+        order.updated_at = now
+        order.version += 1
+        self._orders[order.id] = order
+        fill = PaperFill(
+            id=uuid4(),
+            order_id=order.id,
+            user_id=order.user_id,
+            instrument_key=order.instrument_key,
+            side=order.side,
+            qty=fq,
+            price=price,
+            amount=money(Decimal(fq) * price),
+            tick_ts_ms=int(now.timestamp() * 1000),
+            lot_id=lot.id,
+            created_at=now,
+            charges_total=money(0),
+            schedule_id="off",
+        )
+        self._fills.append(fill)
+        self._persist_order(order)
+        self._persist_fill(fill)
+        self._persist_lot(lot)
+        self._persist_account(acc)
+        if lot.status == LotStatus.CLOSED:
+            self._cancel_orders_for_closed_lot(
+                lot.user_id, lot, reason=reason or "LOT_CLOSED", now=now
             )
-            pnl = money((price - Decimal(str(lot.avg_entry_price))) * Decimal(fq))
-        else:
-            entry = Decimal(str(lot.avg_entry_price))
-            pnl = money((entry - price) * Decimal(fq))
-            ml = acc.lot_margin_lock(lot.id)
-            if ml:
-                ml.released_at = now
-            new_bal = money(acc.cash_balance + pnl)
-            if new_bal < 0:
-                from app.paper.models import LedgerEntry
-
-                acc.ledger.append(
-                    LedgerEntry("ADJUST", money(-acc.cash_balance), money(0), "blow-up")
-                )
-                acc.cash_balance = money(0)
-            else:
-                acc.cash_balance = new_bal
-                from app.paper.models import LedgerEntry
-
-                acc.ledger.append(
-                    LedgerEntry("SQUARE_OFF", pnl, acc.cash_balance, f"{reason} short")
-                )
-        lot.qty_closed += fq
-        lot.qty_open = 0
-        lot.realized_pnl = money(lot.realized_pnl + pnl)
-        lot.status = LotStatus.CLOSED
-        lot.closed_at = now
-        lot.updated_at = now
-        self._cancel_orders_for_closed_lot(lot.user_id, lot, reason=reason or "LOT_CLOSED", now=now)
         self._write_user_cash(lot.user_id, acc)
 
     # --- MIS square-off ---
