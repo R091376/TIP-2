@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -241,6 +241,63 @@ def test_wipe_user_cancels_open_orders_and_force_closes_on_same_instance():
     assert svc.list_positions(uid, open_only=True) == []
     acc = svc._account(uid)
     assert [e.entry_type for e in acc.ledger] == ["SELL"]
+
+
+def test_force_remaining_mis_two_shorts_both_flatten_when_first_cover_aborts(monkeypatch):
+    """Sibling SHORT_MARGIN can make COVER AbortFill(free_cash); flatten must still succeed."""
+    import app.paper.service as svc_mod
+    from app.paper.cash import AbortFill
+
+    svc, uid, _ = _svc(cash=Decimal("2000"))
+    lot_a = _open_lot(uid, side=LotSide.SHORT, qty=10, px=Decimal("100"))
+    lot_b = _open_lot(uid, side=LotSide.SHORT, qty=10, px=Decimal("100"))
+    svc._lots[lot_a.id] = lot_a
+    svc._lots[lot_b.id] = lot_b
+    acc = svc._account(uid)
+    now = datetime.now(timezone.utc)
+    for lot in (lot_a, lot_b):
+        acc.locks.append(
+            CashLock(
+                id=uuid4(),
+                user_id=uid,
+                amount=money(1000),
+                reason=LockReason.SHORT_MARGIN,
+                lot_id=lot.id,
+                created_at=now,
+            )
+        )
+    # cash 2000, two 1000 margins, free=0. Cover @250: pnl=-1500 → free_cash negative.
+    svc._ltp.update(Tick(instrument_key=KEY, price=250.0, volume_traded_today=1, timestamp_ms=1))
+
+    orig = svc_mod.apply_fill_cash
+    aborted: list[str] = []
+
+    def spy(account, order, lot_arg, *args, **kwargs):
+        try:
+            return orig(account, order, lot_arg, *args, **kwargs)
+        except AbortFill:
+            aborted.append(str(lot_arg.id if lot_arg is not None else ""))
+            raise
+
+    monkeypatch.setattr(svc_mod, "apply_fill_cash", spy)
+    svc._force_remaining_mis(date(2026, 8, 4))
+
+    assert aborted, "first cover must hit AbortFill(free_cash negative)"
+    assert lot_a.status == LotStatus.CLOSED
+    assert lot_b.status == LotStatus.CLOSED
+    assert lot_a.qty_open == 0 and lot_b.qty_open == 0
+    fills = svc.list_fills(uid)
+    assert len(fills) == 2
+    so = [o for o in svc.list_orders(uid) if o["source"] == OrderSource.SYSTEM_SQUARE_OFF.value]
+    assert len(so) == 2
+    assert {o["closeLotId"] for o in so} == {str(lot_a.id), str(lot_b.id)}
+    assert all(o["status"] == OrderStatus.FILLED.value for o in so)
+    assert all(o["side"] == Side.BUY.value for o in so)
+    assert {UUID(o["id"]) for o in so}.isdisjoint(svc._open_by_symbol.get(KEY, set()))
+    assert svc.list_positions(uid, open_only=True) == []
+    assert acc.lot_margin_lock(lot_a.id) is None
+    assert acc.lot_margin_lock(lot_b.id) is None
+    assert all(f.charges_total == money(0) for f in svc._fills)
 
 
 @pytest.fixture()

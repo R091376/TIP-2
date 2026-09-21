@@ -20,6 +20,7 @@ from app.market.session_policy import (
     session_kind_from_entry,
 )
 from app.paper.cash import (
+    AbortFill,
     apply_fill_cash,
     lock_reference_price,
     release_order_lock,
@@ -43,6 +44,7 @@ from app.paper.models import (
     CashAccount,
     CashLock,
     Intent,
+    LedgerEntry,
     LockReason,
     LotSide,
     LotStatus,
@@ -749,8 +751,11 @@ class PaperTradingService:
                     self._persist_order(o)
             for L in list(self._lots.values()):
                 if L.user_id == user_id and L.status == LotStatus.OPEN:
-                    px = self._ltp.get_price(L.instrument_key) or L.avg_entry_price
-                    self._force_close_lot(acc, L, Decimal(str(px)), now, reason="ADMIN_WIPE")
+                    try:
+                        px = self._ltp.get_price(L.instrument_key) or L.avg_entry_price
+                        self._force_close_lot(acc, L, Decimal(str(px)), now, reason="ADMIN_WIPE")
+                    except Exception:
+                        logger.exception("wipe force-close failed lot=%s", L.id)
             for lk in acc.open_locks():
                 lk.released_at = now
             self._persist_account(acc)
@@ -1036,6 +1041,44 @@ class PaperTradingService:
             lot.closed_at = now
         return lot
 
+    def _force_flatten_cash(
+        self, acc: CashAccount, lot: PositionLot, fq: int, price: Decimal, now: datetime
+    ) -> None:
+        """CLOSE/COVER cash for system flatten. Always succeeds; may leave free_cash < 0."""
+        if lot.side == LotSide.LONG:
+            notional = money(Decimal(fq) * price)
+            acc.cash_balance = money(acc.cash_balance + notional)
+            acc.ledger.append(
+                LedgerEntry(
+                    "SELL",
+                    notional,
+                    acc.cash_balance,
+                    f"CLOSE_LONG fill {fq}@{price}",
+                )
+            )
+            return
+        entry = Decimal(str(lot.avg_entry_price))
+        pnl = money((entry - price) * Decimal(fq))
+        ml = acc.lot_margin_lock(lot.id)
+        if ml:
+            ml.released_at = now
+        new_bal = money(acc.cash_balance + pnl)
+        if new_bal < 0:
+            acc.ledger.append(
+                LedgerEntry("ADJUST", money(-acc.cash_balance), money(0), "short blow-up floor")
+            )
+            acc.cash_balance = money(0)
+        else:
+            acc.cash_balance = new_bal
+            acc.ledger.append(
+                LedgerEntry(
+                    "SQUARE_OFF",
+                    pnl,
+                    acc.cash_balance,
+                    f"COVER_SHORT fill {fq}@{price}",
+                )
+            )
+
     def _force_close_lot(
         self, acc: CashAccount, lot: PositionLot, price: Decimal, now: datetime, reason: str
     ) -> None:
@@ -1045,7 +1088,7 @@ class PaperTradingService:
             return
         fq = lot.qty_open
         side = Side.SELL if lot.side == LotSide.LONG else Side.BUY
-        # filled_qty stays 0 / OPEN so apply_fill_cash remaining-based lock math is non-zero.
+        # remaining = qty so a later shared _apply_fill does not += against an already-full order
         order = PaperOrder(
             id=uuid4(),
             user_id=lot.user_id,
@@ -1066,19 +1109,36 @@ class PaperTradingService:
             created_at=now,
             updated_at=now,
         )
-        result = apply_fill_cash(
-            acc,
-            order,
-            lot,
-            fq,
-            price,
-            now,
-            cancel_unfunded_market=False,
-        )
-        if result.fill_qty <= 0:
-            logger.warning("force-close fill_qty=0 lot=%s reason=%s", lot.id, reason)
-            return
-        fq = result.fill_qty
+        cash_before = acc.cash_balance
+        ledger_len = len(acc.ledger)
+        lock_snap = [(lk, lk.amount, lk.released_at) for lk in acc.locks]
+        try:
+            result = apply_fill_cash(
+                acc,
+                order,
+                lot,
+                fq,
+                price,
+                now,
+                cancel_unfunded_market=False,
+            )
+            if result.fill_qty <= 0:
+                raise AbortFill("force-close fill_qty=0")
+            fq = result.fill_qty
+        except AbortFill as exc:
+            logger.warning(
+                "force-close apply_fill_cash aborted lot=%s reason=%s err=%s; flattening anyway",
+                lot.id,
+                reason,
+                exc,
+            )
+            acc.cash_balance = cash_before
+            del acc.ledger[ledger_len:]
+            for lk, amt, rel in lock_snap:
+                lk.amount = amt
+                lk.released_at = rel
+            fq = lot.qty_open
+            self._force_flatten_cash(acc, lot, fq, price, now)
         lot = self._apply_lot_fill(order, lot, fq, price, now)
         order.filled_qty = fq
         order.status = OrderStatus.FILLED
@@ -1230,11 +1290,14 @@ class PaperTradingService:
             if not self._matches_kinds(L.instrument_key, kinds):
                 continue
             with self._user_lock(L.user_id):
-                acc = self._account(L.user_id)
-                px = self._ltp.get_price(L.instrument_key) or L.avg_entry_price
-                self._force_close_lot(acc, L, Decimal(str(px)), now, reason="MIS_FORCE_CLOSED")
-                self._persist_lot(L)
-                self._persist_account(acc)
+                try:
+                    acc = self._account(L.user_id)
+                    px = self._ltp.get_price(L.instrument_key) or L.avg_entry_price
+                    self._force_close_lot(acc, L, Decimal(str(px)), now, reason="MIS_FORCE_CLOSED")
+                    self._persist_lot(L)
+                    self._persist_account(acc)
+                except Exception:
+                    logger.exception("MIS force-close failed lot=%s", L.id)
         # CNC SESSION_END is a full-session event (15:30 / flag-off), not CTS.
         if kinds is not None:
             return
