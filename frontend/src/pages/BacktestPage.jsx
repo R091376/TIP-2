@@ -61,7 +61,8 @@ function tradePnl(t) {
 }
 
 function tradePnlNet(t) {
-  const p = Number(t?.pnlNet)
+  if (t?.pnlNet == null) return null
+  const p = Number(t.pnlNet)
   return Number.isFinite(p) ? p : null
 }
 
@@ -381,10 +382,13 @@ export default function BacktestPage() {
     summary.pnl != null && Number.isFinite(Number(summary.pnl))
       ? Number(summary.pnl)
       : filledTrades.reduce((s, t) => s + (tradePnl(t) || 0), 0)
+  const tradeNets = filledTrades.map(tradePnlNet).filter((p) => p != null)
   const runPnlNet =
     summary.pnlNet != null && Number.isFinite(Number(summary.pnlNet))
       ? Number(summary.pnlNet)
-      : filledTrades.reduce((s, t) => s + (tradePnlNet(t) || 0), 0)
+      : tradeNets.length
+        ? tradeNets.reduce((s, p) => s + p, 0)
+        : null
   const runDeployed = filledTrades.reduce((s, t) => s + (tradeNotional(t) || 0), 0)
   const runPnlPct =
     summary.pnlPct != null && Number.isFinite(Number(summary.pnlPct))
@@ -395,11 +399,12 @@ export default function BacktestPage() {
   const runPnlPctNet =
     summary.pnlPctNet != null && Number.isFinite(Number(summary.pnlPctNet))
       ? Number(summary.pnlPctNet)
-      : runDeployed > 0
+      : runPnlNet != null && runDeployed > 0
         ? runPnlNet / runDeployed
         : null
   const pnlTone = runPnl > 0 ? 'good' : runPnl < 0 ? 'bad' : 'warn'
-  const pnlNetTone = runPnlNet > 0 ? 'good' : runPnlNet < 0 ? 'bad' : 'warn'
+  const pnlNetTone =
+    runPnlNet == null ? 'muted' : runPnlNet > 0 ? 'good' : runPnlNet < 0 ? 'bad' : 'warn'
 
   return (
     <div className="bt-page">

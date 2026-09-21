@@ -97,6 +97,8 @@ def test_replay_detects_breakout_and_records_trade():
         assert filled[0].pnl_net is not None
         assert isinstance(result.summary["pnlNet"], (int, float))
         assert result.trades[0].get("pnlNet") == filled[0].pnl_net
+        assert result.summary["pnl"] != result.summary["pnlNet"]
+        assert filled[0].charges_total not in (None, 0)
         assert "avgRNet" in result.summary
         assert "tradeWrNet" in result.summary
 

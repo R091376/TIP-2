@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import threading
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Protocol
 from uuid import UUID, uuid4
 
 from app.backtest.spec import PatternSpec
+from app.user.service import money
 
 
 def _now():
@@ -271,13 +273,10 @@ class PostgresBacktestJobStore:
                     "rMultipleNet": r.r_multiple_net,
                     "pnl": r.pnl,
                     "pnlNet": r.pnl_net,
+                    "pnlPctNet": _pnl_pct_net(r),
                     "chargesEntry": r.charges_entry,
                     "chargesExit": r.charges_exit,
-                    "chargesTotal": (
-                        None
-                        if r.charges_entry is None or r.charges_exit is None
-                        else round(r.charges_entry + r.charges_exit, 2)
-                    ),
+                    "chargesTotal": _charges_total(r.charges_entry, r.charges_exit),
                     "qty": r.qty,
                     "flagConfirmed": r.flag_confirmed,
                     "flagRetested": r.flag_retested,
@@ -304,3 +303,23 @@ class PostgresBacktestJobStore:
 
 def _as_uuid(run_id: UUID | str) -> UUID:
     return run_id if isinstance(run_id, UUID) else UUID(str(run_id))
+
+
+def _charges_total(entry: float | None, exit_amt: float | None) -> float | None:
+    if entry is None or exit_amt is None:
+        return None
+    return float(money(Decimal(str(entry)) + Decimal(str(exit_amt))))
+
+
+def _pnl_pct_net(r) -> float | None:
+    if r.pnl_net is None:
+        return None
+    px = r.fill_entry if r.fill_entry is not None else r.entry
+    try:
+        price = float(px)
+        qty = max(1, int(r.qty or 1))
+    except (TypeError, ValueError):
+        return None
+    if not (price > 0):
+        return None
+    return float(r.pnl_net) / (abs(price) * qty)

@@ -8,6 +8,7 @@ from app.backtest.jobs import BacktestJobStore
 from app.backtest.replay import BacktestResult, replay_series, summarize
 from app.backtest.spec import PatternSpec
 from app.config import Settings
+from app.paper.charges import load_charge_schedule
 from app.market.ingest import CandleIngestService
 from app.market.session_policy import (
     SessionKind,
@@ -50,6 +51,7 @@ def execute_spec(
 
     all_setups = []
     all_trades = []
+    schedule = load_charge_schedule(settings, log=False)
     for symbol_id in spec.symbols:
         close_m = close_minutes_for(symbol_id, instruments, settings)
         mis = mis_hhmm_for(symbol_id, instruments, settings)
@@ -83,6 +85,7 @@ def execute_spec(
                 candles=candles,
                 close_minutes=close_m,
                 mis_hhmm=mis,
+                schedule=schedule,
             )
             all_setups.extend(setups)
             all_trades.extend(trades)

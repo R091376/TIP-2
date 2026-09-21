@@ -18,7 +18,7 @@ from app.backtest.fills import (
 )
 from app.backtest.spec import PatternSpec, overlay_settings
 from app.config import Settings
-from app.paper.charges import load_charge_schedule
+from app.paper.charges import ChargeSchedule, load_charge_schedule
 from app.paper.models import Product
 from app.market.ingest import session_end_epoch, session_start_epoch
 from app.market.models import Candle
@@ -101,6 +101,7 @@ def replay_series(
     candles: list[Candle],
     close_minutes: int,
     mis_hhmm: str,
+    schedule: ChargeSchedule | None = None,
 ) -> tuple[list[ActivePattern], list[SimTrade]]:
     if not candles:
         return [], []
@@ -173,7 +174,13 @@ def replay_series(
         product = Product(str(spec.product or "MIS").upper())
     except ValueError:
         product = Product.MIS
-    stamp_sim_charges(trades, product, load_charge_schedule(settings))
+    stamp_sim_charges(
+        trades,
+        product,
+        schedule
+        if schedule is not None
+        else load_charge_schedule(settings, log=False),
+    )
     trades = [
         t
         for t in trades

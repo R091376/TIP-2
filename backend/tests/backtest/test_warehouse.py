@@ -131,3 +131,4 @@ def test_backtest_trade_net_fields_persist():
     assert trades[0]["chargesExit"] == 0.1
     assert trades[0]["rMultipleNet"] == 1.7
     assert trades[0]["chargesTotal"] == pytest.approx(0.3)
+    assert trades[0]["pnlPctNet"] == pytest.approx(3.5 / 100.2)

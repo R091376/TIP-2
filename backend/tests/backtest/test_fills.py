@@ -155,6 +155,64 @@ def test_expire_open_at_end():
     assert t.outcome == "expired"
 
 
+def test_stamp_short_uses_open_short_and_cover_short():
+    t = _trade(direction="short", entry=100.0, stop=102.0, target=96.0)
+    fill_bar = Candle(1_700_000_300, 100.2, 100.4, 100.0, 100.3, 1000)
+    on_bar([t], fill_bar, stop_wins=True, product="MIS", close_minutes=930, mis_hhmm="15:20")
+    assert t.outcome is None
+    win = Candle(1_700_000_600, 99.0, 99.2, 95.5, 96.0, 1000)
+    on_bar([t], win, stop_wins=True, product="MIS", close_minutes=930, mis_hhmm="15:20")
+    assert t.outcome == "target"
+    assert t.fill_entry == 100.2
+    assert t.fill_exit == 96.0
+    assert t.pnl == (100.2 - 96.0) * 1
+    gross = t.pnl
+    stamp_sim_charges([t], Product.MIS, NSE_EQ_CASH_V1)
+    assert t.pnl == gross
+    entry_px = Decimal(str(t.fill_entry))
+    exit_px = Decimal(str(t.fill_exit))
+    entry_bd = compute_charges(
+        ChargeContext(
+            side=Side.SELL,
+            product=Product.MIS,
+            intent=Intent.OPEN_SHORT,
+            qty=1,
+            price=entry_px,
+            notional=money(entry_px),
+        ),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    exit_bd = compute_charges(
+        ChargeContext(
+            side=Side.BUY,
+            product=Product.MIS,
+            intent=Intent.COVER_SHORT,
+            qty=1,
+            price=exit_px,
+            notional=money(exit_px),
+        ),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    swapped_entry = compute_charges(
+        ChargeContext(
+            side=Side.BUY,
+            product=Product.MIS,
+            intent=Intent.OPEN_LONG,
+            qty=1,
+            price=entry_px,
+            notional=money(entry_px),
+        ),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    assert t.charges_entry == float(entry_bd.total)
+    assert t.charges_exit == float(exit_bd.total)
+    assert t.pnl_net == float(money(Decimal(str(gross)) - entry_bd.total - exit_bd.total))
+    assert t.charges_entry != float(swapped_entry.total)
+
+
 def test_stamp_leaves_open_net_none():
     t = _trade()
     fill_bar = Candle(1_700_000_300, 100.2, 100.4, 100.0, 100.3, 1000)

@@ -154,37 +154,39 @@ def compute_charges(
     )
 
 
-def load_charge_schedule(settings: Any) -> ChargeSchedule:
+def load_charge_schedule(settings: Any, *, log: bool = True) -> ChargeSchedule:
     """Resolve in-code nse_eq_cash_v1, optionally overlaid by JSON (decimal strings only)."""
     base = NSE_EQ_CASH_V1
     requested = (getattr(settings, "paper_charges_schedule_id", "") or "").strip() or base.id
+
+    def _done(sched: ChargeSchedule) -> ChargeSchedule:
+        if log:
+            _log_resolved(settings, sched)
+        return sched
+
     if requested != base.id:
         logger.error(
             "unknown paper charge schedule_id=%s; falling back to %s",
             requested,
             base.id,
         )
-        _log_resolved(settings, base)
-        return base
+        return _done(base)
 
     raw = (getattr(settings, "paper_charges_schedule_json", "") or "").strip()
     if not raw:
-        _log_resolved(settings, base)
-        return base
+        return _done(base)
 
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError:
         logger.error("invalid paper_charges_schedule_json; falling back to in-code default")
-        _log_resolved(settings, base)
-        return base
+        return _done(base)
 
     if not isinstance(payload, dict):
         logger.error(
             "paper_charges_schedule_json is not an object; falling back to in-code default"
         )
-        _log_resolved(settings, base)
-        return base
+        return _done(base)
 
     overlay_id = payload.get("id")
     if overlay_id is not None and overlay_id != base.id:
@@ -192,17 +194,13 @@ def load_charge_schedule(settings: Any) -> ChargeSchedule:
             "unknown paper charge schedule_id=%s in overlay; falling back to in-code default",
             overlay_id,
         )
-        _log_resolved(settings, base)
-        return base
+        return _done(base)
 
     updates = _overlay_updates(payload)
     if updates is None:
-        _log_resolved(settings, base)
-        return base
+        return _done(base)
 
-    sched = replace(base, **updates)
-    _log_resolved(settings, sched)
-    return sched
+    return _done(replace(base, **updates))
 
 
 def _brokerage(ctx: ChargeContext, schedule: ChargeSchedule, notional: Decimal) -> Decimal:
