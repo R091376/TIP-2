@@ -125,6 +125,17 @@ def test_unauthenticated_watchlist_mutations_401(secure_app):
     assert r.status_code == 401
     r = client.delete("/api/backtests")
     assert r.status_code == 401
+    r = client.post(
+        "/api/paper/charges/preview",
+        json={
+            "instrumentKey": "NSE_EQ|X",
+            "side": "BUY",
+            "orderType": "MARKET",
+            "product": "MIS",
+            "qty": 1,
+        },
+    )
+    assert r.status_code == 401
 
 
 def test_login_invalid_credentials_401(secure_app):

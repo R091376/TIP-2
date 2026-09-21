@@ -50,6 +50,16 @@ class ModifyOrderBody(BaseModel):
     triggerPrice: float | None = None
 
 
+class ChargesPreviewBody(BaseModel):
+    instrumentKey: str
+    side: str
+    orderType: str
+    product: str = "MIS"
+    qty: int = Field(ge=1)
+    price: float | None = None
+    closeLotId: str | None = None
+
+
 @router.get("/account")
 def account(request: Request, user: AuthUser):
     return _svc(request).account_snapshot(_uid(user))
@@ -111,6 +121,21 @@ def list_fills(request: Request, user: AuthUser, limit: int = 100):
 @router.get("/ledger")
 def list_ledger(request: Request, user: AuthUser, limit: int = 100):
     return _svc(request).list_ledger(_uid(user), limit=min(limit, 500))
+
+
+@router.post("/charges/preview")
+def preview_charges(body: ChargesPreviewBody, request: Request, user: AuthUser):
+    """Read-only charge estimate. Does not require tradingEnabled; no cash movement."""
+    return _svc(request).preview_charges(
+        _uid(user),
+        instrument_key=body.instrumentKey,
+        side=body.side,
+        order_type=body.orderType,
+        product=body.product,
+        qty=body.qty,
+        price=body.price,
+        close_lot_id=body.closeLotId,
+    )
 
 
 @router.get("/ltp/{instrument_key:path}")

@@ -28,6 +28,7 @@ from app.paper.cash import (
     recompute_order_lock,
     ensure_short_margin,
 )
+from app.paper.charges import ChargeContext, compute_charges, load_charge_schedule
 from app.paper.eligibility import is_paper_tradable
 from app.paper.last_price import LastPriceCache
 from app.paper.matching import (
@@ -97,6 +98,7 @@ class PaperTradingService:
         self._cts_sl_cancelled: set[date] = set()
         self._user_cash_provider = user_cash_provider  # (user_id) -> Decimal
         self._user_cash_writer = user_cash_writer  # (user_id, balance, ledger_entries)
+        self._charge_schedule = load_charge_schedule(settings)
         self._worker = PaperMatcherWorker(
             self._on_drain,
             square_off_check=self.maybe_mis_square_off,
@@ -571,6 +573,163 @@ class PaperTradingService:
             }
             for e in entries
         ]
+
+    def preview_charges(
+        self,
+        user_id: UUID,
+        *,
+        instrument_key: str,
+        side: str,
+        order_type: str,
+        product: str,
+        qty: int,
+        price: float | None = None,
+        close_lot_id: str | None = None,
+    ) -> dict:
+        """Read-only charge/lock estimate. Does not move cash or place an order."""
+        self._require_enabled()
+        if qty < 1:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_QTY", "message": "qty must be >= 1"},
+            )
+        try:
+            side_e = Side(str(side).upper())
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_SIDE", "message": "side must be BUY or SELL"},
+            ) from None
+        try:
+            product_e = Product(str(product).upper())
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_PRODUCT", "message": "product must be MIS or CNC"},
+            ) from None
+        type_e = self._parse_order_type(order_type)
+
+        close_raw = (close_lot_id or "").strip() or None
+        close_id: UUID | None = None
+        if close_raw:
+            try:
+                close_id = UUID(close_raw)
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"code": "LOT_NOT_FOUND", "message": "closeLotId invalid"},
+                ) from None
+
+        if product_e == Product.CNC and side_e == Side.SELL and close_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "CNC_SHORT_NOT_ALLOWED",
+                    "message": "CNC cannot open a short; sell CNC only to close a delivery long",
+                },
+            )
+
+        body_px = Decimal(str(price)) if price is not None else None
+        if body_px is not None and body_px <= 0:
+            body_px = None
+        ltp = self._ltp.get_price(instrument_key)
+        charge_px = self._preview_charge_price(type_e, body_px, ltp)
+
+        with self._user_lock(user_id):
+            lot = None
+            if close_id is not None:
+                lot = self._lots.get(close_id)
+                if lot is None or lot.user_id != user_id or lot.status != LotStatus.OPEN:
+                    raise HTTPException(
+                        status_code=400,
+                        detail={"code": "LOT_NOT_FOUND", "message": "closeLotId invalid"},
+                    )
+                if lot.side == LotSide.LONG and side_e != Side.SELL:
+                    raise HTTPException(
+                        status_code=400,
+                        detail={"code": "SIDE_MISMATCH", "message": "close long with SELL"},
+                    )
+                if lot.side == LotSide.SHORT and side_e != Side.BUY:
+                    raise HTTPException(
+                        status_code=400,
+                        detail={"code": "SIDE_MISMATCH", "message": "cover short with BUY"},
+                    )
+            intent = (
+                Intent.OPEN_LONG
+                if close_id is None and side_e == Side.BUY
+                else Intent.OPEN_SHORT
+                if close_id is None
+                else Intent.COVER_SHORT
+                if side_e == Side.BUY
+                else Intent.CLOSE_LONG
+            )
+            if intent == Intent.COVER_SHORT and lot is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"code": "LOT_NOT_FOUND", "message": "closeLotId invalid"},
+                )
+
+            enabled = bool(getattr(self._settings, "paper_charges_enabled", False))
+            notional = money(Decimal(qty) * charge_px)
+            bd = compute_charges(
+                ChargeContext(
+                    side=side_e,
+                    product=product_e,
+                    intent=intent,
+                    qty=qty,
+                    price=charge_px,
+                    notional=notional,
+                ),
+                self._charge_schedule,
+                enabled=enabled,
+            )
+            cash_effect = self._preview_cash_effect(intent, notional, bd.total, lot, charge_px, qty)
+
+            haircut = Decimal(str(getattr(self._settings, "paper_market_lock_haircut", 1.02)))
+            lock_px = lock_reference_price(type_e, body_px, ltp, haircut)
+            if intent in (Intent.CLOSE_LONG, Intent.COVER_SHORT):
+                lock_estimate = money(0)
+            else:
+                if type_e in (OrderType.MARKET, OrderType.SL_M) and (ltp is None or ltp <= 0):
+                    raise HTTPException(
+                        status_code=400,
+                        detail={"code": "NO_LTP", "message": "No LTP for lock sizing"},
+                    )
+                if lock_px is None or lock_px <= 0:
+                    raise HTTPException(
+                        status_code=400,
+                        detail={"code": "NO_LTP", "message": "No LTP for lock sizing"},
+                    )
+                lock_notional = money(Decimal(qty) * lock_px)
+                lock_bd = compute_charges(
+                    ChargeContext(
+                        side=side_e,
+                        product=product_e,
+                        intent=intent,
+                        qty=qty,
+                        price=lock_px,
+                        notional=lock_notional,
+                    ),
+                    self._charge_schedule,
+                    enabled=enabled,
+                )
+                lock_estimate = money(lock_notional + lock_bd.total)
+
+            return {
+                "enabled": enabled,
+                "scheduleId": bd.schedule_id,
+                "notional": float(notional),
+                "charges": [
+                    {"code": ln.code.value, "amount": float(ln.amount)}
+                    for ln in bd.persistable_lines()
+                ],
+                "chargesTotal": float(bd.total),
+                "cashEffect": float(cash_effect),
+                "lockEstimate": float(lock_estimate),
+                "lockPrice": float(lock_px) if lock_px is not None else None,
+                # place_order still locks notional only until PR2c wires charges into locks.
+                "lockIncludesCharges": False,
+            }
 
     def wipe_user(self, user_id: UUID, *, close_price_policy: str = "LTP_ELSE_ENTRY") -> None:
         """Cancel orders, force-close lots, release locks. Does not reset cash_balance."""
@@ -1091,6 +1250,67 @@ class PaperTradingService:
             if not getattr(self._settings, "is_memory_profile", False):
                 # still allow if paper_allow_memory default false — for local postgres-less, enable via setting
                 pass  # in-process book always works; PG optional write-through
+
+    @staticmethod
+    def _parse_order_type(order_type: str) -> OrderType:
+        ot_raw = str(order_type or "").upper().replace("-", "_")
+        if ot_raw in ("SLM", "SL_M"):
+            return OrderType.SL_M
+        try:
+            return OrderType(ot_raw)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "INVALID_ORDER_TYPE",
+                    "message": "orderType must be MARKET|LIMIT|SL|SL_M",
+                },
+            ) from None
+
+    @staticmethod
+    def _preview_charge_price(
+        order_type: OrderType, body_px: Decimal | None, ltp: Decimal | None
+    ) -> Decimal:
+        if order_type in (OrderType.LIMIT, OrderType.SL):
+            if body_px is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"code": "INVALID_PRICES", "message": "LIMIT/SL requires price"},
+                )
+            return body_px
+        # MARKET / SL_M: body price if present else LTP
+        if body_px is not None:
+            return body_px
+        if ltp is None or ltp <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "NO_LTP", "message": "No LTP for lock sizing"},
+            )
+        return ltp
+
+    @staticmethod
+    def _preview_cash_effect(
+        intent: Intent,
+        notional: Decimal,
+        charges_total: Decimal,
+        lot: PositionLot | None,
+        charge_px: Decimal,
+        qty: int,
+    ) -> Decimal:
+        if intent == Intent.OPEN_LONG:
+            return money(-(notional + charges_total))
+        if intent == Intent.CLOSE_LONG:
+            return money(notional - charges_total)
+        if intent == Intent.OPEN_SHORT:
+            return money(-charges_total)
+        # COVER_SHORT: PnL vs lot entry, then charges (margin is lock, not cashEffect)
+        if lot is None:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "LOT_NOT_FOUND", "message": "closeLotId invalid"},
+            )
+        pnl = money((Decimal(str(lot.avg_entry_price)) - charge_px) * Decimal(qty))
+        return money(pnl - charges_total)
 
     def _validate_prices(
         self, order_type: OrderType, price: Decimal | None, trigger: Decimal | None
