@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
@@ -50,9 +50,9 @@ def write_user_cash(
                     "amount": money(le.amount),
                     "balance_after": money(le.balance_after),
                     "note": (le.note or "paper")[:512],
-                    "created_at": now,
+                    "created_at": now + timedelta(microseconds=i),
                 }
-                for le in unpublished
+                for i, le in enumerate(unpublished)
             ]
             stmt = insert(CashLedgerRow).values(payload)
             stmt = stmt.on_conflict_do_nothing(index_elements=["id"])

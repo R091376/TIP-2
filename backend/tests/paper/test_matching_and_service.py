@@ -301,7 +301,13 @@ def test_reject_index(monkeypatch, wl):
     svc.stop()
 
 
-def _mem_svc(wl, *, charges_enabled: bool = False, cash: Decimal | None = None):
+def _mem_svc(
+    wl,
+    *,
+    charges_enabled: bool = False,
+    cash: Decimal | None = None,
+    max_fill_qty_per_tick: int | None = None,
+):
     uid = uuid4()
     balances = {uid: cash if cash is not None else Decimal("100000")}
     svc = PaperTradingService(
@@ -309,6 +315,7 @@ def _mem_svc(wl, *, charges_enabled: bool = False, cash: Decimal | None = None):
             paper_enabled=True,
             paper_allow_memory=True,
             paper_charges_enabled=charges_enabled,
+            paper_max_fill_qty_per_tick=max_fill_qty_per_tick,
         ),
         wl,
         session_factory=None,
@@ -502,3 +509,53 @@ def test_place_order_lock_includes_estimated_charges(monkeypatch, wl):
     assert lk.amount == money(Decimal("1000") + est.total)
     snap = svc.account_snapshot(uid)
     assert snap["chargesEnabled"] is True
+
+
+def test_max_fill_qty_per_tick_does_not_expire_market_residual(monkeypatch, wl):
+    """Per-tick slice is not INSUFFICIENT_CASH_AT_FILL; leftover stays working."""
+    monkeypatch.setattr("app.paper.service.phase_from_clock", lambda: MarketPhase.OPEN)
+    monkeypatch.setattr("app.paper.service.phase_at", lambda *a, **k: MarketPhase.OPEN)
+    from app.paper.charges import ChargeContext, NSE_EQ_CASH_V1, compute_charges
+    from app.paper.models import Intent, OrderStatus, Product, Side
+    from app.user.service import money
+
+    svc, uid = _mem_svc(
+        wl, charges_enabled=True, cash=Decimal("100000"), max_fill_qty_per_tick=10
+    )
+    key = "NSE_EQ|RELIANCE"
+    svc._ltp.update(Tick(instrument_key=key, price=100.0, volume_traded_today=1, timestamp_ms=1))
+    placed = svc.place_order(
+        uid,
+        instrument_key=key,
+        side="BUY",
+        order_type="MARKET",
+        product="MIS",
+        qty=40,
+        trading_enabled=True,
+    )
+    order = svc._orders[UUID(placed["id"])]
+    order.market_ready_after_seq = 0
+    svc._match_one(order, Decimal("100"), tick_ts_ms=2, seen_seq=1)
+    assert len(svc._fills) == 1
+    assert svc._fills[0].qty == 10
+    assert order.status == OrderStatus.PARTIALLY_FILLED
+    assert order.filled_qty == 10
+    assert order.reject_reason != "INSUFFICIENT_CASH_AT_FILL"
+    assert order.reject_reason is None
+    assert order.id in svc._open_by_symbol.get(key, set())
+    lk = svc._account(uid).order_lock(order.id)
+    assert lk is not None
+    lock_px = money(Decimal("100") * Decimal("1.02"))
+    est = compute_charges(
+        ChargeContext(
+            side=Side.BUY,
+            product=Product.MIS,
+            intent=Intent.OPEN_LONG,
+            qty=30,
+            price=lock_px,
+            notional=money(Decimal(30) * lock_px),
+        ),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    assert lk.amount == money(Decimal(30) * lock_px + est.total)

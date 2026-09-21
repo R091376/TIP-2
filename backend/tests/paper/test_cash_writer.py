@@ -199,9 +199,8 @@ def test_list_ledger_reads_postgres_when_session_factory_set(pg_mem):
         user_cash_provider=lambda _u: Decimal("101049.33"),
     )
     rows = svc.list_ledger(uid, limit=10)
-    assert {r["entryType"] for r in rows} == {"SELL", "FEE"}
-    fee_row = next(r for r in rows if r["entryType"] == "FEE")
-    assert fee_row["amount"] == pytest.approx(-0.67)
+    assert [r["entryType"] for r in rows] == ["FEE", "SELL"]
+    assert rows[0]["amount"] == pytest.approx(-0.67)
     mem = PaperTradingService(
         Settings(paper_enabled=True, paper_allow_memory=True),
         InMemoryWatchlistRepository(),

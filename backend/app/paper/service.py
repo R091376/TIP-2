@@ -603,19 +603,18 @@ class PaperTradingService:
 
             from app.user.entities import CashLedgerRow
 
-            try:
-                with self._sf() as s:
-                    rows = list(
-                        s.scalars(
-                            select(CashLedgerRow)
-                            .where(CashLedgerRow.user_id == user_id)
-                            .order_by(CashLedgerRow.created_at.desc())
-                            .limit(n)
-                        ).all()
-                    )
-            except Exception:
-                logger.exception("list_ledger query failed user=%s", user_id)
-                rows = []
+            with self._sf() as s:
+                rows = list(
+                    s.scalars(
+                        select(CashLedgerRow)
+                        .where(CashLedgerRow.user_id == user_id)
+                        .order_by(
+                            CashLedgerRow.created_at.desc(),
+                            CashLedgerRow.id.desc(),
+                        )
+                        .limit(n)
+                    ).all()
+                )
             return [
                 {
                     "entryType": r.entry_type,
@@ -936,7 +935,6 @@ class PaperTradingService:
         if order.filled_qty >= order.qty:
             order.status = OrderStatus.FILLED
             order.completed_at = now
-            release_order_lock(acc, order.id, now)
             self._open_by_symbol.get(order.instrument_key, set()).discard(order.id)
         else:
             order.status = OrderStatus.PARTIALLY_FILLED
@@ -944,10 +942,7 @@ class PaperTradingService:
                 order.status = OrderStatus.EXPIRED
                 order.reject_reason = outcome.cancel_reason
                 order.completed_at = now
-                release_order_lock(acc, order.id, now)
                 self._open_by_symbol.get(order.instrument_key, set()).discard(order.id)
-            else:
-                self._recompute_remaining_lock(acc, order, price, now)
         order.updated_at = now
         order.version += 1
         self._persist_order(order)
@@ -1280,10 +1275,10 @@ class PaperTradingService:
         will_cancel_residual = (
             cancel_unfunded_market
             and order.working_order_type == WorkingOrderType.MARKET
-            and capped < order.remaining
+            and capped < attempt
         )
         if will_cancel_residual:
-            # Pre-cap would otherwise leave a leftover ORDER lock and trip free_cash.
+            # Cash/charges cap of this tick's attempt — leftover is unfunded, not a max_pt slice.
             release_order_lock(acc, order.id, now)
 
         def restore() -> None:
@@ -1450,7 +1445,8 @@ class PaperTradingService:
             allocated_entry_charges=alloc_entry,
         )
         self._fills.append(fill)
-        logger.info(
+        _log = logger.info if breakdown.total > 0 or fee_capped else logger.debug
+        _log(
             "paper charges fill_id=%s user=%s total=%s collected=%s schedule=%s v=%s",
             fill.id,
             order.user_id,
