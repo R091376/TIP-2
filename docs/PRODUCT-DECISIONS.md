@@ -1,6 +1,6 @@
 # Product decisions (review before each implementation phase)
 
-Last updated: 2026-09-15. Revisit when starting last-day replay or strategy bots.
+Last updated: 2026-09-21. Revisit when starting last-day replay or strategy bots.
 
 ## Market candles (NSE cash)
 
@@ -52,7 +52,7 @@ Last updated: 2026-09-15. Revisit when starting last-day replay or strategy bots
 | Side | Long and short; **CNC cannot open a short** (SELL CNC requires `closeLotId`) |
 | Universe | Watchlist **NSE_EQ** equities only (EQ/BE); **no index** |
 | Capital | 1× cash lock; free = balance − locks; funding cap at fill |
-| Costs | **Zero** v1 |
+| Costs | Configurable **Zerodha-shaped illustrative** NSE cash charges (`nse_eq_cash_v1`); **not** a broker contract note and **not** official NSE charges. Flag **`TIP_PAPER_CHARGES_ENABLED`** (default **off**); ops may enable. Engine: `backend/app/paper/charges.py`. |
 | UI | Dedicated `/paper` desk **and** chart-integrated paper Buy/Sell (see below) |
 | Reset | Admin reset wipes paper then resets cash |
 
@@ -86,7 +86,6 @@ Last updated: 2026-09-15. Revisit when starting last-day replay or strategy bots
 - Full strategy **backtesting**
 - **Last trading day replay**
 - Real broker / live orders
-- Brokerage / STT models
 
 ## Implementation order
 
