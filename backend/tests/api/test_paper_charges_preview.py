@@ -191,6 +191,38 @@ def test_preview_sl_m_no_ltp_400(client):
     assert r.json()["detail"]["code"] == "NO_LTP"
 
 
+def test_preview_market_body_price_without_ltp_400(client):
+    r = client.post(
+        PREVIEW,
+        json={
+            "instrumentKey": KEY,
+            "side": "BUY",
+            "orderType": "MARKET",
+            "product": "MIS",
+            "qty": 10,
+            "price": 100.5,
+        },
+    )
+    assert r.status_code == 400, r.text
+    assert r.json()["detail"]["code"] == "NO_LTP"
+
+
+def test_preview_sl_m_body_price_without_ltp_400(client):
+    r = client.post(
+        PREVIEW,
+        json={
+            "instrumentKey": KEY,
+            "side": "BUY",
+            "orderType": "SL_M",
+            "product": "MIS",
+            "qty": 10,
+            "price": 100.5,
+        },
+    )
+    assert r.status_code == 400, r.text
+    assert r.json()["detail"]["code"] == "NO_LTP"
+
+
 def test_preview_limit_missing_price_400(client):
     r = client.post(
         PREVIEW,

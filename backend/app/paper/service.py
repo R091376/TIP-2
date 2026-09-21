@@ -727,7 +727,7 @@ class PaperTradingService:
                 "cashEffect": float(cash_effect),
                 "lockEstimate": float(lock_estimate),
                 "lockPrice": float(lock_px) if lock_px is not None else None,
-                # place_order still locks notional only until PR2c wires charges into locks.
+                # place_order still locks notional only.
                 "lockIncludesCharges": False,
             }
 
