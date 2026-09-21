@@ -318,3 +318,141 @@ def test_default_schedule_is_nse_eq_cash_v1():
     sched = load_charge_schedule(s)
     assert isinstance(sched, ChargeSchedule)
     assert sched == NSE_EQ_CASH_V1
+
+
+def _alloc_svc(*, charges: bool = True, cash: Decimal = Decimal("100000")):
+    from uuid import uuid4
+
+    from app.paper.service import PaperTradingService
+    from app.watchlist.repository import InMemoryWatchlistRepository
+
+    uid = uuid4()
+    svc = PaperTradingService(
+        Settings(
+            paper_enabled=True,
+            paper_allow_memory=True,
+            paper_charges_enabled=charges,
+        ),
+        InMemoryWatchlistRepository(),
+        session_factory=None,
+        user_cash_provider=lambda _u: cash,
+        user_cash_writer=lambda *_a, **_k: None,
+    )
+    return svc, uid
+
+
+def _mk_order(uid, *, side, qty, close_lot_id=None, product=Product.MIS):
+    from datetime import datetime, timezone
+    from uuid import uuid4
+
+    from app.paper.models import OrderStatus, OrderType, PaperOrder, WorkingOrderType
+
+    now = datetime.now(timezone.utc)
+    return PaperOrder(
+        id=uuid4(),
+        user_id=uid,
+        instrument_key="NSE_EQ|RELIANCE",
+        trading_symbol="RELIANCE",
+        side=side,
+        order_type=OrderType.MARKET,
+        working_order_type=WorkingOrderType.MARKET,
+        product=product,
+        qty=qty,
+        filled_qty=0,
+        status=OrderStatus.OPEN,
+        close_lot_id=close_lot_id,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def test_charges_alloc_two_step_4_then_6():
+    from datetime import datetime, timezone
+
+    from app.paper.models import OrderStatus, Side
+    from app.user.service import money
+
+    svc, uid = _alloc_svc()
+    acc = svc._account(uid)
+    now = datetime.now(timezone.utc)
+    open_o = _mk_order(uid, side=Side.BUY, qty=10)
+    open_o.status = OrderStatus.OPEN
+    out = svc._apply_fill(acc, open_o, None, 10, Decimal("100"), now, tick_ts_ms=1)
+    assert out is not None and out.fill is not None
+    lot = out.lot
+    assert lot is not None
+    assert lot.charges_entry == money("0.42")
+    assert out.fill.realized_pnl is None
+    assert out.fill.allocated_entry_charges is None
+    assert acc.cash_balance == money("100000") - money("1000.42")
+
+    close4 = _mk_order(uid, side=Side.SELL, qty=4, close_lot_id=lot.id)
+    out4 = svc._apply_fill(acc, close4, lot, 4, Decimal("105"), now, tick_ts_ms=2)
+    assert out4 is not None and out4.fill is not None
+    alloc4 = out4.fill.allocated_entry_charges
+    assert alloc4 == money(lot.charges_entry * Decimal(4) / Decimal(10))
+
+    close6 = _mk_order(uid, side=Side.SELL, qty=6, close_lot_id=lot.id)
+    out6 = svc._apply_fill(acc, close6, lot, 6, Decimal("105"), now, tick_ts_ms=3)
+    assert out6 is not None and out6.fill is not None
+    assert money(alloc4 + out6.fill.allocated_entry_charges) == money("0.42")
+    assert lot.qty_open == 0
+    assert lot.charges_entry == money("0.42")
+    dto = svc._lot_dto(lot)
+    assert dto["chargesRemaining"] == 0.0
+    assert out4.fill.realized_pnl is not None
+    assert out6.fill.realized_pnl is not None
+    assert money(out4.fill.realized_pnl + out6.fill.realized_pnl) == lot.realized_pnl
+    assert out6.fill.realized_pnl != lot.realized_pnl
+
+
+def test_charges_alloc_paise_residual_three_singles():
+    from datetime import datetime, timezone
+
+    from app.paper.models import OrderStatus, Side
+    from app.user.service import money
+
+    svc, uid = _alloc_svc()
+    acc = svc._account(uid)
+    now = datetime.now(timezone.utc)
+    open_o = _mk_order(uid, side=Side.BUY, qty=3)
+    open_o.status = OrderStatus.OPEN
+    out = svc._apply_fill(acc, open_o, None, 3, Decimal("100"), now, tick_ts_ms=1)
+    assert out is not None and out.lot is not None
+    lot = out.lot
+    lot.charges_entry = money("0.01")
+    allocs = []
+    for i in range(3):
+        close = _mk_order(uid, side=Side.SELL, qty=1, close_lot_id=lot.id)
+        got = svc._apply_fill(acc, close, lot, 1, Decimal("100"), now, tick_ts_ms=2 + i)
+        assert got is not None and got.fill is not None
+        allocs.append(got.fill.allocated_entry_charges)
+    assert allocs[0] == money("0.00")
+    assert allocs[1] == money("0.00")
+    assert allocs[2] == money("0.01")
+    assert money(sum(allocs, Decimal("0"))) == money("0.01")
+
+
+def test_full_round_trip_net_realized_48_91():
+    from datetime import datetime, timezone
+
+    from app.paper.models import OrderStatus, Side
+    from app.user.service import money
+
+    svc, uid = _alloc_svc()
+    acc = svc._account(uid)
+    now = datetime.now(timezone.utc)
+    open_o = _mk_order(uid, side=Side.BUY, qty=10)
+    open_o.status = OrderStatus.OPEN
+    out = svc._apply_fill(acc, open_o, None, 10, Decimal("100"), now, tick_ts_ms=1)
+    assert out is not None and out.lot is not None
+    assert acc.cash_balance == money("98999.58")
+    lot = out.lot
+    close = _mk_order(uid, side=Side.SELL, qty=10, close_lot_id=lot.id)
+    got = svc._apply_fill(acc, close, lot, 10, Decimal("105"), now, tick_ts_ms=2)
+    assert got is not None and got.fill is not None
+    assert got.fill.allocated_entry_charges == money("0.42")
+    assert got.fill.charges_total == money("0.67")
+    assert got.fill.realized_pnl == money("48.91")
+    assert lot.realized_pnl == money("48.91")
+    assert lot.avg_entry_price == Decimal("100") or lot.avg_entry_price == Decimal("100.0000")

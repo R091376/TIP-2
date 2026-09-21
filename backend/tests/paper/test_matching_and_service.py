@@ -99,7 +99,9 @@ def test_next_tick_market_fill(monkeypatch, wl):
         "app.paper.service.phase_at",
         lambda *a, **k: MarketPhase.OPEN,
     )
-    settings = Settings(paper_enabled=True, paper_allow_memory=True)
+    settings = Settings(
+        paper_enabled=True, paper_allow_memory=True, paper_charges_enabled=False
+    )
     uid = uuid4()
     balances = {uid: Decimal("100000")}
 
@@ -157,7 +159,9 @@ def test_close_lot_expires_linked_and_orphan_stops(monkeypatch, wl):
         "app.paper.service.phase_at",
         lambda *a, **k: MarketPhase.OPEN,
     )
-    settings = Settings(paper_enabled=True, paper_allow_memory=True)
+    settings = Settings(
+        paper_enabled=True, paper_allow_memory=True, paper_charges_enabled=False
+    )
     uid = uuid4()
     balances = {uid: Decimal("100000")}
 
@@ -297,11 +301,15 @@ def test_reject_index(monkeypatch, wl):
     svc.stop()
 
 
-def _mem_svc(wl):
+def _mem_svc(wl, *, charges_enabled: bool = False, cash: Decimal | None = None):
     uid = uuid4()
-    balances = {uid: Decimal("100000")}
+    balances = {uid: cash if cash is not None else Decimal("100000")}
     svc = PaperTradingService(
-        Settings(paper_enabled=True, paper_allow_memory=True),
+        Settings(
+            paper_enabled=True,
+            paper_allow_memory=True,
+            paper_charges_enabled=charges_enabled,
+        ),
         wl,
         session_factory=None,
         user_cash_provider=lambda u: balances.get(u, Decimal("0")),
@@ -398,3 +406,99 @@ def test_cnc_sell_closes_existing_long(monkeypatch, wl):
     assert close["status"] == "FILLED"
     assert svc.list_positions(uid, open_only=True) == []
     svc.stop()
+
+
+def test_charges_on_open_long_partial_38_at_130(monkeypatch, wl):
+    monkeypatch.setattr("app.paper.service.phase_from_clock", lambda: MarketPhase.OPEN)
+    monkeypatch.setattr("app.paper.service.phase_at", lambda *a, **k: MarketPhase.OPEN)
+    from app.paper.charges import ChargeContext, NSE_EQ_CASH_V1, compute_charges
+    from app.paper.models import Intent, Product, Side
+    from app.user.service import money
+
+    svc, uid = _mem_svc(wl, charges_enabled=True, cash=Decimal("5000"))
+    key = "NSE_EQ|RELIANCE"
+    svc._ltp.update(Tick(instrument_key=key, price=100.0, volume_traded_today=1, timestamp_ms=1))
+    placed = svc.place_order(
+        uid,
+        instrument_key=key,
+        side="BUY",
+        order_type="MARKET",
+        product="MIS",
+        qty=40,
+        trading_enabled=True,
+    )
+    order = svc._orders[UUID(placed["id"])]
+    order.market_ready_after_seq = 0
+    svc._match_one(order, Decimal("130"), tick_ts_ms=2, seen_seq=1)
+    assert len(svc._fills) == 1
+    fill = svc._fills[0]
+    assert fill.qty == 38
+    bd = compute_charges(
+        ChargeContext(
+            side=Side.BUY,
+            product=Product.MIS,
+            intent=Intent.OPEN_LONG,
+            qty=38,
+            price=Decimal("130"),
+            notional=money(Decimal(38) * Decimal("130")),
+        ),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    assert fill.charges_total == bd.total
+    forty = compute_charges(
+        ChargeContext(
+            side=Side.BUY,
+            product=Product.MIS,
+            intent=Intent.OPEN_LONG,
+            qty=40,
+            price=Decimal("130"),
+            notional=money(Decimal(40) * Decimal("130")),
+        ),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    assert fill.charges_total != forty.total
+    dto = svc.list_fills(uid)[0]
+    assert dto["qty"] == 38
+    assert dto["chargesTotal"] == float(bd.total)
+    assert dto["scheduleId"] == "nse_eq_cash_v1"
+
+
+def test_place_order_lock_includes_estimated_charges(monkeypatch, wl):
+    monkeypatch.setattr("app.paper.service.phase_from_clock", lambda: MarketPhase.OPEN)
+    monkeypatch.setattr("app.paper.service.phase_at", lambda *a, **k: MarketPhase.OPEN)
+    from app.paper.charges import ChargeContext, NSE_EQ_CASH_V1, compute_charges
+    from app.paper.models import Intent, Product, Side
+    from app.user.service import money
+
+    svc, uid = _mem_svc(wl, charges_enabled=True)
+    key = "NSE_EQ|RELIANCE"
+    placed = svc.place_order(
+        uid,
+        instrument_key=key,
+        side="BUY",
+        order_type="LIMIT",
+        product="MIS",
+        qty=10,
+        price=100.0,
+        trading_enabled=True,
+    )
+    order = svc._orders[UUID(placed["id"])]
+    lk = svc._account(uid).order_lock(order.id)
+    assert lk is not None
+    est = compute_charges(
+        ChargeContext(
+            side=Side.BUY,
+            product=Product.MIS,
+            intent=Intent.OPEN_LONG,
+            qty=10,
+            price=Decimal("100"),
+            notional=money(Decimal(10) * Decimal("100")),
+        ),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    assert lk.amount == money(Decimal("1000") + est.total)
+    snap = svc.account_snapshot(uid)
+    assert snap["chargesEnabled"] is True

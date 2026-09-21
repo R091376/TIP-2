@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
+
+try:
+    from zoneinfo import ZoneInfo
+
+    _IST = ZoneInfo("Asia/Kolkata")
+except Exception:  # pragma: no cover
+    _IST = timezone.utc
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -258,9 +265,25 @@ def load_book(sf: sessionmaker[Session]) -> dict:
             )
         )
 
+    fill_by_id = {r.id: r for r in fill_rows}
+    dp_charged: set[tuple[UUID, str, date]] = set()
+    for cr in charge_rows:
+        if str(cr.code) != "DP" or money(cr.amount) <= 0:
+            continue
+        fr = fill_by_id.get(cr.fill_id)
+        if fr is None:
+            continue
+        created = cr.created_at or fr.created_at
+        if created is None:
+            continue
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        dp_charged.add((cr.user_id, fr.instrument_key, created.astimezone(_IST).date()))
+
     return {
         "orders": orders,
         "lots": lots,
         "fills": fills,
         "locks_by_user": locks_by_user,
+        "dp_charged": dp_charged,
     }

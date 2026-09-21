@@ -184,3 +184,31 @@ def test_service_does_not_advance_watermark_when_writer_fails():
     acc.ledger.append(LedgerEntry("SELL", money(0), acc.cash_balance, "OPEN_SHORT"))
     svc._write_user_cash(uid, acc)
     assert acc.ledger_published_thru == 0
+
+
+def test_list_ledger_reads_postgres_when_session_factory_set(pg_mem):
+    sf, uid = pg_mem
+    sell = LedgerEntry("SELL", money("1050"), money("101050"), "CLOSE_LONG fill 10@105")
+    fee = LedgerEntry("FEE", money("-0.67"), money("101049.33"), f"fill {uuid4()} nse_eq_cash_v1")
+    write_user_cash(sf, uid, money("101049.33"), [sell, fee])
+
+    svc = PaperTradingService(
+        Settings(paper_enabled=True, paper_allow_memory=True, paper_charges_enabled=False),
+        InMemoryWatchlistRepository(),
+        session_factory=sf,
+        user_cash_provider=lambda _u: Decimal("101049.33"),
+    )
+    rows = svc.list_ledger(uid, limit=10)
+    assert {r["entryType"] for r in rows} == {"SELL", "FEE"}
+    fee_row = next(r for r in rows if r["entryType"] == "FEE")
+    assert fee_row["amount"] == pytest.approx(-0.67)
+    mem = PaperTradingService(
+        Settings(paper_enabled=True, paper_allow_memory=True),
+        InMemoryWatchlistRepository(),
+        session_factory=None,
+        user_cash_provider=lambda _u: Decimal("100000"),
+    )
+    acc = mem._account(uid)
+    acc.ledger.append(LedgerEntry("BUY", money("-1000"), money("99000"), "mem"))
+    mem_rows = mem.list_ledger(uid, limit=10)
+    assert mem_rows[0]["entryType"] == "BUY"

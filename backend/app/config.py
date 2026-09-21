@@ -483,6 +483,7 @@ def get_settings() -> Settings:
     tf_1m = os.environ.get("TIP_TIMEFRAME_1M_ENABLED", "")
     sr_backfill = os.environ.get("TIP_PATTERN_SR_BACKFILL_ON_STARTUP", "")
     cas_flag = os.environ.get("TIP_CAS_SESSION_ENABLED", "")
+    charges_flag = os.environ.get("TIP_PAPER_CHARGES_ENABLED", "")
     settings = Settings()
     if store:
         object.__setattr__(settings, "tip_watchlist_store", store)
@@ -509,6 +510,9 @@ def get_settings() -> Settings:
     parsed_cas = _env_bool(cas_flag)
     if parsed_cas is not None:
         object.__setattr__(settings, "cas_session_enabled", parsed_cas)
+    parsed_charges = _env_bool(charges_flag)
+    if parsed_charges is not None:
+        object.__setattr__(settings, "paper_charges_enabled", parsed_charges)
     return settings
 
 

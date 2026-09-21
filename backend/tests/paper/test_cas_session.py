@@ -184,3 +184,64 @@ def test_leftover_mis_force_creates_zero_charge_fill(svc_wl):
     assert snap["cashBalance"] == pytest.approx(before + 5 * 102, rel=1e-9)
     acc = svc._account(uid)
     assert [e.entry_type for e in acc.ledger] == ["SELL"]
+
+
+def test_leftover_mis_force_charges_on_debits_fee():
+    from app.paper.charges import ChargeContext, NSE_EQ_CASH_V1, compute_charges
+    from app.paper.models import Intent, Side
+
+    repo = InMemoryWatchlistRepository()
+    repo.save(_entry("NSE_EQ|RELIANCE", "RELIANCE"))
+    uid = uuid4()
+    balances = {uid: Decimal("100000")}
+    svc = PaperTradingService(
+        Settings(
+            paper_enabled=True,
+            paper_allow_memory=True,
+            paper_charges_enabled=True,
+        ),
+        repo,
+        session_factory=None,
+        user_cash_provider=lambda u: balances.get(u, Decimal("0")),
+        user_cash_writer=lambda u, bal, _led: balances.__setitem__(u, bal),
+    )
+    now = datetime.now(timezone.utc)
+    lot = PositionLot(
+        id=uuid4(),
+        user_id=uid,
+        instrument_key="NSE_EQ|RELIANCE",
+        trading_symbol="RELIANCE",
+        side=LotSide.LONG,
+        product=Product.MIS,
+        qty_open=5,
+        qty_closed=0,
+        avg_entry_price=Decimal("100"),
+        realized_pnl=money(0),
+        status=LotStatus.OPEN,
+        opened_at=now,
+        updated_at=now,
+    )
+    svc._lots[lot.id] = lot
+    svc._ltp.update(
+        Tick(instrument_key=lot.instrument_key, price=102.0, volume_traded_today=1, timestamp_ms=1)
+    )
+    svc._force_remaining_mis(date(2026, 8, 4), kinds={SessionKind.CAS_CASH})
+    assert len(svc._fills) == 1
+    fill = svc._fills[0]
+    bd = compute_charges(
+        ChargeContext(
+            side=Side.SELL,
+            product=Product.MIS,
+            intent=Intent.CLOSE_LONG,
+            qty=5,
+            price=Decimal("102"),
+            notional=money(Decimal(5) * Decimal("102")),
+        ),
+        NSE_EQ_CASH_V1,
+        enabled=True,
+    )
+    assert fill.charges_total == bd.total
+    assert fill.schedule_id == "nse_eq_cash_v1"
+    acc = svc._account(uid)
+    assert acc.ledger[-1].entry_type == "FEE"
+    assert [e.entry_type for e in acc.ledger] == ["SELL", "FEE"]

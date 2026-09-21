@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -21,7 +22,9 @@ from app.market.session_policy import (
 )
 from app.paper.cash import (
     AbortFill,
+    affordable_open_long_qty_with_charges,
     apply_fill_cash,
+    debit_fee,
     lock_reference_price,
     release_order_lock,
     required_order_lock_amount,
@@ -29,7 +32,13 @@ from app.paper.cash import (
     recompute_order_lock,
     ensure_short_margin,
 )
-from app.paper.charges import ChargeContext, compute_charges, load_charge_schedule
+from app.paper.charges import (
+    ChargeBreakdown,
+    ChargeCode,
+    ChargeContext,
+    compute_charges,
+    load_charge_schedule,
+)
 from app.paper.eligibility import is_paper_tradable
 from app.paper.last_price import LastPriceCache
 from app.paper.matching import (
@@ -72,6 +81,16 @@ except Exception:  # pragma: no cover
     NSE_ZONE = timezone.utc
 
 
+@dataclass
+class _ApplyFillOutcome:
+    fill_qty: int
+    fill: PaperFill | None = None
+    lot: PositionLot | None = None
+    cancel_residual: bool = False
+    cancel_reason: str | None = None
+    fee_capped: bool = False
+
+
 class PaperTradingService:
     def __init__(
         self,
@@ -100,7 +119,8 @@ class PaperTradingService:
         self._cts_sl_cancelled: set[date] = set()
         self._user_cash_provider = user_cash_provider  # (user_id) -> Decimal
         self._user_cash_writer = user_cash_writer  # (user_id, balance, ledger_entries)
-        self._charge_schedule = load_charge_schedule(settings)
+        self._schedule = load_charge_schedule(settings)
+        self._dp_charged: set[tuple[UUID, str, date]] = set()
         self._worker = PaperMatcherWorker(
             self._on_drain,
             square_off_check=self.maybe_mis_square_off,
@@ -342,7 +362,9 @@ class PaperTradingService:
                         status_code=400,
                         detail={"code": "NO_LTP", "message": "No LTP for lock sizing"},
                     )
-                need = required_order_lock_amount(intent, qty, lock_px)
+                need = self._lock_need(
+                    intent, side_e, product_e, qty, lock_px, user_id, instrument_key
+                )
                 if need > acc.free_cash():
                     raise HTTPException(
                         status_code=400,
@@ -398,7 +420,9 @@ class PaperTradingService:
                 self._open_by_symbol.setdefault(instrument_key, set()).add(order.id)
 
             if intent in (Intent.OPEN_LONG, Intent.OPEN_SHORT) and lock_px is not None:
-                need = required_order_lock_amount(intent, qty, lock_px)
+                need = self._lock_need(
+                    intent, side_e, product_e, qty, lock_px, user_id, instrument_key, now=now
+                )
                 if need > 0:
                     acc.locks.append(
                         CashLock(
@@ -492,10 +516,18 @@ class PaperTradingService:
                 # temporary release and re-lock
                 now = datetime.now(timezone.utc)
                 old = acc.order_lock(order.id)
-                old_amt = old.amount if old else money(0)
                 if old:
                     old.released_at = now
-                need = required_order_lock_amount(intent, order.remaining, lock_px)
+                need = self._lock_need(
+                    intent,
+                    order.side,
+                    order.product,
+                    order.remaining,
+                    lock_px,
+                    order.user_id,
+                    order.instrument_key,
+                    now=now,
+                )
                 if need > acc.free_cash():
                     # restore old
                     if old:
@@ -560,12 +592,41 @@ class PaperTradingService:
                 "cashBalance": float(acc.cash_balance),
                 "lockedCash": float(acc.locked_cash()),
                 "freeCash": float(acc.free_cash()),
+                "chargesEnabled": self._charges_on,
             }
 
     def list_ledger(self, user_id: UUID, *, limit: int = 100) -> list[dict]:
         self._require_enabled()
+        n = max(1, int(limit))
+        if self._sf is not None:
+            from sqlalchemy import select
+
+            from app.user.entities import CashLedgerRow
+
+            try:
+                with self._sf() as s:
+                    rows = list(
+                        s.scalars(
+                            select(CashLedgerRow)
+                            .where(CashLedgerRow.user_id == user_id)
+                            .order_by(CashLedgerRow.created_at.desc())
+                            .limit(n)
+                        ).all()
+                    )
+            except Exception:
+                logger.exception("list_ledger query failed user=%s", user_id)
+                rows = []
+            return [
+                {
+                    "entryType": r.entry_type,
+                    "amount": float(r.amount),
+                    "balanceAfter": float(r.balance_after),
+                    "note": r.note,
+                }
+                for r in rows
+            ]
         acc = self._account(user_id)
-        entries = list(reversed(acc.ledger[-limit:]))
+        entries = list(reversed(acc.ledger[-n:]))
         return [
             {
                 "entryType": e.entry_type,
@@ -682,7 +743,7 @@ class PaperTradingService:
                     price=charge_px,
                     notional=notional,
                 ),
-                self._charge_schedule,
+                self._schedule,
                 enabled=enabled,
             )
             cash_effect = self._preview_cash_effect(intent, notional, bd.total, lot, charge_px, qty)
@@ -712,7 +773,7 @@ class PaperTradingService:
                         price=lock_px,
                         notional=lock_notional,
                     ),
-                    self._charge_schedule,
+                    self._schedule,
                     enabled=enabled,
                 )
                 lock_estimate = money(lock_notional + lock_bd.total)
@@ -834,7 +895,6 @@ class PaperTradingService:
 
         acc = self._account(order.user_id)
         lot: PositionLot | None = None
-        intent = resolve_intent(order)
         if order.close_lot_id:
             lot = self._lots.get(order.close_lot_id)
             if lot is None or lot.status != LotStatus.OPEN:
@@ -846,21 +906,23 @@ class PaperTradingService:
                 self._persist_order(order)
                 return
 
-        # open long funding cap
         cancel_mkt = order.working_order_type == WorkingOrderType.MARKET
-        result = apply_fill_cash(
+        outcome = self._apply_fill(
             acc,
             order,
             lot,
             attempt,
             price,
             now,
+            tick_ts_ms=tick_ts_ms,
             cancel_unfunded_market=cancel_mkt,
         )
-        if result.fill_qty <= 0:
-            if result.cancel_residual:
+        if outcome is None:
+            return
+        if outcome.fill_qty <= 0:
+            if outcome.cancel_residual:
                 order.status = OrderStatus.EXPIRED
-                order.reject_reason = result.cancel_reason
+                order.reject_reason = outcome.cancel_reason
                 order.completed_at = now
                 release_order_lock(acc, order.id, now)
                 self._open_by_symbol.get(order.instrument_key, set()).discard(order.id)
@@ -868,17 +930,8 @@ class PaperTradingService:
             self._persist_account(acc)
             return
 
-        fq = result.fill_qty
-        # update lot
-        lot = self._apply_lot_fill(order, lot, fq, price, now)
-        if intent == Intent.OPEN_SHORT and lot is not None:
-            ensure_short_margin(
-                acc,
-                lot,
-                money(Decimal(lot.qty_open) * Decimal(str(lot.avg_entry_price))),
-                now,
-            )
-
+        fq = outcome.fill_qty
+        lot = outcome.lot
         order.filled_qty += fq
         if order.filled_qty >= order.qty:
             order.status = OrderStatus.FILLED
@@ -887,38 +940,19 @@ class PaperTradingService:
             self._open_by_symbol.get(order.instrument_key, set()).discard(order.id)
         else:
             order.status = OrderStatus.PARTIALLY_FILLED
-            if result.cancel_residual:
+            if outcome.cancel_residual:
                 order.status = OrderStatus.EXPIRED
-                order.reject_reason = result.cancel_reason
+                order.reject_reason = outcome.cancel_reason
                 order.completed_at = now
                 release_order_lock(acc, order.id, now)
                 self._open_by_symbol.get(order.instrument_key, set()).discard(order.id)
             else:
-                # recompute lock
-                haircut = Decimal(str(getattr(self._settings, "paper_market_lock_haircut", 1.02)))
-                ltp = price
-                lock_px = lock_reference_price(order.order_type, order.price, ltp, haircut)
-                if lock_px and resolve_intent(order) in (Intent.OPEN_LONG, Intent.OPEN_SHORT):
-                    recompute_order_lock(acc, order, lock_px, now)
-
-        fill = PaperFill(
-            id=uuid4(),
-            order_id=order.id,
-            user_id=order.user_id,
-            instrument_key=order.instrument_key,
-            side=order.side,
-            qty=fq,
-            price=price,
-            amount=money(Decimal(fq) * price),
-            tick_ts_ms=tick_ts_ms,
-            lot_id=lot.id if lot else None,
-            created_at=now,
-        )
-        self._fills.append(fill)
+                self._recompute_remaining_lock(acc, order, price, now)
         order.updated_at = now
         order.version += 1
         self._persist_order(order)
-        self._persist_fill(fill)
+        if outcome.fill is not None:
+            self._persist_fill(outcome.fill)
         self._persist_account(acc)
         if lot:
             self._persist_lot(lot)
@@ -982,6 +1016,458 @@ class PaperTradingService:
             self._persist_order(o)
         self._persist_account(acc)
 
+    @property
+    def _charges_on(self) -> bool:
+        return bool(getattr(self._settings, "paper_charges_enabled", False))
+
+    def _ist_date(self, when: datetime) -> date:
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        return when.astimezone(NSE_ZONE).date()
+
+    def _breakdown_for(
+        self,
+        side: Side,
+        product: Product,
+        intent: Intent,
+        qty: int,
+        px: Decimal,
+        user_id: UUID,
+        instrument_key: str,
+        now: datetime | None = None,
+    ) -> ChargeBreakdown:
+        when = now or datetime.now(timezone.utc)
+        ctx = ChargeContext(
+            side=side,
+            product=product,
+            intent=intent,
+            qty=qty,
+            price=Decimal(str(px)),
+            notional=money(Decimal(qty) * Decimal(str(px))),
+            dp_already_charged_today=(
+                user_id,
+                instrument_key,
+                self._ist_date(when),
+            )
+            in self._dp_charged,
+        )
+        return compute_charges(ctx, self._schedule, enabled=self._charges_on)
+
+    def _charges_total_for(
+        self,
+        side: Side,
+        product: Product,
+        intent: Intent,
+        qty: int,
+        px: Decimal,
+        user_id: UUID,
+        instrument_key: str,
+        now: datetime | None = None,
+    ) -> Decimal:
+        return self._breakdown_for(
+            side, product, intent, qty, px, user_id, instrument_key, now
+        ).total
+
+    def _lock_need(
+        self,
+        intent: Intent,
+        side: Side,
+        product: Product,
+        qty: int,
+        lock_px: Decimal | None,
+        user_id: UUID,
+        instrument_key: str,
+        now: datetime | None = None,
+    ) -> Decimal:
+        notional = required_order_lock_amount(intent, qty, lock_px)
+        if notional <= 0 or lock_px is None or qty <= 0 or not self._charges_on:
+            return notional
+        extra = self._charges_total_for(
+            side, product, intent, qty, lock_px, user_id, instrument_key, now
+        )
+        return money(notional + extra)
+
+    def _recompute_remaining_lock(
+        self,
+        acc: CashAccount,
+        order: PaperOrder,
+        fill_px: Decimal,
+        now: datetime,
+        *,
+        remaining: int | None = None,
+    ) -> None:
+        intent = resolve_intent(order)
+        if intent not in (Intent.OPEN_LONG, Intent.OPEN_SHORT):
+            return
+        rem = order.remaining if remaining is None else remaining
+        if rem <= 0:
+            release_order_lock(acc, order.id, now)
+            return
+        haircut = Decimal(str(getattr(self._settings, "paper_market_lock_haircut", 1.02)))
+        lock_px = lock_reference_price(order.order_type, order.price, fill_px, haircut)
+        if not lock_px:
+            return
+        extra = money(0)
+        if self._charges_on:
+            extra = self._charges_total_for(
+                order.side,
+                order.product,
+                intent,
+                rem,
+                lock_px,
+                order.user_id,
+                order.instrument_key,
+                now,
+            )
+        recompute_order_lock(acc, order, lock_px, now, remaining=rem, extra=extra)
+
+    def _cap_fill_qty(
+        self,
+        acc: CashAccount,
+        order: PaperOrder,
+        lot: PositionLot | None,
+        attempt: int,
+        fill_px: Decimal,
+        now: datetime,
+    ) -> int:
+        intent = resolve_intent(order)
+        if intent in (Intent.CLOSE_LONG, Intent.COVER_SHORT):
+            open_qty = lot.qty_open if lot is not None else 0
+            return max(0, min(attempt, open_qty))
+        if intent == Intent.OPEN_LONG and self._charges_on:
+            return affordable_open_long_qty_with_charges(
+                acc,
+                order.id,
+                attempt,
+                fill_px,
+                lambda q: self._charges_total_for(
+                    order.side,
+                    order.product,
+                    intent,
+                    q,
+                    fill_px,
+                    order.user_id,
+                    order.instrument_key,
+                    now,
+                ),
+            )
+        if intent == Intent.OPEN_SHORT and self._charges_on:
+            return self._affordable_open_short_qty(acc, order, lot, attempt, fill_px, now)
+        return attempt
+
+    def _affordable_open_short_qty(
+        self,
+        acc: CashAccount,
+        order: PaperOrder,
+        lot: PositionLot | None,
+        attempt: int,
+        fill_px: Decimal,
+        now: datetime,
+    ) -> int:
+        if attempt <= 0:
+            return 0
+
+        def fits(q: int) -> bool:
+            if q <= 0:
+                return True
+            charges = self._charges_total_for(
+                order.side,
+                order.product,
+                Intent.OPEN_SHORT,
+                q,
+                fill_px,
+                order.user_id,
+                order.instrument_key,
+                now,
+            )
+            rem = order.remaining
+            lk = acc.order_lock(order.id)
+            lock_amt = lk.amount if lk else money(0)
+            other = money(acc.locked_cash() - lock_amt)
+            rem_after = rem - q
+            leftover_order = money(0)
+            if rem > 0 and rem_after > 0 and lock_amt > 0:
+                leftover_order = money(lock_amt * Decimal(rem_after) / Decimal(rem))
+            if lot is None:
+                margin = money(Decimal(q) * fill_px)
+            else:
+                old_n = Decimal(lot.qty_open) * Decimal(str(lot.avg_entry_price))
+                new_open = lot.qty_open + q
+                new_avg = (old_n + Decimal(q) * fill_px) / Decimal(new_open)
+                margin = money(Decimal(new_open) * new_avg)
+            cash_after = money(acc.cash_balance - charges)
+            free = money(cash_after - leftover_order - margin - other)
+            return cash_after >= 0 and free >= 0
+
+        if fits(attempt):
+            return attempt
+        lo, hi = 0, attempt
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if fits(mid):
+                lo = mid
+            else:
+                hi = mid - 1
+        return lo
+
+    def _prior_alloc_entry(self, lot_id: UUID) -> Decimal:
+        total = money(0)
+        for f in self._fills:
+            if f.lot_id == lot_id and f.allocated_entry_charges is not None:
+                total = money(total + f.allocated_entry_charges)
+        return total
+
+    def _charges_remaining(self, lot: PositionLot) -> Decimal:
+        return money(lot.charges_entry - self._prior_alloc_entry(lot.id))
+
+    def _apply_fill(
+        self,
+        acc: CashAccount,
+        order: PaperOrder,
+        lot: PositionLot | None,
+        attempt: int,
+        fill_px: Decimal,
+        now: datetime,
+        *,
+        tick_ts_ms: int,
+        cancel_unfunded_market: bool = True,
+        skip_short_margin: bool = False,
+    ) -> _ApplyFillOutcome | None:
+        """Cash → lot → short margin → charges at fill_qty → FEE. None = skip tick."""
+        intent = resolve_intent(order)
+        try:
+            capped = self._cap_fill_qty(acc, order, lot, attempt, fill_px, now)
+        except Exception:
+            logger.exception(
+                "compute_charges failed during qty cap; skip tick order=%s", order.id
+            )
+            return None
+        if capped <= 0:
+            mkt = order.working_order_type == WorkingOrderType.MARKET
+            if cancel_unfunded_market and mkt:
+                return _ApplyFillOutcome(
+                    fill_qty=0,
+                    cancel_residual=True,
+                    cancel_reason="INSUFFICIENT_CASH_AT_FILL",
+                )
+            return None
+
+        existing_entry: PositionLot | None = lot
+        if existing_entry is None:
+            for L in self._lots.values():
+                if L.entry_order_id == order.id and L.status == LotStatus.OPEN:
+                    existing_entry = L
+                    break
+        lot_existed = existing_entry is not None and existing_entry.id in self._lots
+        lot_snap = None
+        if existing_entry is not None:
+            lot_snap = (
+                existing_entry.qty_open,
+                existing_entry.qty_closed,
+                existing_entry.avg_entry_price,
+                existing_entry.realized_pnl,
+                existing_entry.charges_entry,
+                existing_entry.charges_exit,
+                existing_entry.status,
+                existing_entry.closed_at,
+                existing_entry.updated_at,
+            )
+        cash_before = acc.cash_balance
+        ledger_len = len(acc.ledger)
+        n_locks = len(acc.locks)
+        lock_snap = [(lk, lk.amount, lk.released_at) for lk in acc.locks]
+        applied_lot: PositionLot | None = None
+        will_cancel_residual = (
+            cancel_unfunded_market
+            and order.working_order_type == WorkingOrderType.MARKET
+            and capped < order.remaining
+        )
+        if will_cancel_residual:
+            # Pre-cap would otherwise leave a leftover ORDER lock and trip free_cash.
+            release_order_lock(acc, order.id, now)
+
+        def restore() -> None:
+            acc.cash_balance = cash_before
+            del acc.ledger[ledger_len:]
+            del acc.locks[n_locks:]
+            for lk, amt, rel in lock_snap:
+                lk.amount = amt
+                lk.released_at = rel
+            if applied_lot is not None:
+                if not lot_existed:
+                    self._lots.pop(applied_lot.id, None)
+                elif lot_snap is not None:
+                    (
+                        applied_lot.qty_open,
+                        applied_lot.qty_closed,
+                        applied_lot.avg_entry_price,
+                        applied_lot.realized_pnl,
+                        applied_lot.charges_entry,
+                        applied_lot.charges_exit,
+                        applied_lot.status,
+                        applied_lot.closed_at,
+                        applied_lot.updated_at,
+                    ) = lot_snap
+
+        try:
+            result = apply_fill_cash(
+                acc,
+                order,
+                lot,
+                capped,
+                fill_px,
+                now,
+                cancel_unfunded_market=cancel_unfunded_market,
+            )
+        except AbortFill:
+            restore()
+            return None
+        if result.fill_qty <= 0:
+            return _ApplyFillOutcome(
+                fill_qty=0,
+                cancel_residual=result.cancel_residual,
+                cancel_reason=result.cancel_reason,
+            )
+
+        fq = result.fill_qty
+        cancel_residual = result.cancel_residual or will_cancel_residual
+        cancel_reason = result.cancel_reason
+        if cancel_residual:
+            cancel_reason = cancel_reason or "INSUFFICIENT_CASH_AT_FILL"
+        qty_open_before = existing_entry.qty_open if existing_entry is not None else 0
+        qty_closed_before = existing_entry.qty_closed if existing_entry is not None else 0
+        try:
+            applied_lot, gross_delta = self._apply_lot_fill(order, lot, fq, fill_px, now)
+            if intent == Intent.OPEN_SHORT and applied_lot is not None and not skip_short_margin:
+                ensure_short_margin(
+                    acc,
+                    applied_lot,
+                    money(Decimal(applied_lot.qty_open) * Decimal(str(applied_lot.avg_entry_price))),
+                    now,
+                )
+            breakdown = self._breakdown_for(
+                order.side,
+                order.product,
+                intent,
+                fq,
+                fill_px,
+                order.user_id,
+                order.instrument_key,
+                now,
+            )
+        except Exception:
+            logger.exception(
+                "charges/lot apply failed after cash; restoring snapshot order=%s",
+                order.id,
+            )
+            restore()
+            return None
+
+        fill_id = uuid4()
+        collected = money(0)
+        fee_capped = False
+        if breakdown.total > 0:
+            collected = min(breakdown.total, acc.cash_balance)
+            if collected > 0:
+                entry = debit_fee(
+                    acc, collected, fill_id=fill_id, schedule_id=breakdown.schedule_id
+                )
+                if collected < breakdown.total:
+                    entry.note = f"fill {fill_id} {breakdown.schedule_id} FEE_CAPPED"
+            if collected < breakdown.total:
+                fee_capped = True
+                logger.warning(
+                    "paper charges FEE_CAPPED fill_id=%s computed=%s collected=%s",
+                    fill_id,
+                    breakdown.total,
+                    collected,
+                )
+
+        rem_after = order.remaining - fq
+        if rem_after <= 0 or cancel_residual:
+            release_order_lock(acc, order.id, now)
+        else:
+            try:
+                self._recompute_remaining_lock(
+                    acc, order, fill_px, now, remaining=rem_after
+                )
+            except Exception:
+                logger.exception("lock recompute failed; restoring order=%s", order.id)
+                restore()
+                return None
+
+        if acc.cash_balance < 0 or acc.free_cash() < 0:
+            restore()
+            return None
+
+        realized_pnl: Decimal | None = None
+        alloc_entry: Decimal | None = None
+        if applied_lot is not None and intent in (Intent.OPEN_LONG, Intent.OPEN_SHORT):
+            applied_lot.charges_entry = money(applied_lot.charges_entry + breakdown.total)
+        elif applied_lot is not None and intent in (Intent.CLOSE_LONG, Intent.COVER_SHORT):
+            qty_entered = qty_open_before + qty_closed_before
+            qty_open_after = applied_lot.qty_open
+            prior = self._prior_alloc_entry(applied_lot.id)
+            if qty_open_after <= 0:
+                alloc_entry = money(applied_lot.charges_entry - prior)
+            elif qty_entered > 0:
+                alloc_entry = money(
+                    applied_lot.charges_entry * Decimal(fq) / Decimal(qty_entered)
+                )
+            else:
+                alloc_entry = money(0)
+            exit_charges = breakdown.total
+            gross = gross_delta if gross_delta is not None else money(0)
+            realized_pnl = money(gross - alloc_entry - exit_charges)
+            applied_lot.realized_pnl = money(
+                applied_lot.realized_pnl - alloc_entry - exit_charges
+            )
+            applied_lot.charges_exit = money(applied_lot.charges_exit + exit_charges)
+
+        persistable = breakdown.persistable_lines()
+        if any(ln.code == ChargeCode.DP and ln.amount > 0 for ln in persistable):
+            self._dp_charged.add(
+                (order.user_id, order.instrument_key, self._ist_date(now))
+            )
+
+        fill = PaperFill(
+            id=fill_id,
+            order_id=order.id,
+            user_id=order.user_id,
+            instrument_key=order.instrument_key,
+            side=order.side,
+            qty=fq,
+            price=fill_px,
+            amount=money(Decimal(fq) * fill_px),
+            tick_ts_ms=tick_ts_ms,
+            lot_id=applied_lot.id if applied_lot else None,
+            created_at=now,
+            charges_total=breakdown.total,
+            charges=persistable,
+            schedule_id=breakdown.schedule_id,
+            schedule_version=breakdown.schedule_version,
+            realized_pnl=realized_pnl,
+            allocated_entry_charges=alloc_entry,
+        )
+        self._fills.append(fill)
+        logger.info(
+            "paper charges fill_id=%s user=%s total=%s collected=%s schedule=%s v=%s",
+            fill.id,
+            order.user_id,
+            breakdown.total,
+            collected,
+            breakdown.schedule_id,
+            breakdown.schedule_version,
+        )
+        return _ApplyFillOutcome(
+            fill_qty=fq,
+            fill=fill,
+            lot=applied_lot,
+            cancel_residual=cancel_residual,
+            cancel_reason=cancel_reason,
+            fee_capped=fee_capped,
+        )
+
     def _apply_lot_fill(
         self,
         order: PaperOrder,
@@ -989,7 +1475,7 @@ class PaperTradingService:
         fill_qty: int,
         price: Decimal,
         now: datetime,
-    ) -> PositionLot:
+    ) -> tuple[PositionLot, Decimal | None]:
         intent = resolve_intent(order)
         if intent in (Intent.OPEN_LONG, Intent.OPEN_SHORT):
             if lot is None:
@@ -1023,10 +1509,10 @@ class PaperTradingService:
                 lot.qty_open += fill_qty
                 lot.avg_entry_price = Decimal(str(new_n / Decimal(lot.qty_open)))
                 lot.updated_at = now
-            return lot
+            return lot, None
 
         assert lot is not None
-        # close / cover
+        # close / cover — gross delta; _apply_fill nets allocated entry + exit charges
         if intent == Intent.CLOSE_LONG:
             pnl = money((price - Decimal(str(lot.avg_entry_price))) * Decimal(fill_qty))
         else:
@@ -1039,7 +1525,7 @@ class PaperTradingService:
             lot.qty_open = 0
             lot.status = LotStatus.CLOSED
             lot.closed_at = now
-        return lot
+        return lot, pnl
 
     def _force_flatten_cash(
         self, acc: CashAccount, lot: PositionLot, fq: int, price: Decimal, now: datetime
@@ -1109,59 +1595,53 @@ class PaperTradingService:
             created_at=now,
             updated_at=now,
         )
-        cash_before = acc.cash_balance
-        ledger_len = len(acc.ledger)
-        lock_snap = [(lk, lk.amount, lk.released_at) for lk in acc.locks]
-        try:
-            result = apply_fill_cash(
-                acc,
-                order,
-                lot,
-                fq,
-                price,
-                now,
-                cancel_unfunded_market=False,
-            )
-            if result.fill_qty <= 0:
-                raise AbortFill("force-close fill_qty=0")
-            fq = result.fill_qty
-        except AbortFill as exc:
+        tick_ts_ms = int(now.timestamp() * 1000)
+        outcome = self._apply_fill(
+            acc,
+            order,
+            lot,
+            fq,
+            price,
+            now,
+            tick_ts_ms=tick_ts_ms,
+            cancel_unfunded_market=False,
+            skip_short_margin=True,
+        )
+        if outcome is None or outcome.fill_qty <= 0 or outcome.fill is None:
             logger.warning(
-                "force-close apply_fill_cash aborted lot=%s reason=%s err=%s; flattening anyway",
+                "force-close _apply_fill aborted lot=%s reason=%s; flattening anyway",
                 lot.id,
                 reason,
-                exc,
             )
-            acc.cash_balance = cash_before
-            del acc.ledger[ledger_len:]
-            for lk, amt, rel in lock_snap:
-                lk.amount = amt
-                lk.released_at = rel
             fq = lot.qty_open
             self._force_flatten_cash(acc, lot, fq, price, now)
-        lot = self._apply_lot_fill(order, lot, fq, price, now)
+            lot, _gross = self._apply_lot_fill(order, lot, fq, price, now)
+            fill = PaperFill(
+                id=uuid4(),
+                order_id=order.id,
+                user_id=order.user_id,
+                instrument_key=order.instrument_key,
+                side=order.side,
+                qty=fq,
+                price=price,
+                amount=money(Decimal(fq) * price),
+                tick_ts_ms=tick_ts_ms,
+                lot_id=lot.id,
+                created_at=now,
+                charges_total=money(0),
+                schedule_id="off",
+            )
+            self._fills.append(fill)
+        else:
+            fq = outcome.fill_qty
+            lot = outcome.lot if outcome.lot is not None else lot
+            fill = outcome.fill
         order.filled_qty = fq
         order.status = OrderStatus.FILLED
         order.completed_at = now
         order.updated_at = now
         order.version += 1
         self._orders[order.id] = order
-        fill = PaperFill(
-            id=uuid4(),
-            order_id=order.id,
-            user_id=order.user_id,
-            instrument_key=order.instrument_key,
-            side=order.side,
-            qty=fq,
-            price=price,
-            amount=money(Decimal(fq) * price),
-            tick_ts_ms=int(now.timestamp() * 1000),
-            lot_id=lot.id,
-            created_at=now,
-            charges_total=money(0),
-            schedule_id="off",
-        )
-        self._fills.append(fill)
         self._persist_order(order)
         self._persist_fill(fill)
         self._persist_lot(lot)
@@ -1492,6 +1972,9 @@ class PaperTradingService:
             "avgEntryPrice": float(L.avg_entry_price),
             "realizedPnl": float(L.realized_pnl),
             "unrealizedPnl": mtm,
+            "chargesEntry": float(L.charges_entry),
+            "chargesExit": float(L.charges_exit),
+            "chargesRemaining": float(self._charges_remaining(L)),
             "ltp": float(ltp) if ltp is not None else None,
             "status": L.status.value,
             "entryOrderId": str(L.entry_order_id) if L.entry_order_id else None,
@@ -1512,6 +1995,19 @@ class PaperTradingService:
             "tickTsMs": f.tick_ts_ms,
             "lotId": str(f.lot_id) if f.lot_id else None,
             "createdAt": f.created_at.isoformat(),
+            "chargesTotal": float(f.charges_total),
+            "charges": [
+                {"code": str(ln.code), "amount": float(ln.amount)}
+                for ln in f.charges
+                if ln.amount > 0
+            ],
+            "scheduleId": f.schedule_id,
+            "allocatedEntryCharges": (
+                float(f.allocated_entry_charges)
+                if f.allocated_entry_charges is not None
+                else None
+            ),
+            "realizedPnl": float(f.realized_pnl) if f.realized_pnl is not None else None,
         }
 
     def _write_user_cash(self, user_id: UUID, acc: CashAccount) -> None:
@@ -1570,6 +2066,7 @@ class PaperTradingService:
         self._orders = book["orders"]
         self._lots = book["lots"]
         self._fills = book["fills"]
+        self._dp_charged = set(book.get("dp_charged") or [])
         # rebuild indexes
         self._open_by_symbol.clear()
         max_seq = 0

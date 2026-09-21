@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -94,15 +95,77 @@ def affordable_open_long_qty(
     return max(0, min(attempt, max_qty))
 
 
+def affordable_open_long_qty_with_charges(
+    account: CashAccount,
+    order_id: UUID,
+    attempt: int,
+    fill_px: Decimal,
+    charges_total_for_qty: Callable[[int], Decimal],
+) -> int:
+    """Largest q in [0, min(attempt, spendable//px)] with notional+charges(q) <= spendable."""
+    if attempt <= 0 or fill_px <= 0:
+        return 0
+    spendable = spendable_for_order(account, order_id)
+    if spendable <= 0:
+        return 0
+    hi = min(attempt, int(spendable // fill_px))
+    if hi <= 0:
+        return 0
+
+    def fits(q: int) -> bool:
+        if q <= 0:
+            return True
+        cost = money(Decimal(q) * fill_px) + money(charges_total_for_qty(q))
+        return cost <= spendable
+
+    if fits(hi):
+        return hi
+    lo = 0
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if fits(mid):
+            lo = mid
+        else:
+            hi = mid - 1
+    return lo
+
+
+def debit_fee(
+    account: CashAccount,
+    collected: Decimal,
+    *,
+    fill_id: UUID,
+    schedule_id: str,
+) -> LedgerEntry:
+    """One FEE row; cash_balance -= collected. No ADJUST. No margin."""
+    collected = money(collected)
+    if collected < 0:
+        collected = money(0)
+    account.cash_balance = money(account.cash_balance - collected)
+    entry = LedgerEntry(
+        "FEE",
+        money(-collected),
+        account.cash_balance,
+        f"fill {fill_id} {schedule_id}",
+    )
+    account.ledger.append(entry)
+    return entry
+
+
 def recompute_order_lock(
     account: CashAccount,
     order: PaperOrder,
     lock_unit_px: Decimal,
     now_released_at=None,
+    *,
+    remaining: int | None = None,
+    extra: Decimal | None = None,
 ) -> None:
-    """Set ORDER lock to lock_unit_px * remaining; release if zero."""
-    remaining = order.remaining
-    desired = money(Decimal(remaining) * lock_unit_px) if remaining > 0 else money(0)
+    """Set ORDER lock to lock_unit_px * remaining [+ extra]; release if zero."""
+    rem = order.remaining if remaining is None else remaining
+    desired = money(Decimal(rem) * lock_unit_px) if rem > 0 else money(0)
+    if extra is not None and rem > 0:
+        desired = money(desired + extra)
     lk = account.order_lock(order.id)
     if desired <= 0:
         if lk:
