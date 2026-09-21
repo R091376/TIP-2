@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest'
-import { validatePaperOrderFields } from './PaperOrderModal'
+import { describe, expect, it, vi, afterEach } from 'vitest'
+import {
+  buildPaperChargesPreviewBody,
+  loadPaperChargesPreview,
+  paperChargesEstimateNote,
+  validatePaperOrderFields,
+} from './PaperOrderModal'
 
 describe('validatePaperOrderFields', () => {
   it('rejects non-integer or qty < 1', () => {
@@ -237,5 +242,83 @@ describe('validatePaperOrderFields', () => {
         product: 'CNC',
       }),
     ).toBe('')
+  })
+})
+
+describe('paper charges ticket preview', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('sends orderType and omits closeLotId (open-only)', () => {
+    const body = buildPaperChargesPreviewBody({
+      instrumentKey: 'NSE_EQ|RELIANCE',
+      side: 'BUY',
+      orderType: 'LIMIT',
+      product: 'MIS',
+      qty: 10,
+      price: 100.5,
+    })
+    expect(body.orderType).toBe('LIMIT')
+    expect(body).toEqual({
+      instrumentKey: 'NSE_EQ|RELIANCE',
+      side: 'BUY',
+      orderType: 'LIMIT',
+      product: 'MIS',
+      qty: 10,
+      price: 100.5,
+    })
+    expect(body).not.toHaveProperty('closeLotId')
+  })
+
+  it('includes MARKET orderType when no limit price', () => {
+    const body = buildPaperChargesPreviewBody({
+      instrumentKey: 'NSE_EQ|RELIANCE',
+      side: 'SELL',
+      orderType: 'MARKET',
+      product: 'MIS',
+      qty: 3,
+    })
+    expect(body.orderType).toBe('MARKET')
+    expect(body).not.toHaveProperty('price')
+    expect(body).not.toHaveProperty('closeLotId')
+  })
+
+  it('preview failure is non-blocking and does not prevent place', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const previewFn = vi.fn().mockRejectedValue(new Error('NO_LTP'))
+    const placeFn = vi.fn().mockResolvedValue({ id: 'o1', status: 'OPEN' })
+
+    const previewBody = buildPaperChargesPreviewBody({
+      instrumentKey: 'NSE_EQ|RELIANCE',
+      side: 'BUY',
+      orderType: 'MARKET',
+      product: 'MIS',
+      qty: 1,
+      price: 100,
+    })
+    expect(previewBody.orderType).toBe('MARKET')
+
+    const preview = await loadPaperChargesPreview(previewBody, previewFn)
+    expect(preview).toBeNull()
+    expect(previewFn).toHaveBeenCalledWith(previewBody)
+    expect(warn).toHaveBeenCalled()
+
+    const order = await placeFn({
+      instrumentKey: 'NSE_EQ|RELIANCE',
+      side: 'BUY',
+      orderType: 'MARKET',
+      product: 'MIS',
+      qty: 1,
+    })
+    expect(order.id).toBe('o1')
+    expect(placeFn).toHaveBeenCalled()
+  })
+
+  it('estimate copy names an illustrative schedule, not a broker', () => {
+    const note = paperChargesEstimateNote('nse_eq_cash_v1')
+    expect(note).toMatch(/Illustrative schedule nse_eq_cash_v1/)
+    expect(note).toMatch(/not a broker contract note/)
+    expect(note.toLowerCase()).not.toMatch(/zerodha/)
   })
 })

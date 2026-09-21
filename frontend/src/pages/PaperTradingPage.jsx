@@ -48,6 +48,18 @@ function formatTime(iso) {
   }
 }
 
+function chargeLinesTitle(charges, scheduleId) {
+  const parts = []
+  if (Array.isArray(charges)) {
+    for (const ln of charges) {
+      if (!ln?.code) continue
+      parts.push(`${ln.code} ₹${money(ln.amount)}`)
+    }
+  }
+  if (scheduleId) parts.push(scheduleId)
+  return parts.length ? parts.join(' · ') : undefined
+}
+
 function newClientOrderId(prefix, extra = '') {
   const uuid =
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -134,6 +146,7 @@ export default function PaperTradingPage() {
     const upnl = Number(pnl.overallUnrealized)
     if (Number.isNaN(cash)) return null
     const u = Number.isNaN(upnl) ? 0 : upnl
+    // Fees already left cash; do not also subtract chargesRemaining.
     return cash + u
   }, [account, pnl.overallUnrealized])
 
@@ -335,6 +348,7 @@ export default function PaperTradingPage() {
                     <th>Avg</th>
                     <th>LTP</th>
                     <th>P&amp;L</th>
+                    <th>Charges</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -362,6 +376,7 @@ export default function PaperTradingPage() {
                         <td>₹{money(p.avgEntryPrice)}</td>
                         <td>₹{money(p.ltp)}</td>
                         <td className={pnlClass(u)}>₹{money(u)}</td>
+                        <td>₹{money(p.chargesRemaining ?? 0)}</td>
                         <td>
                           <button
                             type="button"
@@ -394,6 +409,7 @@ export default function PaperTradingPage() {
                     <th>Qty</th>
                     <th>Avg</th>
                     <th>Realized</th>
+                    <th>Charges</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -418,6 +434,9 @@ export default function PaperTradingPage() {
                       <td>{p.qtyClosed ?? p.qtyOpen}</td>
                       <td>₹{money(p.avgEntryPrice)}</td>
                       <td className={pnlClass(p.realizedPnl)}>₹{money(p.realizedPnl)}</td>
+                      <td>
+                        ₹{money((Number(p.chargesEntry) || 0) + (Number(p.chargesExit) || 0))}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -437,6 +456,7 @@ export default function PaperTradingPage() {
                   <th>Qty</th>
                   <th>Price</th>
                   <th>Amount</th>
+                  <th>Charges</th>
                 </tr>
               </thead>
               <tbody>
@@ -460,6 +480,9 @@ export default function PaperTradingPage() {
                     <td>{f.qty}</td>
                     <td>₹{money(f.price)}</td>
                     <td>₹{money(f.amount)}</td>
+                    <td title={chargeLinesTitle(f.charges, f.scheduleId)}>
+                      ₹{money(f.chargesTotal ?? 0)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

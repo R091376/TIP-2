@@ -124,6 +124,88 @@ describe('computeDayRealizedFromCloseFills', () => {
     )
     expect(day).toBe(30) // (110-100)*3
   })
+
+  it('uses fill.realizedPnl (per-fill net) when present, including 0', () => {
+    const day = computeDayRealizedFromCloseFills(
+      [
+        {
+          orderId: 'close-today',
+          lotId: 'lot1',
+          side: 'SELL',
+          qty: 5,
+          price: 105,
+          createdAt: '2026-07-29T04:30:00.000Z',
+          realizedPnl: 48.61,
+        },
+      ],
+      orders,
+      lots,
+      today,
+    )
+    expect(day).toBe(48.61)
+  })
+
+  it('uses fill.realizedPnl of 0 instead of gross', () => {
+    const day = computeDayRealizedFromCloseFills(
+      [
+        {
+          orderId: 'close-today',
+          lotId: 'lot1',
+          side: 'SELL',
+          qty: 5,
+          price: 105,
+          createdAt: '2026-07-29T04:30:00.000Z',
+          realizedPnl: 0,
+        },
+      ],
+      orders,
+      lots,
+      today,
+    )
+    expect(day).toBe(0)
+  })
+
+  it('falls back to gross minus chargesTotal and allocatedEntryCharges', () => {
+    // Gross (105-100)*5 = 25; net = 25 - 0.67 - 0.72
+    const day = computeDayRealizedFromCloseFills(
+      [
+        {
+          orderId: 'close-today',
+          lotId: 'lot1',
+          side: 'SELL',
+          qty: 5,
+          price: 105,
+          createdAt: '2026-07-29T04:30:00.000Z',
+          chargesTotal: 0.67,
+          allocatedEntryCharges: 0.72,
+        },
+      ],
+      orders,
+      lots,
+      today,
+    )
+    expect(day).toBeCloseTo(25 - 0.67 - 0.72, 10)
+  })
+
+  it('legacy fills without net or charge fields stay gross', () => {
+    const day = computeDayRealizedFromCloseFills(
+      [
+        {
+          orderId: 'close-today',
+          lotId: 'lot1',
+          side: 'SELL',
+          qty: 5,
+          price: 105,
+          createdAt: '2026-07-29T04:30:00.000Z',
+          scheduleId: 'legacy',
+        },
+      ],
+      orders,
+      lots,
+      today,
+    )
+    expect(day).toBe(25)
+  })
 })
 
 describe('computePaperPnl day via fills', () => {

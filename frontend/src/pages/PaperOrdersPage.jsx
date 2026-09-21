@@ -69,8 +69,8 @@ function OrderPnlCell({ result }) {
   const label = result.kind === 'realized' ? 'R' : 'U'
   const title =
     result.kind === 'realized'
-      ? 'Realized P&L on this order (close/cover)'
-      : 'Unrealized P&L on filled qty vs LTP (open position)'
+      ? 'Realized P&L on this order (close/cover; net of charges when fills include it)'
+      : 'Unrealized P&L on filled qty vs LTP (open position; gross)'
   return (
     <span className={`paper-order-pnl ${pnlClass(result.value)}`} title={title}>
       <span className="paper-order-pnl__kind" aria-hidden="true">

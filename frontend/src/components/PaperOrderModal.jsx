@@ -5,6 +5,7 @@ import {
   fetchPaperLtp,
   parsePaperApiError,
   placePaperOrder,
+  previewPaperCharges,
 } from '../services/paperApi'
 import {
   PAPER_ORDER_TYPES,
@@ -23,6 +24,15 @@ function money(n) {
 /**
  * Backend-parity client validation for paper place body.
  * Returns error string or '' when valid.
+ * @param {{
+ *   side: string,
+ *   orderType: string,
+ *   qty: number | string,
+ *   price?: number | string | null,
+ *   trigger?: number | string | null,
+ *   product?: string,
+ *   closeLotId?: string | null,
+ * }} fields
  */
 export function validatePaperOrderFields({
   side,
@@ -72,6 +82,56 @@ export function validatePaperOrderFields({
 }
 
 /**
+ * Open-ticket preview body. Always includes orderType; never closeLotId.
+ * @param {{
+ *   instrumentKey: string,
+ *   side: string,
+ *   orderType: string,
+ *   product: string,
+ *   qty: number,
+ *   price?: number | null,
+ * }} args
+ */
+export function buildPaperChargesPreviewBody({
+  instrumentKey,
+  side,
+  orderType,
+  product,
+  qty,
+  price,
+}) {
+  const body = {
+    instrumentKey,
+    side,
+    orderType,
+    product,
+    qty: Number(qty),
+  }
+  if (price != null && Number(price) > 0) body.price = Number(price)
+  return body
+}
+
+/**
+ * Preview is informational. Failures must not throw to the place path.
+ */
+export async function loadPaperChargesPreview(
+  request,
+  fetchPreview = previewPaperCharges,
+) {
+  try {
+    return await fetchPreview(request)
+  } catch (err) {
+    console.warn('paper charges preview failed', err)
+    return null
+  }
+}
+
+export function paperChargesEstimateNote(scheduleId) {
+  const id = scheduleId || 'off'
+  return `Illustrative schedule ${id} — paper estimate, not a broker contract note / not official NSE charges.`
+}
+
+/**
  * Snapshot paper order ticket (instrumentKey fixed at open).
  * Symbol-switch detection is parent-owned; no live activeSymbolId prop.
  */
@@ -101,6 +161,7 @@ export default function PaperOrderModal({
   const [fieldError, setFieldError] = useState('')
   /** Large notional / qty confirm step */
   const [confirmLarge, setConfirmLarge] = useState(null)
+  const [preview, setPreview] = useState(null)
 
   const needsPrice = orderType === 'LIMIT' || orderType === 'SL'
   const needsTrigger = orderType === 'SL' || orderType === 'SL_M'
@@ -224,6 +285,50 @@ export default function PaperOrderModal({
       clearInterval(interval)
     }
   }, [instrumentKey])
+
+  // Open-only estimate. Desk Close does not preview. Failure never blocks place.
+  useEffect(() => {
+    let cancelled = false
+    const q = Number(qty)
+    if (metaLoading || !instrumentKey || !Number.isInteger(q) || q < 1) {
+      if (!metaLoading) setPreview(null)
+      return undefined
+    }
+    const ot = (orderType || '').toUpperCase()
+    const limitPx =
+      needsPrice && price !== '' && Number(price) > 0 ? Number(price) : null
+    const ltpPx = ltp != null && Number(ltp) > 0 ? Number(ltp) : null
+    const px = limitPx ?? ltpPx
+    if (px == null) {
+      setPreview(null)
+      return undefined
+    }
+
+    const body = buildPaperChargesPreviewBody({
+      instrumentKey,
+      side,
+      orderType: ot,
+      product,
+      qty: q,
+      price: px,
+    })
+    loadPaperChargesPreview(body).then((res) => {
+      if (!cancelled) setPreview(res)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    instrumentKey,
+    side,
+    orderType,
+    product,
+    qty,
+    price,
+    ltp,
+    needsPrice,
+    metaLoading,
+  ])
 
   function handleOrderTypeChange(next) {
     setOrderType(next)
@@ -454,6 +559,18 @@ export default function PaperOrderModal({
             <p className="paper-order-modal__hint">
               Shorts are MIS only. Close a CNC long from Positions.
             </p>
+          ) : null}
+
+          {preview ? (
+            <div>
+              <p className="paper-order-modal__quotes">
+                Est. charges ₹{money(preview.chargesTotal)} · Cash effect ₹
+                {money(preview.cashEffect)}
+              </p>
+              <p className="paper-order-modal__hint">
+                {paperChargesEstimateNote(preview.scheduleId)}
+              </p>
+            </div>
           ) : null}
 
           {fieldError ? (

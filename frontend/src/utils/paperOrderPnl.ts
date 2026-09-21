@@ -38,6 +38,10 @@ export type FillLike = {
   price: number
   createdAt?: string | null
   side?: string
+  /** Per-fill net close/cover delta. Null on entry fills. */
+  realizedPnl?: number | null
+  chargesTotal?: number | null
+  allocatedEntryCharges?: number | null
 }
 
 export type LotLike = {
@@ -196,18 +200,34 @@ export function computeOrderPnl(
   const { avg, fillsIncomplete } = resolveOrderAvgFill(order, fillsForOrder)
   const isClose = Boolean(order.closeLotId)
 
-  if (avg == null) {
-    return {
-      kind: isClose ? 'realized' : 'unrealized',
-      value: null,
-      avgFillPrice: null,
-      filledQty,
-      fillsIncomplete,
-    }
-  }
-
   // Close / cover path
   if (isClose) {
+    const everyHasNet =
+      fillsForOrder.length > 0 &&
+      fillsForOrder.every(
+        (f) => f.realizedPnl != null && Number.isFinite(Number(f.realizedPnl)),
+      )
+    if (everyHasNet && !fillsIncomplete) {
+      const value = fillsForOrder.reduce((s, f) => s + Number(f.realizedPnl), 0)
+      return {
+        kind: 'realized',
+        value,
+        avgFillPrice: avg,
+        filledQty,
+        fillsIncomplete,
+      }
+    }
+
+    if (avg == null) {
+      return {
+        kind: 'realized',
+        value: null,
+        avgFillPrice: null,
+        filledQty,
+        fillsIncomplete,
+      }
+    }
+
     const lot =
       lotsById.get(String(order.closeLotId)) ||
       fillsForOrder.map((f) => (f.lotId ? lotsById.get(f.lotId) : undefined)).find(Boolean)
@@ -220,16 +240,34 @@ export function computeOrderPnl(
         fillsIncomplete,
       }
     }
-    const value = realizedClosePnl(
+    const gross = realizedClosePnl(
       order.side || '',
       Number(lot.avgEntryPrice),
       avg,
       filledQty,
     )
+    // Truncated fill windows would under-subtract; keep gross when incomplete.
+    const charges = fillsIncomplete
+      ? 0
+      : fillsForOrder.reduce(
+          (s, f) =>
+            s + (Number(f.chargesTotal) || 0) + (Number(f.allocatedEntryCharges) || 0),
+          0,
+        )
     return {
       kind: 'realized',
-      value,
+      value: gross - charges,
       avgFillPrice: avg,
+      filledQty,
+      fillsIncomplete,
+    }
+  }
+
+  if (avg == null) {
+    return {
+      kind: 'unrealized',
+      value: null,
+      avgFillPrice: null,
       filledQty,
       fillsIncomplete,
     }

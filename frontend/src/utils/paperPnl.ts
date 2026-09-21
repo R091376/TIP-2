@@ -8,8 +8,9 @@
  *
  * Day (IST calendar day):
  * - dayRealized   = sum of realized P&L on **close/cover fills** whose
- *                   createdAt falls on today (IST). Uses lot avg entry ×
- *                   fill price — not cumulative lot.realizedPnl heuristics.
+ *                   createdAt falls on today (IST). Prefers fill.realizedPnl
+ *                   (per-fill net delta); else gross − charges; else legacy
+ *                   gross. Never dumps cumulative lot.realizedPnl onto today.
  * - dayUnrealized = overallUnrealized (open mark-to-market; not session delta)
  * - dayTotal      = dayRealized + dayUnrealized
  *
@@ -42,6 +43,11 @@ export type PaperFillLike = {
   qty: number
   price: number
   createdAt?: string | null
+  /** Per-fill net close/cover delta from the backend. Null on entry fills. */
+  realizedPnl?: number | null
+  chargesTotal?: number | null
+  allocatedEntryCharges?: number | null
+  scheduleId?: string | null
 }
 
 /** Calendar date YYYY-MM-DD in Asia/Kolkata (NSE session day). */
@@ -112,6 +118,12 @@ export function computeDayRealizedFromCloseFills(
     // Only close/cover orders produce realized P&L
     if (!order?.closeLotId) continue
 
+    const net = Number(f.realizedPnl)
+    if (f.realizedPnl != null && Number.isFinite(net)) {
+      day += net
+      continue
+    }
+
     const lot =
       lotsById.get(String(order.closeLotId)) ||
       (f.lotId ? lotsById.get(f.lotId) : undefined)
@@ -122,7 +134,17 @@ export function computeDayRealizedFromCloseFills(
     if (qty <= 0 || !Number.isFinite(px)) continue
 
     const side = order.side || f.side || ''
-    day += realizedClosePnl(side, Number(lot.avgEntryPrice), px, qty)
+    const gross = realizedClosePnl(side, Number(lot.avgEntryPrice), px, qty)
+    const ct = f.chargesTotal
+    const alloc = f.allocatedEntryCharges
+    const hasCharges =
+      (ct != null && Number.isFinite(Number(ct))) ||
+      (alloc != null && Number.isFinite(Number(alloc)))
+    if (hasCharges) {
+      day += gross - (Number(ct) || 0) - (Number(alloc) || 0)
+    } else {
+      day += gross
+    }
   }
   return day
 }

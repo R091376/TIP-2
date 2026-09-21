@@ -150,6 +150,60 @@ describe('computeOrderPnl', () => {
     expect(r.value).toBe(50)
   })
 
+  it('prefers sum of fill.realizedPnl when every close fill has it', () => {
+    const r = computeOrderPnl(
+      { id: 'o2', side: 'SELL', filledQty: 5, closeLotId: 'lot2' },
+      [
+        { orderId: 'o2', lotId: 'lot2', qty: 2, price: 210, realizedPnl: 19.4 },
+        { orderId: 'o2', lotId: 'lot2', qty: 3, price: 210, realizedPnl: 29.21 },
+      ],
+      lotsById,
+      byEntry,
+    )
+    expect(r.kind).toBe('realized')
+    expect(r.value).toBeCloseTo(48.61, 10)
+  })
+
+  it('falls back to gross minus charges when any close fill lacks realizedPnl', () => {
+    const r = computeOrderPnl(
+      { id: 'o2', side: 'SELL', filledQty: 5, closeLotId: 'lot2' },
+      [
+        {
+          orderId: 'o2',
+          lotId: 'lot2',
+          qty: 5,
+          price: 210,
+          chargesTotal: 0.67,
+          allocatedEntryCharges: 0.72,
+        },
+      ],
+      lotsById,
+      byEntry,
+    )
+    expect(r.kind).toBe('realized')
+    expect(r.value).toBeCloseTo(50 - 0.67 - 0.72, 10)
+  })
+
+  it('does not sum partial realizedPnl when a sibling fill is missing it', () => {
+    const r = computeOrderPnl(
+      { id: 'o2', side: 'SELL', filledQty: 5, closeLotId: 'lot2' },
+      [
+        { orderId: 'o2', lotId: 'lot2', qty: 2, price: 210, realizedPnl: 19.4 },
+        {
+          orderId: 'o2',
+          lotId: 'lot2',
+          qty: 3,
+          price: 210,
+          chargesTotal: 0.4,
+          allocatedEntryCharges: 0.3,
+        },
+      ],
+      lotsById,
+      byEntry,
+    )
+    expect(r.value).toBeCloseTo(50 - 0.4 - 0.3, 10)
+  })
+
   it('none when order.filledQty is 0', () => {
     const r = computeOrderPnl({ id: 'o3', side: 'BUY', filledQty: 0 }, [], lotsById, byEntry)
     expect(r.kind).toBe('none')

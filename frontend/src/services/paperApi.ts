@@ -8,6 +8,7 @@ export type PaperAccount = {
   cashBalance: number
   lockedCash: number
   freeCash: number
+  chargesEnabled?: boolean
 }
 
 export type PaperLtp = {
@@ -110,6 +111,11 @@ export type PaperOrder = {
   createdAt: string | null
 }
 
+export type PaperChargeLine = {
+  code: string
+  amount: number
+}
+
 export type PaperPosition = {
   id: string
   instrumentKey: string
@@ -121,6 +127,9 @@ export type PaperPosition = {
   avgEntryPrice: number
   realizedPnl: number
   unrealizedPnl: number | null
+  chargesEntry?: number
+  chargesExit?: number
+  chargesRemaining?: number
   ltp: number | null
   status: string
   entryOrderId?: string | null
@@ -171,6 +180,34 @@ export type PaperFill = {
   tickTsMs?: number
   lotId: string | null
   createdAt: string | null
+  chargesTotal?: number
+  charges?: PaperChargeLine[]
+  scheduleId?: string
+  allocatedEntryCharges?: number | null
+  /** Per-fill net close/cover delta. Null on entry fills. */
+  realizedPnl?: number | null
+}
+
+export type PaperChargesPreviewRequest = {
+  instrumentKey: string
+  side: string
+  orderType: string
+  product: string
+  qty: number
+  price?: number | null
+  closeLotId?: string | null
+}
+
+export type PaperChargesPreview = {
+  enabled: boolean
+  scheduleId: string
+  notional: number
+  charges: PaperChargeLine[]
+  chargesTotal: number
+  cashEffect: number
+  lockEstimate: number
+  lockPrice: number | null
+  lockIncludesCharges?: boolean
 }
 
 export async function fetchPaperFills(opts?: { limit?: number }): Promise<PaperFill[]> {
@@ -216,4 +253,15 @@ export async function modifyPaperOrder(
 /** GET /api/paper/ltp/{instrumentKey} — LTP may be null when no quote yet. */
 export async function fetchPaperLtp(instrumentKey: string): Promise<PaperLtp> {
   return api<PaperLtp>(`/api/paper/ltp/${encodeURIComponent(instrumentKey)}`)
+}
+
+/** POST /api/paper/charges/preview — read-only ticket estimate. orderType required. */
+export async function previewPaperCharges(
+  body: PaperChargesPreviewRequest,
+): Promise<PaperChargesPreview> {
+  return api<PaperChargesPreview>('/api/paper/charges/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
 }
