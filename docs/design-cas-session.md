@@ -826,7 +826,7 @@ Filter lots/orders by kind from **`InstrumentMasterCache.find_by_instrument_key`
 
 Flag off: both times ignored; single 15:20 path for all (today’s behavior). CAS SL cancel at 15:15 is also skipped.
 
-Ticks after CAS CTS never reach the matcher (`on_tick` drop ⇒ `_paper_enqueue` not called). Square-off at 15:10 still has ~5 minutes of CAS ticks to fill SYSTEM market orders; leftovers are force-closed at 15:15. MIS square-off fills (SYSTEM market closes and leftover force-close) incur the same charge engine as user fills (`TIP_PAPER_CHARGES_ENABLED`; illustrative NSE cash schedule).
+Ticks after CAS CTS never reach the matcher (`on_tick` drop ⇒ `_paper_enqueue` not called). Square-off at 15:10 still has ~5 minutes of CAS ticks to fill SYSTEM market orders; leftovers are force-closed at 15:15. MIS square-off fills (SYSTEM market closes and leftover force-close) use the same charge engine as user fills (`TIP_PAPER_CHARGES_ENABLED`, default off; illustrative NSE cash schedule, not a contract note).
 
 ### Frontend
 

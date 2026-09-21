@@ -12,7 +12,7 @@ Authoritative math and lifecycle docs for indicators, patterns, and the pattern 
 | **Design: composable stack filters (P0 research stats)** | [`design-composable-stack-filters.md`](design-composable-stack-filters.md) — implement when ready |
 | **Design: Woodie daily S/R** | [`design-woodie-sr.md`](design-woodie-sr.md) |
 | Learn (operator education) | `/learn` in the app; Woodie topic at `/learn/concepts/woodie-sr` |
-| Paper fill charges | [`PRODUCT-DECISIONS.md`](PRODUCT-DECISIONS.md) — Costs row; engine `backend/app/paper/charges.py`. Zerodha-shaped **illustrative** NSE cash schedule (`TIP_PAPER_CHARGES_ENABLED`, default **off**). Not a broker contract note. |
+| Paper fill charges | [`PRODUCT-DECISIONS.md`](PRODUCT-DECISIONS.md) — Costs row; engine `backend/app/paper/charges.py`. Zerodha-shaped **illustrative** NSE cash schedule (`TIP_PAPER_CHARGES_ENABLED`, default **off**) — not a broker contract note, not official NSE charges. |
 
 ## Standards
 
@@ -20,7 +20,7 @@ Authoritative math and lifecycle docs for indicators, patterns, and the pattern 
 - Pattern docs must list **all lifecycle stages** and terminal outcomes.
 - Design overview: [`../Pattern-Intelligence-Design-v1.0.md`](../Pattern-Intelligence-Design-v1.0.md).
 - Detector rule defaults: [`../Pattern-Definitions-v1.0-Final.md`](../Pattern-Definitions-v1.0-Final.md).
-- Manual paper OMS (v1): [`../Manual-Paper-Trading-Design-v1.0.md`](../Manual-Paper-Trading-Design-v1.0.md). Fill costs: [`PRODUCT-DECISIONS.md`](PRODUCT-DECISIONS.md) (Costs) — illustrative NSE cash schedule, flag default off.
+- Manual paper OMS (v1): [`../Manual-Paper-Trading-Design-v1.0.md`](../Manual-Paper-Trading-Design-v1.0.md). Fill costs: [`PRODUCT-DECISIONS.md`](PRODUCT-DECISIONS.md) (Costs) — illustrative NSE cash schedule, flag default off; not a broker contract note, not official NSE charges.
 - Paper strategy bots (deferred): [`../Paper-Strategy-Design-v1.0.md`](../Paper-Strategy-Design-v1.0.md).
 
 ## Data flow (summary)
