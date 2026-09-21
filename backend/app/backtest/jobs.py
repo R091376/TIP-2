@@ -209,6 +209,10 @@ class PostgresBacktestJobStore:
                         outcome=t.get("outcome"),
                         r_multiple=t.get("rMultiple"),
                         pnl=t.get("pnl"),
+                        pnl_net=t.get("pnlNet"),
+                        charges_entry=t.get("chargesEntry"),
+                        charges_exit=t.get("chargesExit"),
+                        r_multiple_net=t.get("rMultipleNet"),
                         qty=int(t.get("qty") or 1),
                         flag_confirmed=bool(t.get("flagConfirmed")),
                         flag_retested=bool(t.get("flagRetested")),
@@ -264,7 +268,16 @@ class PostgresBacktestJobStore:
                     "fillExit": r.fill_exit,
                     "outcome": r.outcome,
                     "rMultiple": r.r_multiple,
+                    "rMultipleNet": r.r_multiple_net,
                     "pnl": r.pnl,
+                    "pnlNet": r.pnl_net,
+                    "chargesEntry": r.charges_entry,
+                    "chargesExit": r.charges_exit,
+                    "chargesTotal": (
+                        None
+                        if r.charges_entry is None or r.charges_exit is None
+                        else round(r.charges_entry + r.charges_exit, 2)
+                    ),
                     "qty": r.qty,
                     "flagConfirmed": r.flag_confirmed,
                     "flagRetested": r.flag_retested,

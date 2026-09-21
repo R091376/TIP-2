@@ -60,6 +60,11 @@ function tradePnl(t) {
   return Number.isFinite(p) ? p : null
 }
 
+function tradePnlNet(t) {
+  const p = Number(t?.pnlNet)
+  return Number.isFinite(p) ? p : null
+}
+
 function tradePnlPct(t) {
   if (t?.pnlPct != null && Number.isFinite(Number(t.pnlPct))) return Number(t.pnlPct)
   const p = tradePnl(t)
@@ -376,6 +381,10 @@ export default function BacktestPage() {
     summary.pnl != null && Number.isFinite(Number(summary.pnl))
       ? Number(summary.pnl)
       : filledTrades.reduce((s, t) => s + (tradePnl(t) || 0), 0)
+  const runPnlNet =
+    summary.pnlNet != null && Number.isFinite(Number(summary.pnlNet))
+      ? Number(summary.pnlNet)
+      : filledTrades.reduce((s, t) => s + (tradePnlNet(t) || 0), 0)
   const runDeployed = filledTrades.reduce((s, t) => s + (tradeNotional(t) || 0), 0)
   const runPnlPct =
     summary.pnlPct != null && Number.isFinite(Number(summary.pnlPct))
@@ -383,7 +392,14 @@ export default function BacktestPage() {
       : runDeployed > 0
         ? runPnl / runDeployed
         : null
+  const runPnlPctNet =
+    summary.pnlPctNet != null && Number.isFinite(Number(summary.pnlPctNet))
+      ? Number(summary.pnlPctNet)
+      : runDeployed > 0
+        ? runPnlNet / runDeployed
+        : null
   const pnlTone = runPnl > 0 ? 'good' : runPnl < 0 ? 'bad' : 'warn'
+  const pnlNetTone = runPnlNet > 0 ? 'good' : runPnlNet < 0 ? 'bad' : 'warn'
 
   return (
     <div className="bt-page">
@@ -670,42 +686,70 @@ export default function BacktestPage() {
       </section>
 
       {active && (
-        <section className="bt-metrics" aria-label="Run summary">
-          <Metric
-            label="Status"
-            value={active.status}
-            tone={
-              active.status === 'done'
-                ? 'good'
-                : active.status === 'failed'
-                  ? 'bad'
-                  : 'info'
-            }
-          />
-          <Metric
-            label="Resolved WR"
-            value={pct(summary.resolvedWr)}
-            tone={wrTone(summary.resolvedWr)}
-          />
-          <Metric
-            label="Trade WR"
-            value={pct(summary.tradeWr)}
-            tone={wrTone(summary.tradeWr)}
-          />
-          <Metric label="Trades" value={summary.trades ?? '—'} tone="info" />
-          <Metric label="P&L" value={inr(runPnl)} tone={pnlTone} />
-          <Metric
-            label="Return"
-            value={retPct(runPnlPct)}
-            tone={pnlTone}
-          />
-          <Metric
-            label="Avg R"
-            value={num(summary.avgR)}
-            tone={Number(summary.avgR) > 0 ? 'good' : Number(summary.avgR) < 0 ? 'bad' : 'warn'}
-          />
-          <Metric label="Max DD (R)" value={num(summary.maxDdR)} tone="warn" />
-        </section>
+        <>
+          <section className="bt-metrics bt-metrics--run" aria-label="Run summary">
+            <Metric
+              label="Status"
+              value={active.status}
+              tone={
+                active.status === 'done'
+                  ? 'good'
+                  : active.status === 'failed'
+                    ? 'bad'
+                    : 'info'
+              }
+            />
+            <Metric
+              label="Resolved WR"
+              value={pct(summary.resolvedWr)}
+              tone={wrTone(summary.resolvedWr)}
+            />
+            <Metric label="Trades" value={summary.trades ?? '—'} tone="info" />
+          </section>
+          <div className="bt-pnl-groups">
+            <section className="bt-pnl-group" aria-label="Without charges">
+              <h2>Without charges</h2>
+              <div className="bt-metrics">
+                <Metric label="P&L" value={inr(runPnl)} tone={pnlTone} />
+                <Metric label="Return" value={retPct(runPnlPct)} tone={pnlTone} />
+                <Metric
+                  label="Avg R"
+                  value={num(summary.avgR)}
+                  tone={Number(summary.avgR) > 0 ? 'good' : Number(summary.avgR) < 0 ? 'bad' : 'warn'}
+                />
+                <Metric label="Max DD (R)" value={num(summary.maxDdR)} tone="warn" />
+                <Metric
+                  label="Trade WR"
+                  value={pct(summary.tradeWr)}
+                  tone={wrTone(summary.tradeWr)}
+                />
+              </div>
+            </section>
+            <section className="bt-pnl-group" aria-label="With charges">
+              <h2>With charges</h2>
+              <p className="bt-caption">
+                Illustrative Zerodha-like schedule — not a contract note.
+              </p>
+              <div className="bt-metrics">
+                <Metric label="P&L net" value={inr(runPnlNet)} tone={pnlNetTone} />
+                <Metric label="Return net" value={retPct(runPnlPctNet)} tone={pnlNetTone} />
+                <Metric
+                  label="Avg R net"
+                  value={num(summary.avgRNet)}
+                  tone={
+                    Number(summary.avgRNet) > 0 ? 'good' : Number(summary.avgRNet) < 0 ? 'bad' : 'warn'
+                  }
+                />
+                <Metric label="Max DD net (R)" value={num(summary.maxDdRNet)} tone="warn" />
+                <Metric
+                  label="Trade WR net"
+                  value={pct(summary.tradeWrNet)}
+                  tone={wrTone(summary.tradeWrNet)}
+                />
+              </div>
+            </section>
+          </div>
+        </>
       )}
 
       {usedRows.length > 0 && (
@@ -746,6 +790,8 @@ export default function BacktestPage() {
                 <th>P&L</th>
                 <th>%</th>
                 <th>R</th>
+                <th>P&L net</th>
+                <th>R net</th>
                 <th>Flags</th>
               </tr>
             </thead>
@@ -754,10 +800,16 @@ export default function BacktestPage() {
                 const r = Number(t.rMultiple)
                 const win = Number.isFinite(r) && r > 0
                 const loss = Number.isFinite(r) && r < 0
+                const rNet = Number(t.rMultipleNet)
+                const winNet = Number.isFinite(rNet) && rNet > 0
+                const lossNet = Number.isFinite(rNet) && rNet < 0
                 const p = tradePnl(t)
+                const pNet = tradePnlNet(t)
                 const pPct = tradePnlPct(t)
                 const moneyWin = p != null && p > 0
                 const moneyLoss = p != null && p < 0
+                const moneyWinNet = pNet != null && pNet > 0
+                const moneyLossNet = pNet != null && pNet < 0
                 return (
                   <tr key={t.id}>
                     <td className="bt-td-sym">{t.tradingSymbol || t.symbolId}</td>
@@ -776,6 +828,12 @@ export default function BacktestPage() {
                       {retPct(pPct)}
                     </td>
                     <td className={win ? 'bt-r-pos' : loss ? 'bt-r-neg' : ''}>{num(t.rMultiple)}</td>
+                    <td className={moneyWinNet ? 'bt-r-pos' : moneyLossNet ? 'bt-r-neg' : ''}>
+                      {inr(pNet)}
+                    </td>
+                    <td className={winNet ? 'bt-r-pos' : lossNet ? 'bt-r-neg' : ''}>
+                      {num(t.rMultipleNet)}
+                    </td>
                     <td className="bt-td-flags">
                       {t.flagConfirmed ? <span className="bt-flag">confirmed</span> : null}
                       {t.flagRetested ? <span className="bt-flag">retest</span> : null}

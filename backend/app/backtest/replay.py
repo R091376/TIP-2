@@ -12,11 +12,14 @@ from app.backtest.fills import (
     notional,
     on_bar,
     passes_setup_filters,
+    stamp_sim_charges,
     sync_flags,
     to_row,
 )
 from app.backtest.spec import PatternSpec, overlay_settings
 from app.config import Settings
+from app.paper.charges import load_charge_schedule
+from app.paper.models import Product
 from app.market.ingest import session_end_epoch, session_start_epoch
 from app.market.models import Candle
 from app.patterns.active_store import ActiveInstanceStore
@@ -166,6 +169,11 @@ def replay_series(
 
     last = candles[-1] if candles else None
     expire_open(trades, last)
+    try:
+        product = Product(str(spec.product or "MIS").upper())
+    except ValueError:
+        product = Product.MIS
+    stamp_sim_charges(trades, product, load_charge_schedule(settings))
     trades = [
         t
         for t in trades
@@ -233,6 +241,29 @@ def summarize(
 
     total_pnl = sum(float(t.pnl or 0) for t in filled)
     deployed = sum(n for t in filled if (n := notional(t)))
+    netted = [t for t in filled if t.pnl_net is not None]
+    wins_net = [t for t in netted if (t.r_multiple_net or 0) > 0]
+    losses_net = [t for t in netted if (t.r_multiple_net or 0) <= 0]
+    trade_wr_net = (len(wins_net) / len(netted)) if netted else None
+    avg_r_net = (
+        (sum(t.r_multiple_net or 0 for t in netted) / len(netted)) if netted else None
+    )
+    equity_net = 0.0
+    peak_net = 0.0
+    max_dd_net = 0.0
+    ordered_net = sorted(
+        [t for t in netted if t.exit_time is not None],
+        key=lambda t: int(t.exit_time or 0),
+    )
+    for t in ordered_net:
+        equity_net += float(t.r_multiple_net or 0)
+        if equity_net > peak_net:
+            peak_net = equity_net
+        dd_net = peak_net - equity_net
+        if dd_net > max_dd_net:
+            max_dd_net = dd_net
+    total_pnl_net = sum(float(t.pnl_net or 0) for t in netted)
+    deployed_net = sum(n for t in netted if (n := notional(t)))
     summary = {
         "setups": len(setups),
         "succeeded": succeeded,
@@ -249,6 +280,14 @@ def summarize(
         "maxDdR": max_dd if filled else None,
         "pnl": total_pnl,
         "pnlPct": (total_pnl / deployed) if deployed else None,
+        "pnlNet": total_pnl_net,
+        "pnlPctNet": (total_pnl_net / deployed_net) if deployed_net else None,
+        "avgRNet": avg_r_net,
+        "expectancyRNet": avg_r_net,
+        "tradeWrNet": trade_wr_net,
+        "maxDdRNet": max_dd_net if netted else None,
+        "tradeWinsNet": len(wins_net),
+        "tradeLossesNet": len(losses_net),
         "byType": by_type,
         "bySymbol": by_symbol,
         "spec": spec.to_dict(),

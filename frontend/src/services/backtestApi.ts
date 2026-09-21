@@ -18,8 +18,14 @@ export type BacktestTradeDto = {
   fillExit?: number | null
   outcome?: string | null
   rMultiple?: number | null
+  rMultipleNet?: number | null
   pnl?: number | null
+  pnlNet?: number | null
   pnlPct?: number | null
+  pnlPctNet?: number | null
+  chargesEntry?: number | null
+  chargesExit?: number | null
+  chargesTotal?: number | null
   qty?: number
   flagConfirmed?: boolean
   flagRetested?: boolean

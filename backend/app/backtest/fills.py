@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import time
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 from app.market.models import Candle
+from app.paper.charges import ChargeCode, ChargeContext, ChargeSchedule, compute_charges
+from app.paper.models import Intent, Product, Side
 from app.patterns.models import ActivePattern, PatternDirection
 from app.patterns.research_filters import detect_candle_ist
+from app.user.service import money
 
 
 @dataclass
@@ -37,6 +41,11 @@ class SimTrade:
     outcome: str | None = None
     r_multiple: float | None = None
     pnl: float | None = None
+    charges_entry: float | None = None
+    charges_exit: float | None = None
+    charges_total: float | None = None
+    pnl_net: float | None = None
+    r_multiple_net: float | None = None
     mfe_r: float | None = None
     mae_r: float | None = None
     extras: dict = field(default_factory=dict)
@@ -123,6 +132,109 @@ def pnl_pct(trade: SimTrade) -> float | None:
     if n is None or trade.pnl is None:
         return None
     return float(trade.pnl) / n
+
+
+def pnl_pct_net(trade: SimTrade) -> float | None:
+    n = notional(trade)
+    if n is None or trade.pnl_net is None:
+        return None
+    return float(trade.pnl_net) / n
+
+
+def _sim_charge_ctx(
+    *,
+    side: Side,
+    product: Product,
+    intent: Intent,
+    qty: int,
+    price: Decimal,
+    dp_already_charged_today: bool,
+) -> ChargeContext:
+    px = Decimal(str(price))
+    return ChargeContext(
+        side=side,
+        product=product,
+        intent=intent,
+        qty=qty,
+        price=px,
+        notional=money(Decimal(qty) * px),
+        dp_already_charged_today=dp_already_charged_today,
+    )
+
+
+def stamp_sim_charges(
+    trades: list[SimTrade],
+    product: Product,
+    schedule: ChargeSchedule,
+) -> None:
+    """Set charges_* and pnl_net. Leaves trade.pnl / r_multiple GROSS."""
+    dp_charged: set[tuple[str, object]] = set()
+    ordered = sorted(trades, key=lambda t: (int(t.exit_time or 0), str(t.id)))
+    for trade in ordered:
+        if trade.outcome is None or trade.outcome == "no_fill":
+            continue
+        if trade.pnl is None or trade.fill_entry is None or trade.fill_exit is None:
+            continue
+        qty = max(1, int(trade.qty))
+        long = trade.direction == PatternDirection.LONG.value
+        if long:
+            entry_side, entry_intent = Side.BUY, Intent.OPEN_LONG
+            exit_side, exit_intent = Side.SELL, Intent.CLOSE_LONG
+        else:
+            entry_side, entry_intent = Side.SELL, Intent.OPEN_SHORT
+            exit_side, exit_intent = Side.BUY, Intent.COVER_SHORT
+
+        entry_bd = compute_charges(
+            _sim_charge_ctx(
+                side=entry_side,
+                product=product,
+                intent=entry_intent,
+                qty=qty,
+                price=Decimal(str(trade.fill_entry)),
+                dp_already_charged_today=False,
+            ),
+            schedule,
+            enabled=True,
+        )
+        ist_date = None
+        if trade.exit_time is not None:
+            dt = detect_candle_ist(trade.exit_time)
+            if dt is not None:
+                ist_date = dt.date()
+        dp_already = bool(
+            exit_intent == Intent.CLOSE_LONG
+            and product == Product.CNC
+            and ist_date is not None
+            and (trade.symbol_id, ist_date) in dp_charged
+        )
+        exit_bd = compute_charges(
+            _sim_charge_ctx(
+                side=exit_side,
+                product=product,
+                intent=exit_intent,
+                qty=qty,
+                price=Decimal(str(trade.fill_exit)),
+                dp_already_charged_today=dp_already,
+            ),
+            schedule,
+            enabled=True,
+        )
+        if (
+            exit_intent == Intent.CLOSE_LONG
+            and product == Product.CNC
+            and ist_date is not None
+            and any(ln.code == ChargeCode.DP and ln.amount > 0 for ln in exit_bd.lines)
+        ):
+            dp_charged.add((trade.symbol_id, ist_date))
+
+        trade.charges_entry = float(entry_bd.total)
+        trade.charges_exit = float(exit_bd.total)
+        trade.charges_total = float(money(entry_bd.total + exit_bd.total))
+        trade.pnl_net = float(
+            money(Decimal(str(trade.pnl)) - entry_bd.total - exit_bd.total)
+        )
+        risk = abs(trade.entry - trade.stop)
+        trade.r_multiple_net = (trade.pnl_net / qty) / risk if risk > 0 else None
 
 
 def square_off_time(product: str, close_minutes: int, mis_hhmm: str) -> time | None:
@@ -238,8 +350,14 @@ def to_row(trade: SimTrade) -> dict:
         "fillExit": trade.fill_exit,
         "outcome": trade.outcome,
         "rMultiple": trade.r_multiple,
+        "rMultipleNet": trade.r_multiple_net,
         "pnl": trade.pnl,
+        "pnlNet": trade.pnl_net,
         "pnlPct": pnl_pct(trade),
+        "pnlPctNet": pnl_pct_net(trade),
+        "chargesEntry": trade.charges_entry,
+        "chargesExit": trade.charges_exit,
+        "chargesTotal": trade.charges_total,
         "qty": trade.qty,
         "flagConfirmed": trade.flag_confirmed,
         "flagRetested": trade.flag_retested,

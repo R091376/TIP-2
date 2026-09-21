@@ -89,10 +89,16 @@ def test_replay_detects_breakout_and_records_trade():
     result = summarize(spec, setups, trades)
     assert result.summary["setups"] >= 1
     assert "pnl" in result.summary
+    assert "pnlNet" in result.summary
     assert result.summary["pnlPct"] is None or isinstance(result.summary["pnlPct"], float)
     if filled:
         assert result.trades[0].get("pnl") is not None
         assert "pnlPct" in result.trades[0]
+        assert filled[0].pnl_net is not None
+        assert isinstance(result.summary["pnlNet"], (int, float))
+        assert result.trades[0].get("pnlNet") == filled[0].pnl_net
+        assert "avgRNet" in result.summary
+        assert "tradeWrNet" in result.summary
 
 
 def test_warmup_bars_do_not_create_detects_before_from_date():
