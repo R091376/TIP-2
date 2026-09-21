@@ -56,6 +56,7 @@ def test_open_long_mis_10_at_100_total_0_42():
     assert _amt(bd, ChargeCode.STAMP) == money("0.03")
     assert _amt(bd, ChargeCode.GST) == money("0.06")
     assert _amt(bd, ChargeCode.DP) == money("0")
+    # Design table listed 0.72 (brokerage double-counted). Later PRs: entry=0.42, exit=0.67, net=48.91.
     assert bd.total == money("0.42")
     assert bd.total == money(sum((ln.amount for ln in bd.lines), Decimal("0")))
     assert bd.schedule_id == "nse_eq_cash_v1"
@@ -272,6 +273,30 @@ def test_overlay_json_number_rejected():
     sched = load_charge_schedule(s)
     assert sched.nse_txn_pct == NSE_EQ_CASH_V1.nse_txn_pct
     assert sched.version == NSE_EQ_CASH_V1.version
+
+
+def test_overlay_legacy_stamp_buy_pct():
+    both = load_charge_schedule(
+        Settings(paper_charges_schedule_json='{"stamp_buy_pct": "0.0001"}')
+    )
+    assert both.stamp_buy_delivery_pct == Decimal("0.0001")
+    assert both.stamp_buy_intraday_pct == Decimal("0.0001")
+
+    override = load_charge_schedule(
+        Settings(
+            paper_charges_schedule_json=(
+                '{"stamp_buy_pct": "0.0001", "stamp_buy_delivery_pct": "0.0002"}'
+            )
+        )
+    )
+    assert override.stamp_buy_delivery_pct == Decimal("0.0002")
+    assert override.stamp_buy_intraday_pct == Decimal("0.0001")
+
+    rejected = load_charge_schedule(
+        Settings(paper_charges_schedule_json='{"stamp_buy_pct": 0.0001}')
+    )
+    assert rejected.stamp_buy_delivery_pct == NSE_EQ_CASH_V1.stamp_buy_delivery_pct
+    assert rejected.stamp_buy_intraday_pct == NSE_EQ_CASH_V1.stamp_buy_intraday_pct
 
 
 def test_overlay_invalid_json_and_unknown_id_fallback():

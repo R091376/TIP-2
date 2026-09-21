@@ -173,13 +173,13 @@ class PositionLot:
     qty_closed: int = 0
     avg_entry_price: Decimal = Decimal("0")
     realized_pnl: Decimal = Decimal("0")
-    charges_entry: Decimal = Decimal("0")
-    charges_exit: Decimal = Decimal("0")
     status: LotStatus = LotStatus.OPEN
     entry_order_id: UUID | None = None
     opened_at: datetime | None = None
     closed_at: datetime | None = None
     updated_at: datetime | None = None
+    charges_entry: Decimal = Decimal("0")
+    charges_exit: Decimal = Decimal("0")
 
 
 @dataclass
