@@ -369,49 +369,18 @@ def build_container(settings: Settings | None = None) -> AppContainer:
             u = user_service.find_by_id(uid)
             return u.cash_balance if u else 0
 
+        from app.paper.cash_writer import write_user_cash
+        from app.paper.service import PaperTradingService
+        from app.user.service import money
+
         def _cash_writer(uid, balance, ledger_tail):
-            from decimal import Decimal
-
-            from app.user.service import money
-
+            if session_factory is not None:
+                write_user_cash(session_factory, uid, balance, list(ledger_tail or []))
+                return
             u = user_service.find_by_id(uid)
             if u is None:
                 return
-            # Sync paper cash back to app_users when balance diverged
-            target = money(balance)
-            if money(u.cash_balance) == target:
-                return
-            # Use postgres path via seed/adjust: write through user service internals
-            if user_service.is_postgres:
-                from datetime import datetime, timezone
-                from uuid import uuid4
-
-                from app.user.entities import AppUserRow, CashLedgerRow
-
-                with session_factory() as s:  # type: ignore[misc]
-                    row = s.get(AppUserRow, uid)
-                    if row is None:
-                        return
-                    prev = money(row.cash_balance)
-                    row.cash_balance = target
-                    row.updated_at = datetime.now(timezone.utc)
-                    for le in ledger_tail or []:
-                        s.add(
-                            CashLedgerRow(
-                                id=uuid4(),
-                                user_id=uid,
-                                entry_type=getattr(le, "entry_type", "ADJUST")[:32],
-                                amount=money(getattr(le, "amount", 0)),
-                                balance_after=money(getattr(le, "balance_after", target)),
-                                note=(getattr(le, "note", None) or "paper")[:512],
-                                created_at=datetime.now(timezone.utc),
-                            )
-                        )
-                    s.commit()
-            else:
-                u.cash_balance = target
-
-        from app.paper.service import PaperTradingService
+            u.cash_balance = money(balance)
 
         paper_service = PaperTradingService(
             settings,

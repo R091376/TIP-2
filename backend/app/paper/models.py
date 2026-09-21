@@ -215,6 +215,7 @@ class CashAccount:
     cash_balance: Decimal
     locks: list[CashLock] = field(default_factory=list)
     ledger: list[LedgerEntry] = field(default_factory=list)
+    ledger_published_thru: int = 0
 
     def open_locks(self) -> list[CashLock]:
         return [lk for lk in self.locks if lk.is_open]

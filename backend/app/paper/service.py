@@ -1202,8 +1202,10 @@ class PaperTradingService:
 
     def _write_user_cash(self, user_id: UUID, acc: CashAccount) -> None:
         if self._user_cash_writer:
+            unpublished = list(acc.ledger[acc.ledger_published_thru :])
             try:
-                self._user_cash_writer(user_id, acc.cash_balance, list(acc.ledger[-5:]))
+                self._user_cash_writer(user_id, acc.cash_balance, unpublished)
+                acc.ledger_published_thru = len(acc.ledger)
             except Exception:
                 logger.exception("user cash writer failed")
 
